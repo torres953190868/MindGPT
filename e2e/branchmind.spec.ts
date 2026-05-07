@@ -33,7 +33,8 @@ function makeWorkspaceProject(seed: string) {
           {
             id: `e2e-message-assistant-${seed}`,
             role: "assistant",
-            content: "The workspace is ready for deterministic E2E checks.",
+            content:
+              "## Workspace ready\n\nThe workspace is **ready** for deterministic E2E checks.\n\n- Stable selectors\n- Markdown rendering",
             createdAt: timestamp,
           },
         ],
@@ -115,6 +116,13 @@ test("loads a seeded workspace with stable test ids", async ({ page }) => {
     await expect(page.getByTestId("node-detail-panel")).toBeVisible();
     await expect(page.getByTestId("conversation-history")).toBeVisible();
     await expect(page.getByTestId("conversation-message")).toHaveCount(2);
+    await expect(page.getByTestId("conversation-message-content")).toHaveCount(2);
+    const assistantMessage = page.getByTestId("conversation-message").last();
+    await expect(
+      assistantMessage.getByRole("heading", { level: 2, name: "Workspace ready" }),
+    ).toBeVisible();
+    await expect(assistantMessage.locator("strong")).toHaveText("ready");
+    await expect(assistantMessage.locator("li")).toHaveCount(2);
     await expect(page.getByTestId("message-composer")).toBeVisible();
     await expect(page.getByTestId("message-instruction-input")).toBeVisible();
     await expect(page.getByTestId("send-message-button")).toBeVisible();
@@ -147,6 +155,13 @@ test("streams a node reply into a draft child node", async ({ page }) => {
   try {
     const project = await importProject(page, sourceProject);
     projectIdToDelete = project.id;
+    await page.request.post(`/api/projects/${project.id}/nodes/stream`, {
+      data: {
+        parentId: "missing-node-for-route-warmup",
+        mode: "continue",
+        instruction: "Warm up the streaming route.",
+      },
+    }).catch(() => undefined);
 
     await page.goto(`/workspace/${project.id}`);
     await page.getByTestId("message-instruction-input").fill(instruction);

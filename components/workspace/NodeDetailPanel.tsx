@@ -11,6 +11,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { MindNode } from "@/lib/types";
+import { MarkdownMessage } from "./MarkdownMessage";
 
 type NodeDetailPanelProps = {
   node: MindNode | null;
@@ -260,15 +261,10 @@ export function NodeDetailPanel({
                 }`}
               >
                 <p className="mb-1 text-xs font-black uppercase opacity-65">{message.role}</p>
-                <p
-                  data-testid={
-                    isStreamingAssistant ? "streaming-assistant-response" : undefined
-                  }
-                  className="whitespace-pre-wrap"
-                >
-                  {message.content ||
-                    (isStreamingAssistant ? "Generating answer..." : "")}
-                </p>
+                <MarkdownMessage
+                  content={message.content || (isStreamingAssistant ? "Generating answer..." : "")}
+                  isStreaming={isStreamingAssistant}
+                />
                 {isStreamingAssistant && (
                   <p
                     role="status"
