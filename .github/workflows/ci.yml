@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      DEEPSEEK_MODEL: ${{ vars.DEEPSEEK_MODEL }}
+      AI_MOCK_MODE: "true"
+      BRANCHMIND_PROJECTS_BACKEND: "file"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare test artifact directories
+        run: mkdir -p reports/vitest reports/playwright
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit and API tests
+        run: npm run test -- --reporter=default --reporter=junit --outputFile.junit=reports/vitest/junit.xml
+
+      - name: Upload unit test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-results
+          path: reports/vitest
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: npm run e2e
+
+      - name: Upload E2E artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: |
+            playwright-report
+            test-results
+            reports/playwright
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Production smoke test
+        run: npm run smoke:prod

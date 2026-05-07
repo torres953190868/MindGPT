@@ -1,0 +1,39 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+:root {
+  --background: #fff9fb;
+  --foreground: #332b38;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 12% 16%, rgba(255, 194, 209, 0.34), transparent 28%),
+    radial-gradient(circle at 82% 8%, rgba(198, 238, 216, 0.42), transparent 24%),
+    linear-gradient(135deg, #fff9fb 0%, #f7fbff 46%, #fffbe9 100%);
+  color: var(--foreground);
+  font-family: Nunito, ui-rounded, "Segoe UI", system-ui, sans-serif;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.react-flow__attribution {
+  display: none;
+}
+
+.branchmind-grid {
+  background-image:
+    linear-gradient(rgba(130, 101, 167, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(130, 101, 167, 0.08) 1px, transparent 1px);
+  background-size: 28px 28px;
+}

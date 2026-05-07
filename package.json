@@ -1,0 +1,41 @@
+{
+  "name": "branchmind",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest run --configLoader native --pool threads",
+    "e2e": "playwright test",
+    "smoke:prod": "node scripts/production-smoke.mjs",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.105.1",
+    "@xyflow/react": "^12.8.4",
+    "lucide-react": "^0.468.0",
+    "next": "^15.5.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zod": "^4.4.2",
+    "zustand": "^5.0.1"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.0",
+    "@playwright/test": "^1.59.1",
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "@typescript-eslint/eslint-plugin": "^8.18.2",
+    "@typescript-eslint/parser": "^8.18.2",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "^15.5.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.5"
+  }
+}

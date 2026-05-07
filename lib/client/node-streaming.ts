@@ -1,0 +1,269 @@
+"use client";
+
+import { getChildPosition } from "@/lib/graph";
+import { createId } from "@/lib/ids";
+import type { BranchType, ChatMessage, MindNode, Project } from "@/lib/types";
+
+export type NodeStreamingEvent =
+  | { type: "delta"; contentDelta: string }
+  | { type: "complete"; project: Project; node: MindNode };
+
+type SseEvent = {
+  event: string;
+  data: string;
+};
+
+function now() {
+  return new Date().toISOString();
+}
+
+function makeMessage(role: ChatMessage["role"], content: string): ChatMessage {
+  return {
+    id: createId("msg"),
+    role,
+    content,
+    createdAt: now(),
+  };
+}
+
+export function createDraftChildProject(
+  project: Project,
+  parentId: string,
+  mode: Exclude<BranchType, "root">,
+  instruction: string,
+) {
+  const parent = project.nodes[parentId];
+  if (!parent) return null;
+
+  const timestamp = now();
+  const nodeId = createId(`node_${mode}_draft`);
+  const assistantMessage = makeMessage("assistant", "");
+  const child: MindNode = {
+    id: nodeId,
+    projectId: project.id,
+    parentId,
+    title: mode === "branch" ? "Generating branch..." : "Generating continuation...",
+    summary: "Streaming DeepSeek response.",
+    messages: [makeMessage("user", instruction), assistantMessage],
+    children: [],
+    position: getChildPosition(
+      parent,
+      mode,
+      parent.children
+        .map((childId) => project.nodes[childId])
+        .filter((node): node is MindNode => Boolean(node)),
+    ),
+    branchType: mode,
+    collapsed: false,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  return {
+    assistantMessageId: assistantMessage.id,
+    node: child,
+    project: {
+      ...project,
+      nodes: {
+        ...project.nodes,
+        [parentId]: {
+          ...parent,
+          children: [...parent.children, nodeId],
+          updatedAt: timestamp,
+        },
+        [nodeId]: child,
+      },
+      updatedAt: timestamp,
+    },
+  };
+}
+
+export function appendDraftAssistantDelta(
+  project: Project,
+  nodeId: string,
+  assistantMessageId: string,
+  contentDelta: string,
+) {
+  const node = project.nodes[nodeId];
+  if (!node || !contentDelta) return project;
+
+  return {
+    ...project,
+    nodes: {
+      ...project.nodes,
+      [nodeId]: {
+        ...node,
+        messages: node.messages.map((message) =>
+          message.id === assistantMessageId
+            ? { ...message, content: `${message.content}${contentDelta}` }
+            : message,
+        ),
+        updatedAt: now(),
+      },
+    },
+    updatedAt: now(),
+  };
+}
+
+export function removeDraftChildNode(project: Project, nodeId: string) {
+  const node = project.nodes[nodeId];
+  if (!node?.parentId) return project;
+
+  const parent = project.nodes[node.parentId];
+  const nodes = { ...project.nodes };
+  delete nodes[nodeId];
+
+  return {
+    ...project,
+    nodes: {
+      ...nodes,
+      [node.parentId]: parent
+        ? {
+            ...parent,
+            children: parent.children.filter((childId) => childId !== nodeId),
+            updatedAt: now(),
+          }
+        : parent,
+    },
+    updatedAt: now(),
+  };
+}
+
+function getApiErrorMessage(data: unknown) {
+  const payload = data as { error?: string | { message?: string } } | null;
+  const error = payload?.error;
+
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object" && typeof error.message === "string") {
+    return error.message;
+  }
+
+  return null;
+}
+
+async function assertStreamingResponse(response: Response) {
+  if (response.ok) return;
+
+  const data = (await response.json().catch(() => null)) as unknown;
+  throw new Error(getApiErrorMessage(data) ?? "Request failed.");
+}
+
+function parseSseEvent(block: string): SseEvent | null {
+  const lines = block.split("\n");
+  const event = lines
+    .find((line) => line.startsWith("event:"))
+    ?.slice(6)
+    .trim() ?? "message";
+  const data = lines
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trimStart())
+    .join("\n");
+
+  return data ? { event, data } : null;
+}
+
+function parseNodeStreamingEvent({ event, data }: SseEvent): NodeStreamingEvent | null {
+  const payload = JSON.parse(data) as Record<string, unknown>;
+
+  if (event === "delta") {
+    return typeof payload.contentDelta === "string"
+      ? { type: "delta", contentDelta: payload.contentDelta }
+      : null;
+  }
+
+  if (event === "complete") {
+    return payload.project && payload.node
+      ? {
+          type: "complete",
+          project: payload.project as Project,
+          node: payload.node as MindNode,
+        }
+      : null;
+  }
+
+  if (event === "error") {
+    throw new Error(
+      typeof payload.message === "string" ? payload.message : "Request failed.",
+    );
+  }
+
+  return null;
+}
+
+export async function readNodeStreamingEvents(
+  response: Response,
+  onEvent: (event: NodeStreamingEvent) => void,
+) {
+  await assertStreamingResponse(response);
+  if (!response.body) throw new Error("Server did not return a streaming response.");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer = (buffer + decoder.decode(value, { stream: !done })).replace(/\r\n/g, "\n");
+
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary >= 0) {
+      const block = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      const event = parseSseEvent(block);
+      const parsed = event ? parseNodeStreamingEvent(event) : null;
+      if (parsed) onEvent(parsed);
+      boundary = buffer.indexOf("\n\n");
+    }
+
+    if (done) break;
+  }
+
+  const trailingEvent = parseSseEvent(buffer);
+  const parsedTrailingEvent = trailingEvent ? parseNodeStreamingEvent(trailingEvent) : null;
+  if (parsedTrailingEvent) onEvent(parsedTrailingEvent);
+}
+
+function scheduleFrame(callback: () => void) {
+  if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+    return window.requestAnimationFrame(callback);
+  }
+
+  return window.setTimeout(callback, 16);
+}
+
+function cancelFrame(handle: number) {
+  if (typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function") {
+    window.cancelAnimationFrame(handle);
+    return;
+  }
+
+  window.clearTimeout(handle);
+}
+
+export function createTextDeltaBatch(onFlush: (contentDelta: string) => void) {
+  let queued = "";
+  let frame: number | null = null;
+
+  function flush() {
+    const contentDelta = queued;
+    queued = "";
+    frame = null;
+    if (contentDelta) onFlush(contentDelta);
+  }
+
+  return {
+    cancel() {
+      if (frame !== null) cancelFrame(frame);
+      queued = "";
+      frame = null;
+    },
+    flushNow() {
+      if (frame !== null) cancelFrame(frame);
+      flush();
+    },
+    push(contentDelta: string) {
+      queued += contentDelta;
+      if (frame === null) frame = scheduleFrame(flush);
+    },
+  };
+}
