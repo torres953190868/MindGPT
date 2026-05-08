@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 type MarkdownMessageProps = {
   content: string;
   isStreaming?: boolean;
+  testId?: string;
 };
 
 const markdownComponents: Components = {
@@ -96,9 +97,13 @@ const markdownComponents: Components = {
 
 const remarkPlugins = [remarkGfm];
 
-export function MarkdownMessage({ content, isStreaming = false }: MarkdownMessageProps) {
+export function MarkdownMessage({
+  content,
+  isStreaming = false,
+  testId = "conversation-message-content",
+}: MarkdownMessageProps) {
   return (
-    <div data-testid="conversation-message-content" className="overflow-x-auto break-words">
+    <div data-testid={testId} className="overflow-x-auto break-words">
       <div data-testid={isStreaming ? "streaming-assistant-response" : undefined}>
         <ReactMarkdown components={markdownComponents} remarkPlugins={remarkPlugins}>
           {content}

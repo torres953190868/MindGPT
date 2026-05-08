@@ -107,7 +107,7 @@ function normalizeMessages(
       return [];
     }
 
-    return {
+  return {
       id: createUniqueId("msg", usedIds),
       role: message.role as ChatMessage["role"],
       content: message.content,
@@ -226,6 +226,7 @@ export function remapProjectForImport(
     id: projectId,
     ...(options.ownerSessionId ? { ownerSessionId: options.ownerSessionId } : {}),
     title: cleanString(project.title, "Imported project"),
+    notes: typeof (project as { notes?: unknown }).notes === "string" ? project.notes : "",
     rootNodeId,
     nodes,
     createdAt: timestamp,

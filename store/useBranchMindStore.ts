@@ -1,9 +1,11 @@
 "use client";
 
 import { create } from "zustand";
+import type { StoreApi } from "zustand";
 import {
   appendDraftAssistantDelta,
   createDraftChildProject,
+  createRegeneratingNodeProject,
   createTextDeltaBatch,
   readNodeStreamingEvents,
   removeDraftChildNode,
@@ -34,6 +36,13 @@ type BranchMindState = {
     instruction: string,
     sourceText?: string,
   ) => Promise<string | null>;
+  editUserMessage: (
+    nodeId: string,
+    userMessageId: string,
+    instruction: string,
+  ) => Promise<boolean>;
+  retryAssistantMessage: (nodeId: string, assistantMessageId: string) => Promise<boolean>;
+  updateProjectNotes: (projectId: string, notes: string) => Promise<boolean>;
   updateNodePosition: (nodeId: string, position: NodePosition) => Promise<void>;
   toggleNodeCollapsed: (nodeId: string) => Promise<void>;
   deleteNode: (nodeId: string) => Promise<void>;
@@ -50,6 +59,10 @@ type CreateProjectResponse = ProjectsResponse & {
 type UpdateNodeResponse = {
   project: Project;
   selectedNodeId?: string;
+};
+
+type UpdateProjectResponse = {
+  project: Project;
 };
 
 type ApiErrorPayload = {
@@ -96,6 +109,115 @@ function replaceProject(projects: Project[], nextProject: Project) {
 
 function getActiveProject(projects: Project[], activeProjectId: string | null) {
   return projects.find((project) => project.id === activeProjectId) ?? projects[0] ?? null;
+}
+
+type BranchMindSet = StoreApi<BranchMindState>["setState"];
+type BranchMindGet = StoreApi<BranchMindState>["getState"];
+
+async function regenerateNodeInPlace(
+  set: BranchMindSet,
+  get: BranchMindGet,
+  {
+    nodeId,
+    instruction,
+    userMessageId,
+    assistantMessageId,
+  }: {
+    nodeId: string;
+    instruction?: string;
+    userMessageId?: string;
+    assistantMessageId?: string;
+  },
+) {
+  const state = get();
+  const project = state.projects.find((item) => item.id === state.activeProjectId);
+  const node = project?.nodes[nodeId];
+  if (!project || !node || state.creatingNodeId || state.streamingNodeId) {
+    return false;
+  }
+
+  const draft = createRegeneratingNodeProject(project, nodeId, {
+    instruction,
+    userMessageId,
+    assistantMessageId,
+  });
+  if (!draft) return false;
+
+  set({
+    projects: replaceProject(state.projects, draft.project),
+    selectedNodeId: nodeId,
+    creatingNodeId: nodeId,
+    streamingNodeId: nodeId,
+    aiError: null,
+  });
+
+  const deltaBatch = createTextDeltaBatch((contentDelta) => {
+    set((current) => {
+      const currentProject = current.projects.find((item) => item.id === project.id);
+      if (!currentProject) return current;
+
+      return {
+        projects: replaceProject(
+          current.projects,
+          appendDraftAssistantDelta(
+            currentProject,
+            nodeId,
+            draft.assistantMessageId,
+            contentDelta,
+          ),
+        ),
+      };
+    });
+  });
+
+  void (async () => {
+    let completed = false;
+
+    try {
+      const response = await fetch(
+        `/api/projects/${project.id}/nodes/${nodeId}/regenerate`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ instruction, userMessageId, assistantMessageId }),
+        },
+      );
+
+      await readNodeStreamingEvents(response, (event) => {
+        if (event.type === "delta") {
+          deltaBatch.push(event.contentDelta);
+          return;
+        }
+
+        completed = true;
+        deltaBatch.flushNow();
+        set({
+          projects: replaceProject(get().projects, event.project),
+          selectedNodeId: event.node.id,
+          creatingNodeId: null,
+          streamingNodeId: null,
+        });
+      });
+
+      if (!completed) {
+        throw new Error("Streaming response ended before completion.");
+      }
+    } catch (error) {
+      deltaBatch.cancel();
+      set((current) => ({
+        projects: completed
+          ? current.projects
+          : replaceProject(current.projects, project),
+        selectedNodeId: nodeId,
+        creatingNodeId: null,
+        streamingNodeId: null,
+        aiError: getErrorMessage(error),
+      }));
+    }
+  })();
+
+  return true;
 }
 
 function readLegacyProjects() {
@@ -333,6 +455,57 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
     })();
 
     return draft.node.id;
+  },
+
+  editUserMessage: async (nodeId, userMessageId, instruction) => {
+    const trimmed = instruction.trim();
+    if (!trimmed) return false;
+
+    return regenerateNodeInPlace(set, get, {
+      nodeId,
+      instruction: trimmed,
+      userMessageId,
+    });
+  },
+
+  retryAssistantMessage: async (nodeId, assistantMessageId) => {
+    return regenerateNodeInPlace(set, get, {
+      nodeId,
+      assistantMessageId,
+    });
+  },
+
+  updateProjectNotes: async (projectId, notes) => {
+    const state = get();
+    const project = state.projects.find((item) => item.id === projectId);
+    if (!project) return false;
+
+    const timestamp = new Date().toISOString();
+    const optimisticProject = {
+      ...project,
+      notes,
+      updatedAt: timestamp,
+    };
+
+    set({
+      projects: replaceProject(state.projects, optimisticProject),
+      aiError: null,
+    });
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes }),
+      });
+      const data = await readJson<UpdateProjectResponse>(response);
+
+      set({ projects: replaceProject(get().projects, data.project) });
+      return true;
+    } catch (error) {
+      set({ aiError: getErrorMessage(error) });
+      return false;
+    }
   },
 
   updateNodePosition: async (nodeId, position) => {

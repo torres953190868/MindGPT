@@ -1,64 +1,182 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, GitBranch, PanelLeftClose, PanelLeftOpen, Search, Sprout } from "lucide-react";
-import { useMemo, useState } from "react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronRight,
+  GitBranch,
+  PanelLeftClose,
+  Search,
+  Sprout,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MindNode, Project } from "@/lib/types";
 
 type WorkspaceSidebarProps = {
   project: Project;
   selectedNodeId: string | null;
-  isCollapsed: boolean;
   onSelectNode: (nodeId: string) => void;
   onCollapse: () => void;
-  onExpand: () => void;
 };
+
+type OutlineRow = {
+  node: MindNode;
+  depth: number;
+};
+
+function matchesQuery(node: MindNode, normalized: string) {
+  return (
+    node.title.toLowerCase().includes(normalized) ||
+    node.summary.toLowerCase().includes(normalized)
+  );
+}
+
+function getDefaultExpandedNodeIds(project: Project) {
+  const expanded = new Set<string>();
+  const root = project.nodes[project.rootNodeId];
+  if (!root) return expanded;
+
+  if (root.children.length > 0) expanded.add(root.id);
+  root.children.forEach((childId) => {
+    const child = project.nodes[childId];
+    if (child && child.children.length > 0) expanded.add(child.id);
+  });
+
+  return expanded;
+}
+
+function getAncestorIds(project: Project, nodeId: string | null) {
+  const ids: string[] = [];
+  let current = nodeId ? project.nodes[nodeId] : null;
+
+  while (current?.parentId) {
+    ids.unshift(current.parentId);
+    current = project.nodes[current.parentId] ?? null;
+  }
+
+  return ids;
+}
+
+function getSearchExpandedNodeIds(project: Project, normalized: string) {
+  const expanded = new Set<string>();
+
+  Object.values(project.nodes).forEach((node) => {
+    if (!matchesQuery(node, normalized)) return;
+    getAncestorIds(project, node.id).forEach((ancestorId) => expanded.add(ancestorId));
+  });
+
+  return expanded;
+}
+
+function getVisibleOutlineRows(
+  project: Project,
+  expandedNodeIds: Set<string>,
+  normalized: string,
+) {
+  const rows: OutlineRow[] = [];
+  const matchingNodeIds = normalized
+    ? new Set(
+        Object.values(project.nodes)
+          .filter((node) => matchesQuery(node, normalized))
+          .map((node) => node.id),
+      )
+    : null;
+  const includedNodeIds = new Set<string>();
+
+  if (matchingNodeIds?.size === 0) return rows;
+
+  if (matchingNodeIds) {
+    matchingNodeIds.forEach((nodeId) => {
+      includedNodeIds.add(nodeId);
+      getAncestorIds(project, nodeId).forEach((ancestorId) => includedNodeIds.add(ancestorId));
+    });
+  }
+
+  function visit(nodeId: string, depth: number) {
+    const node = project.nodes[nodeId];
+    if (!node) return;
+    if (includedNodeIds.size > 0 && !includedNodeIds.has(nodeId)) return;
+
+    rows.push({ node, depth });
+
+    if (!expandedNodeIds.has(nodeId)) return;
+
+    node.children.forEach((childId) => visit(childId, depth + 1));
+  }
+
+  visit(project.rootNodeId, 0);
+  return rows;
+}
 
 export function WorkspaceSidebar({
   project,
   selectedNodeId,
-  isCollapsed,
   onSelectNode,
   onCollapse,
-  onExpand,
 }: WorkspaceSidebarProps) {
   const [query, setQuery] = useState("");
+  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(() =>
+    getDefaultExpandedNodeIds(project),
+  );
+  const previousProjectId = useRef(project.id);
+  const previousSelectedNodeId = useRef(selectedNodeId);
   const normalized = query.trim().toLowerCase();
   const nodes = useMemo(() => Object.values(project.nodes), [project.nodes]);
-  const visibleNodes = normalized
-    ? nodes.filter(
-        (node) =>
-          node.title.toLowerCase().includes(normalized) ||
-          node.summary.toLowerCase().includes(normalized),
-      )
-    : nodes;
+  const effectiveExpandedNodeIds = useMemo(() => {
+    if (!normalized) return expandedNodeIds;
+    return new Set([...expandedNodeIds, ...getSearchExpandedNodeIds(project, normalized)]);
+  }, [expandedNodeIds, normalized, project]);
+  const outlineRows = useMemo(
+    () => getVisibleOutlineRows(project, effectiveExpandedNodeIds, normalized),
+    [effectiveExpandedNodeIds, normalized, project],
+  );
+  const hasMatches = outlineRows.length > 0;
 
-  if (isCollapsed) {
-    return (
-      <aside
-        aria-label="Workspace sidebar"
-        data-testid="workspace-sidebar"
-        className="flex min-h-[76px] w-full items-center justify-center rounded-[28px] border border-white/80 bg-white/72 p-3 shadow-lg shadow-[#e4d6ef]/40 lg:min-h-0"
-      >
-        <button
-          type="button"
-          onClick={onExpand}
-          aria-label="Expand workspace sidebar"
-          aria-expanded="false"
-          data-testid="expand-workspace-sidebar-button"
-          className="grid h-11 w-11 place-items-center rounded-full bg-[#f1e8fb] text-[#6c538d] transition hover:bg-[#e4d5f6] focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
-        >
-          <PanelLeftOpen size={18} />
-        </button>
-      </aside>
-    );
+  useEffect(() => {
+    if (previousProjectId.current === project.id) return;
+    previousProjectId.current = project.id;
+    setExpandedNodeIds(getDefaultExpandedNodeIds(project));
+  }, [project]);
+
+  useEffect(() => {
+    if (previousSelectedNodeId.current === selectedNodeId) return;
+    previousSelectedNodeId.current = selectedNodeId;
+    if (!selectedNodeId) return;
+
+    const ancestorIds = getAncestorIds(project, selectedNodeId);
+    if (ancestorIds.length === 0) return;
+
+    setExpandedNodeIds((current) => {
+      const next = new Set(current);
+      let changed = false;
+      ancestorIds.forEach((ancestorId) => {
+        if (next.has(ancestorId)) return;
+        next.add(ancestorId);
+        changed = true;
+      });
+      if (!changed) return current;
+      return next;
+    });
+  }, [project, selectedNodeId]);
+
+  function toggleOutlineNode(nodeId: string) {
+    setExpandedNodeIds((current) => {
+      const next = new Set(current);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
   }
 
   return (
     <aside
       aria-label="Workspace sidebar"
       data-testid="workspace-sidebar"
-      className="flex min-h-[220px] w-full flex-col gap-5 rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:min-h-0 lg:w-[292px]"
+      className="flex min-h-[220px] w-full flex-col gap-4 rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:min-h-0"
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex shrink-0 items-center gap-2">
@@ -104,9 +222,9 @@ export function WorkspaceSidebar({
         id="conversation-outline"
         aria-label="Conversation outline"
         data-testid="conversation-outline"
-        className="min-h-[96px] flex-1 space-y-2 overflow-auto pr-1 lg:min-h-0"
+        className="min-h-[96px] flex-1 space-y-1 overflow-auto pr-1 lg:min-h-0"
       >
-        {visibleNodes.length === 0 ? (
+        {!hasMatches ? (
           <p
             role="status"
             data-testid="conversation-outline-empty-state"
@@ -115,12 +233,15 @@ export function WorkspaceSidebar({
             No matching nodes
           </p>
         ) : (
-          visibleNodes.map((node) => (
+          outlineRows.map(({ node, depth }) => (
             <OutlineItem
               key={node.id}
               node={node}
+              depth={depth}
+              expanded={effectiveExpandedNodeIds.has(node.id)}
               selected={selectedNodeId === node.id}
               onSelectNode={onSelectNode}
+              onToggleNode={toggleOutlineNode}
             />
           ))
         )}
@@ -131,39 +252,72 @@ export function WorkspaceSidebar({
 
 function OutlineItem({
   node,
+  depth,
+  expanded,
   selected,
   onSelectNode,
+  onToggleNode,
 }: {
   node: MindNode;
+  depth: number;
+  expanded: boolean;
   selected: boolean;
   onSelectNode: (nodeId: string) => void;
+  onToggleNode: (nodeId: string) => void;
 }) {
   const Icon = node.branchType === "branch" ? GitBranch : Sprout;
+  const hasChildren = node.children.length > 0;
 
   return (
-    <button
-      type="button"
-      onClick={() => onSelectNode(node.id)}
-      aria-label={`Open conversation node ${node.title}`}
-      aria-current={selected ? "true" : undefined}
-      data-testid="conversation-outline-item"
+    <div
+      data-testid="conversation-outline-row"
       data-node-id={node.id}
-      className={`flex w-full items-start gap-3 rounded-[18px] p-3 text-left transition ${
+      data-depth={depth}
+      className={`flex w-full items-start gap-1 rounded-[14px] px-1.5 py-1 text-left transition ${
         selected ? "bg-[#eadcf7] text-[#49315f]" : "bg-white/65 text-[#655a6d] hover:bg-white"
       }`}
+      style={{ paddingLeft: `${Math.min(depth, 4) * 6 + 6}px` }}
     >
-      <span
-        aria-hidden="true"
-        className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/80"
+      {hasChildren ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleNode(node.id);
+          }}
+          aria-label={`${expanded ? "Collapse" : "Expand"} children for ${node.title}`}
+          aria-expanded={expanded}
+          data-testid="conversation-outline-toggle"
+          data-node-id={node.id}
+          className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+        >
+          {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        </button>
+      ) : (
+        <span aria-hidden="true" className="mt-0.5 h-5 w-3.5 shrink-0" />
+      )}
+      <button
+        type="button"
+        onClick={() => onSelectNode(node.id)}
+        aria-label={`Open conversation node ${node.title}`}
+        aria-current={selected ? "true" : undefined}
+        data-testid="conversation-outline-item"
+        data-node-id={node.id}
+        className="flex min-w-0 flex-1 items-start gap-1.5 rounded-[12px] p-0.5 text-left outline-none transition focus:ring-4 focus:ring-[#eadcf7]"
       >
-        <Icon size={15} />
-      </span>
-      <span className="min-w-0">
-        <span className="line-clamp-2 text-sm font-black">{node.title}</span>
-        <span className="mt-1 block text-xs font-semibold opacity-75">
-          {node.children.length} children
+        <span
+          aria-hidden="true"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white/80"
+        >
+          <Icon size={13} />
         </span>
-      </span>
-    </button>
+        <span className="min-w-0">
+          <span className="line-clamp-2 text-sm font-black leading-5">{node.title}</span>
+          <span className="mt-0.5 block text-xs font-semibold leading-4 opacity-75">
+            {node.children.length} children
+          </span>
+        </span>
+      </button>
+    </div>
   );
 }

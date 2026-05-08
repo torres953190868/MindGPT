@@ -63,7 +63,7 @@ export function getProjectsForSession(projects: Project[], sessionId: string) {
   return toProjectDtos(projects.filter((project) => projectBelongsToSession(project, sessionId)));
 }
 
-function projectToRows(project: Project) {
+export function projectToRows(project: Project) {
   const ownerSessionId = requireProjectOwner(project);
   const rootNode = project.nodes[project.rootNodeId];
 
@@ -75,6 +75,7 @@ function projectToRows(project: Project) {
     id: project.id,
     owner_session_id: ownerSessionId,
     title: project.title,
+    notes: project.notes,
     root_node_id: project.rootNodeId,
     created_at: project.createdAt,
     updated_at: project.updatedAt,
@@ -202,6 +203,7 @@ export function composeProjectsFromRows(
       id: projectRow.id,
       ownerSessionId: projectRow.owner_session_id,
       title: projectRow.title,
+      notes: projectRow.notes,
       rootNodeId: projectRow.root_node_id,
       nodes,
       createdAt: projectRow.created_at,

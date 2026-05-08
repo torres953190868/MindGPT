@@ -105,6 +105,79 @@ export function appendDraftAssistantDelta(
   };
 }
 
+function findLastAssistantMessageId(node: MindNode) {
+  for (let index = node.messages.length - 1; index >= 0; index -= 1) {
+    const message = node.messages[index];
+    if (message.role === "assistant") return message.id;
+  }
+
+  return null;
+}
+
+export function createRegeneratingNodeProject(
+  project: Project,
+  nodeId: string,
+  update: {
+    instruction?: string;
+    userMessageId?: string;
+    assistantMessageId?: string;
+  },
+) {
+  const node = project.nodes[nodeId];
+  if (!node) return null;
+
+  const instruction =
+    typeof update.instruction === "string" ? update.instruction.trim() : undefined;
+  if (typeof update.instruction === "string" && !instruction) return null;
+
+  const assistantMessageId =
+    update.assistantMessageId ?? findLastAssistantMessageId(node);
+  if (!assistantMessageId) return null;
+
+  let hasUserTarget = !instruction && !update.userMessageId;
+  let hasAssistantTarget = false;
+  const timestamp = now();
+  const messages = node.messages.map((message) => {
+    if (
+      instruction &&
+      message.role === "user" &&
+      (!update.userMessageId || message.id === update.userMessageId)
+    ) {
+      hasUserTarget = true;
+      return { ...message, content: instruction };
+    }
+
+    if (message.id === assistantMessageId && message.role === "assistant") {
+      hasAssistantTarget = true;
+      return { ...message, content: "" };
+    }
+
+    return message;
+  });
+
+  if (!hasUserTarget || !hasAssistantTarget) return null;
+
+  const nextNode = {
+    ...node,
+    messages,
+    updatedAt: timestamp,
+  };
+
+  return {
+    assistantMessageId,
+    node: nextNode,
+    project: {
+      ...project,
+      title: instruction && nodeId === project.rootNodeId ? instruction : project.title,
+      nodes: {
+        ...project.nodes,
+        [nodeId]: nextNode,
+      },
+      updatedAt: timestamp,
+    },
+  };
+}
+
 export function removeDraftChildNode(project: Project, nodeId: string) {
   const node = project.nodes[nodeId];
   if (!node?.parentId) return project;

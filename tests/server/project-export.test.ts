@@ -7,6 +7,7 @@ function makeProject(): Project {
     id: "project-export-test",
     ownerSessionId: "owner-session-should-not-export",
     title: "Export test",
+    notes: "Project notes",
     rootNodeId: "node-root-export-test",
     nodes: {
       "node-root-export-test": {

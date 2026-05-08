@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { getContextTitles } from "@/lib/graph";
 import {
   addChildNode,
   createRootProject,
+  regenerateNode,
   removeNode,
   setNodeCollapsed,
+  setProjectNotes,
   updateNodePosition,
 } from "@/lib/server/project-model";
 import type { MockReply } from "@/lib/types";
@@ -45,6 +47,7 @@ describe("project model helpers", () => {
     const rootNode = project.nodes[project.rootNodeId];
 
     expect(project.title).toBe("Graph search");
+    expect(project.notes).toBe("");
     expect(rootNode).toMatchObject({
       projectId: project.id,
       parentId: null,
@@ -105,6 +108,83 @@ describe("project model helpers", () => {
       position: { x: 120, y: 120 },
       collapsed: false,
     });
+  });
+
+  it("updates project notes without mutating the original project", () => {
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      const project = createRootProject("Graph search", rootReply);
+      vi.setSystemTime(new Date("2026-01-01T00:00:01.000Z"));
+      const updated = setProjectNotes(project, "## Notes\n\nSaved note");
+
+      expect(updated.notes).toBe("## Notes\n\nSaved note");
+      expect(updated.updatedAt).toBe("2026-01-01T00:00:01.000Z");
+      expect(project.notes).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("regenerates a node in place without mutating the original project", () => {
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      const project = createRootProject("Original prompt", rootReply);
+      const rootId = project.rootNodeId;
+      const [userMessage, assistantMessage] = project.nodes[rootId].messages;
+
+      vi.setSystemTime(new Date("2026-01-01T00:00:01.000Z"));
+      const regenerated = regenerateNode(project, rootId, {
+        instruction: "Edited prompt",
+        userMessageId: userMessage.id,
+        assistantMessageId: assistantMessage.id,
+        reply: {
+          title: "Regenerated title",
+          summary: "Regenerated summary",
+          content: "Regenerated content",
+        },
+      });
+
+      expect(regenerated?.project.title).toBe("Edited prompt");
+      expect(regenerated?.node).toMatchObject({
+        title: "Regenerated title",
+        summary: "Regenerated summary",
+        updatedAt: "2026-01-01T00:00:01.000Z",
+      });
+      expect(regenerated?.node.messages.map((message) => message.content)).toEqual([
+        "Edited prompt",
+        "Regenerated content",
+      ]);
+      expect(project.title).toBe("Original prompt");
+      expect(project.nodes[rootId].messages.map((message) => message.content)).toEqual([
+        "Original prompt",
+        "Root content",
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects regenerate targets with mismatched message roles", () => {
+    const project = createRootProject("Graph search", rootReply);
+    const rootId = project.rootNodeId;
+    const [userMessage, assistantMessage] = project.nodes[rootId].messages;
+
+    expect(
+      regenerateNode(project, rootId, {
+        userMessageId: assistantMessage.id,
+        reply: childReply,
+      }),
+    ).toBeNull();
+    expect(
+      regenerateNode(project, rootId, {
+        assistantMessageId: userMessage.id,
+        reply: childReply,
+      }),
+    ).toBeNull();
   });
 
   it("removes a non-root node and all descendants", () => {

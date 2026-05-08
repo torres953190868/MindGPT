@@ -44,6 +44,7 @@ export function createRootProject(topic: string, reply: MockReply): Project {
   return {
     id: projectId,
     title: topic.trim(),
+    notes: "",
     rootNodeId: nodeId,
     nodes: { [nodeId]: rootNode },
     createdAt: timestamp,
@@ -102,6 +103,74 @@ export function addChildNode(
   };
 }
 
+export function regenerateNode(
+  project: Project,
+  nodeId: string,
+  update: {
+    reply: MockReply;
+    instruction?: string;
+    userMessageId?: string;
+    assistantMessageId?: string;
+  },
+) {
+  const node = project.nodes[nodeId];
+  if (!node) return null;
+
+  const instruction =
+    typeof update.instruction === "string" ? update.instruction.trim() : undefined;
+  if (typeof update.instruction === "string" && !instruction) return null;
+
+  const userMessageIndex =
+    typeof update.userMessageId === "string"
+      ? node.messages.findIndex(
+          (message) => message.id === update.userMessageId && message.role === "user",
+        )
+      : node.messages.findIndex((message) => message.role === "user");
+  const assistantMessageIndex =
+    typeof update.assistantMessageId === "string"
+      ? node.messages.findIndex(
+          (message) =>
+            message.id === update.assistantMessageId && message.role === "assistant",
+        )
+      : node.messages.findLastIndex((message) => message.role === "assistant");
+
+  if ((instruction || update.userMessageId) && userMessageIndex < 0) return null;
+  if (assistantMessageIndex < 0) return null;
+
+  const timestamp = now();
+  const nextMessages = node.messages.map((message, index) => {
+    if (instruction && index === userMessageIndex) {
+      return { ...message, content: instruction };
+    }
+
+    if (index === assistantMessageIndex) {
+      return { ...message, content: update.reply.content };
+    }
+
+    return message;
+  });
+  const nextNode = {
+    ...node,
+    title: update.reply.title,
+    summary: update.reply.summary,
+    messages: nextMessages,
+    updatedAt: timestamp,
+  };
+
+  return {
+    node: nextNode,
+    project: {
+      ...project,
+      title: instruction && nodeId === project.rootNodeId ? instruction : project.title,
+      nodes: {
+        ...project.nodes,
+        [nodeId]: nextNode,
+      },
+      updatedAt: timestamp,
+    },
+  };
+}
+
 export function updateNodePosition(
   project: Project,
   nodeId: string,
@@ -132,6 +201,16 @@ export function setNodeCollapsed(project: Project, nodeId: string, collapsed: bo
       ...project.nodes,
       [nodeId]: { ...node, collapsed, updatedAt: timestamp },
     },
+    updatedAt: timestamp,
+  };
+}
+
+export function setProjectNotes(project: Project, notes: string) {
+  const timestamp = now();
+
+  return {
+    ...project,
+    notes,
     updatedAt: timestamp,
   };
 }

@@ -1,16 +1,30 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import {
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
+import {
+  Check,
+  Copy,
+  Pencil,
+  RotateCcw,
+  Save,
+  X,
   GitBranch,
+  NotebookPen,
   PanelRightClose,
-  PanelRightOpen,
   Ribbon,
   Send,
   Sprout,
   Trash2,
 } from "lucide-react";
-import type { MindNode } from "@/lib/types";
+import type { ChatMessage, MindNode } from "@/lib/types";
 import { MarkdownMessage } from "./MarkdownMessage";
 
 type NodeDetailPanelProps = {
@@ -21,17 +35,32 @@ type NodeDetailPanelProps = {
     instruction: string,
     sourceText?: string,
   ) => Promise<string | null>;
+  onEditUserMessage: (
+    nodeId: string,
+    userMessageId: string,
+    instruction: string,
+  ) => Promise<boolean>;
+  onRetryAssistantMessage: (nodeId: string, assistantMessageId: string) => Promise<boolean>;
   onToggleNode: (nodeId: string) => void;
   onDeleteNode: (nodeId: string) => void;
-  isCollapsed: boolean;
   isCreating: boolean;
+  isNotesOpen: boolean;
   error: string | null;
+  onToggleNotes: () => void;
   onCollapse: () => void;
-  onExpand: () => void;
 };
 
 const DEFAULT_SELECTION_BRANCH_INSTRUCTION = "Explain the selected text in a focused branch.";
 const SELECTION_PREVIEW_LIMIT = 180;
+
+type MessageActionButtonProps = {
+  label: string;
+  testId: string;
+  title?: string;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+};
 
 function getSelectionPreview(sourceText: string) {
   const compact = sourceText.replace(/\s+/g, " ").trim();
@@ -40,16 +69,62 @@ function getSelectionPreview(sourceText: string) {
     : compact;
 }
 
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.append(textarea);
+  textarea.select();
+
+  try {
+    if (!document.execCommand("copy")) throw new Error("Copy command failed.");
+  } finally {
+    textarea.remove();
+  }
+}
+
+function MessageActionButton({
+  label,
+  testId,
+  title = label,
+  disabled = false,
+  onClick,
+  children,
+}: MessageActionButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={title}
+      data-testid={testId}
+      className="grid h-8 w-8 place-items-center rounded-full text-current opacity-75 transition hover:bg-white/70 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-current/25 disabled:cursor-not-allowed disabled:opacity-35"
+    >
+      {children}
+    </button>
+  );
+}
+
 export function NodeDetailPanel({
   node,
   onCreateNode,
+  onEditUserMessage,
+  onRetryAssistantMessage,
   onToggleNode,
   onDeleteNode,
-  isCollapsed,
   isCreating,
+  isNotesOpen,
   error,
+  onToggleNotes,
   onCollapse,
-  onExpand,
 }: NodeDetailPanelProps) {
   const panelId = useId();
   const titleId = `${panelId}-title`;
@@ -58,7 +133,11 @@ export function NodeDetailPanel({
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"continue" | "branch">("continue");
   const [selectedSourceText, setSelectedSourceText] = useState("");
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState("");
   const messagesRef = useRef<HTMLDivElement>(null);
+  const copyTimeoutRef = useRef<number | null>(null);
   const lastMessage = node?.messages[node.messages.length - 1] ?? null;
   const streamingMessageId =
     isCreating && lastMessage?.role === "assistant" ? lastMessage.id : null;
@@ -88,7 +167,15 @@ export function NodeDetailPanel({
 
   useEffect(() => {
     clearSelectedSourceText();
+    setEditingMessageId(null);
+    setEditingValue("");
   }, [clearSelectedSourceText, node?.id]);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current !== null) window.clearTimeout(copyTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isCreating) return;
@@ -118,25 +205,48 @@ export function NodeDetailPanel({
     }
   }
 
-  if (isCollapsed) {
-    return (
-      <aside
-        aria-label="Node details"
-        data-testid="node-detail-panel"
-        className="flex min-h-[76px] w-full items-center justify-center rounded-[28px] border border-white/80 bg-white/72 p-3 shadow-lg shadow-[#e4d6ef]/40 lg:min-h-0"
-      >
-        <button
-          type="button"
-          onClick={onExpand}
-          aria-label="Expand node details panel"
-          aria-expanded="false"
-          data-testid="expand-node-detail-panel-button"
-          className="grid h-11 w-11 place-items-center rounded-full bg-[#f1e8fb] text-[#6c538d] transition hover:bg-[#e4d5f6] focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
-        >
-          <PanelRightOpen size={18} />
-        </button>
-      </aside>
-    );
+  async function handleCopyMessage(message: ChatMessage) {
+    if (!message.content) return;
+
+    try {
+      await copyTextToClipboard(message.content);
+      setCopiedMessageId(message.id);
+      if (copyTimeoutRef.current !== null) window.clearTimeout(copyTimeoutRef.current);
+      copyTimeoutRef.current = window.setTimeout(() => {
+        setCopiedMessageId((currentId) => (currentId === message.id ? null : currentId));
+      }, 1800);
+    } catch {
+      setCopiedMessageId(null);
+    }
+  }
+
+  function handleStartEdit(message: ChatMessage) {
+    setEditingMessageId(message.id);
+    setEditingValue(message.content);
+    clearSelectedSourceText();
+  }
+
+  async function handleSaveEdit() {
+    if (!node || !editingMessageId || isCreating) return;
+    const trimmed = editingValue.trim();
+    if (!trimmed) return;
+
+    const started = await onEditUserMessage(node.id, editingMessageId, trimmed);
+    if (started) {
+      setEditingMessageId(null);
+      setEditingValue("");
+      clearSelectedSourceText();
+    }
+  }
+
+  function handleCancelEdit() {
+    setEditingMessageId(null);
+    setEditingValue("");
+  }
+
+  function handleRetryMessage(message: ChatMessage) {
+    if (!node || isCreating) return;
+    void onRetryAssistantMessage(node.id, message.id);
   }
 
   if (!node) {
@@ -221,10 +331,27 @@ export function NodeDetailPanel({
               Delete
             </button>
           )}
+          <button
+            type="button"
+            onClick={onToggleNotes}
+            aria-label={isNotesOpen ? "Close project notes" : "Open project notes"}
+            aria-controls="project-notes-panel"
+            aria-expanded={isNotesOpen}
+            data-testid="node-detail-notes-button"
+            className={`inline-flex h-10 items-center gap-2 rounded-[16px] px-3 text-sm font-black transition focus:outline-none focus:ring-4 focus:ring-[#eadcf7] ${
+              isNotesOpen
+                ? "bg-[#eadcf7] text-[#6e4ca0] hover:bg-[#dfc9f3]"
+                : "bg-white/75 text-[#776c80] hover:bg-white"
+            }`}
+          >
+            <NotebookPen size={16} />
+            Notes
+          </button>
         </div>
       </div>
 
       <section
+        id="conversation-history"
         ref={messagesRef}
         aria-label="Conversation history"
         aria-busy={isCreating}
@@ -245,37 +372,119 @@ export function NodeDetailPanel({
         ) : (
           node.messages.map((message) => {
             const isStreamingAssistant = message.id === streamingMessageId;
+            const isEditingMessage =
+              message.role === "user" && message.id === editingMessageId;
+            const isCopied = copiedMessageId === message.id;
 
             return (
-              <article
+              <div
                 key={message.id}
-                aria-label={`${message.role} message`}
-                aria-live={isStreamingAssistant ? "polite" : undefined}
                 data-testid="conversation-message"
                 data-message-id={message.id}
                 data-streaming={isStreamingAssistant ? "true" : undefined}
-                className={`rounded-[20px] p-3 text-sm leading-6 ${
+                className={`group text-sm leading-6 ${
                   message.role === "user"
-                    ? "ml-6 bg-[#e7f5ed] text-[#315e45]"
-                    : "mr-6 bg-[#f5effc] text-[#514062]"
+                    ? "ml-6 text-[#315e45]"
+                    : "mr-6 text-[#514062]"
                 }`}
               >
-                <p className="mb-1 text-xs font-black uppercase opacity-65">{message.role}</p>
-                <MarkdownMessage
-                  content={message.content || (isStreamingAssistant ? "Generating answer..." : "")}
-                  isStreaming={isStreamingAssistant}
-                />
-                {isStreamingAssistant && (
-                  <p
-                    role="status"
-                    aria-live="polite"
-                    data-testid="message-streaming-status"
-                    className="mt-2 text-xs font-black uppercase tracking-[0.14em] text-[#6c5b75]"
+                <article
+                  aria-label={`${message.role} message`}
+                  aria-live={isStreamingAssistant ? "polite" : undefined}
+                  className={`rounded-[20px] p-3 ${
+                    message.role === "user" ? "bg-[#e7f5ed]" : "bg-[#f5effc]"
+                  }`}
+                >
+                  <p className="mb-1 text-xs font-black uppercase opacity-65">{message.role}</p>
+                  {isEditingMessage ? (
+                    <div className="space-y-2">
+                      <textarea
+                        value={editingValue}
+                        onChange={(event) => setEditingValue(event.target.value)}
+                        disabled={isCreating}
+                        aria-label="Edit user message"
+                        data-testid="message-edit-input"
+                        rows={4}
+                        className="w-full resize-none rounded-[16px] border border-white/80 bg-white/78 p-3 text-sm leading-6 text-[#315e45] outline-none focus:border-[#8fc7aa] focus:ring-4 focus:ring-[#d7f0e2] disabled:cursor-not-allowed disabled:opacity-65"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <MessageActionButton
+                          label="Cancel message edit"
+                          testId="cancel-message-edit-button"
+                          onClick={handleCancelEdit}
+                          disabled={isCreating}
+                        >
+                          <X size={15} />
+                        </MessageActionButton>
+                        <MessageActionButton
+                          label="Save message edit"
+                          testId="save-message-edit-button"
+                          onClick={handleSaveEdit}
+                          disabled={isCreating || !editingValue.trim()}
+                        >
+                          <Save size={15} />
+                        </MessageActionButton>
+                      </div>
+                    </div>
+                  ) : (
+                    <MarkdownMessage
+                      content={
+                        message.content || (isStreamingAssistant ? "Generating answer..." : "")
+                      }
+                      isStreaming={isStreamingAssistant}
+                    />
+                  )}
+                  {isStreamingAssistant && (
+                    <p
+                      role="status"
+                      aria-live="polite"
+                      data-testid="message-streaming-status"
+                      className="mt-2 text-xs font-black uppercase tracking-[0.14em] text-[#6c5b75]"
+                    >
+                      Generating answer
+                    </p>
+                  )}
+                </article>
+                {!isEditingMessage && (
+                  <div
+                    role="group"
+                    aria-label={`${message.role} message actions`}
+                    data-testid="conversation-message-actions"
+                    className={`mt-1 flex h-8 gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 ${
+                      message.role === "user" ? "justify-end pr-2" : "justify-start pl-2"
+                    }`}
                   >
-                    Generating answer
-                  </p>
+                    <MessageActionButton
+                      label={`Copy ${message.role} message`}
+                      title={isCopied ? "Copied" : `Copy ${message.role} message`}
+                      testId="copy-message-button"
+                      onClick={() => void handleCopyMessage(message)}
+                      disabled={!message.content}
+                    >
+                      {isCopied ? <Check size={15} /> : <Copy size={15} />}
+                    </MessageActionButton>
+                    {message.role === "user" ? (
+                      <MessageActionButton
+                        label="Edit user message"
+                        testId="edit-message-button"
+                        onClick={() => handleStartEdit(message)}
+                        disabled={isCreating}
+                      >
+                        <Pencil size={15} />
+                      </MessageActionButton>
+                    ) : (
+                      <MessageActionButton
+                        label="Retry assistant response"
+                        testId="retry-message-button"
+                        onClick={() => handleRetryMessage(message)}
+                        disabled={isCreating}
+                      >
+                        <RotateCcw size={15} />
+                      </MessageActionButton>
+                    )}
+                  </div>
                 )}
-              </article>
+              </div>
             );
           })
         )}

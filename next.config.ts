@@ -10,6 +10,26 @@ function getDistDir(phase: string) {
 const createNextConfig = (phase: string): NextConfig => ({
   reactStrictMode: true,
   distDir: getDistDir(phase),
+  webpack: (config) => {
+    const ignored = config.watchOptions?.ignored;
+    const ignoredPatterns = Array.isArray(ignored)
+      ? ignored.filter((pattern) => typeof pattern === "string" && pattern.length > 0)
+      : typeof ignored === "string" && ignored
+        ? [ignored]
+        : [];
+
+    config.watchOptions = {
+      ...config.watchOptions,
+      ignored: [
+        ...ignoredPatterns,
+        "**/data/**",
+        "**/test-results/**",
+        "**/playwright-report/**",
+      ],
+    };
+
+    return config;
+  },
 });
 
 export default createNextConfig;

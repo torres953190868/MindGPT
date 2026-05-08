@@ -33,6 +33,7 @@ export type Project = {
   id: string;
   ownerSessionId?: string;
   title: string;
+  notes: string;
   rootNodeId: string;
   nodes: Record<string, MindNode>;
   createdAt: string;

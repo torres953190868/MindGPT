@@ -16,6 +16,7 @@ export type Database = {
           id: string;
           owner_session_id: string;
           title: string;
+          notes: string;
           root_node_id: string;
           created_at: string;
           updated_at: string;
@@ -24,6 +25,7 @@ export type Database = {
           id: string;
           owner_session_id: string;
           title: string;
+          notes?: string;
           root_node_id: string;
           created_at?: string;
           updated_at?: string;
@@ -32,6 +34,7 @@ export type Database = {
           id?: string;
           owner_session_id?: string;
           title?: string;
+          notes?: string;
           root_node_id?: string;
           created_at?: string;
           updated_at?: string;

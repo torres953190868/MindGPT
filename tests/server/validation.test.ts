@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import {
+  PROJECT_NOTES_MAX_LENGTH,
+  updateProjectSchema,
+} from "@/lib/server/project-request";
 import { parseJsonBody } from "@/lib/server/validation";
 
 const payloadSchema = z.object({
@@ -54,5 +58,14 @@ describe("JSON request validation", () => {
       code: "VALIDATION_FAILED",
       status: 400,
     });
+  });
+
+  it("rejects project notes that exceed the PATCH limit", () => {
+    expect(updateProjectSchema.safeParse({ notes: "x".repeat(PROJECT_NOTES_MAX_LENGTH) }).success)
+      .toBe(true);
+    expect(
+      updateProjectSchema.safeParse({ notes: "x".repeat(PROJECT_NOTES_MAX_LENGTH + 1) })
+        .success,
+    ).toBe(false);
   });
 });

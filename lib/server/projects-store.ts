@@ -15,6 +15,16 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
 
+function normalizeProject(project: Project): Project {
+  return {
+    ...project,
+    notes:
+      typeof (project as { notes?: unknown }).notes === "string"
+        ? (project as { notes: string }).notes
+        : "",
+  };
+}
+
 function normalizeDataFile(value: unknown): BranchMindDataFile {
   if (
     value &&
@@ -24,7 +34,7 @@ function normalizeDataFile(value: unknown): BranchMindDataFile {
   ) {
     return {
       version: 1,
-      projects: (value as { projects: Project[] }).projects,
+      projects: (value as { projects: Project[] }).projects.map(normalizeProject),
     };
   }
 

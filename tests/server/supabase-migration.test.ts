@@ -6,6 +6,10 @@ const migration = readFileSync(
   join(process.cwd(), "supabase/migrations/20260504000000_branchmind_foundation.sql"),
   "utf8",
 );
+const projectNotesMigration = readFileSync(
+  join(process.cwd(), "supabase/migrations/20260508000000_branchmind_project_notes.sql"),
+  "utf8",
+);
 
 describe("Supabase foundation migration", () => {
   it("creates the beta persistence and distributed rate-limit tables", () => {
@@ -25,5 +29,9 @@ describe("Supabase foundation migration", () => {
       expect(migration).toContain(`alter table public.${table} enable row level security`);
       expect(migration).toContain(`revoke all on public.${table} from anon, authenticated`);
     }
+  });
+
+  it("adds project notes persistence", () => {
+    expect(projectNotesMigration).toContain("add column if not exists notes text not null default ''");
   });
 });
