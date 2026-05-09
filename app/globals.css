@@ -37,3 +37,306 @@ textarea {
     linear-gradient(90deg, rgba(130, 101, 167, 0.08) 1px, transparent 1px);
   background-size: 28px 28px;
 }
+
+.project-notes-editor {
+  min-height: 320px;
+  height: 100%;
+  overflow: auto;
+  border: 1px solid #ffffff;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 0.75rem;
+  color: #332b38;
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+  outline: none;
+}
+
+.project-notes-editor:focus {
+  border-color: #b696d4;
+  box-shadow: 0 0 0 4px #eadcf7;
+}
+
+.project-notes-editor .is-editor-empty:first-child::before,
+.project-notes-editor .is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: #665a70;
+  pointer-events: none;
+}
+
+.project-notes-editor > *:first-child {
+  margin-top: 0;
+}
+
+.project-notes-editor > *:last-child {
+  margin-bottom: 0;
+}
+
+.project-notes-editor p {
+  margin: 0.5rem 0;
+}
+
+.project-notes-editor h1,
+.project-notes-editor h2,
+.project-notes-editor h3 {
+  margin: 0.75rem 0 0.5rem;
+  color: #332a39;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.project-notes-editor h1 {
+  font-size: 1.3rem;
+}
+
+.project-notes-editor h2 {
+  font-size: 1.08rem;
+}
+
+.project-notes-editor h3 {
+  font-size: 0.98rem;
+}
+
+.project-notes-editor ul,
+.project-notes-editor ol {
+  margin: 0.5rem 0;
+  padding-left: 1.35rem;
+}
+
+.project-notes-editor li {
+  margin: 0.18rem 0;
+  padding-left: 0.15rem;
+}
+
+.project-notes-editor-task-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.project-notes-editor-task-item {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+}
+
+.project-notes-editor-task-item > label {
+  display: inline-flex;
+  min-height: 1.5rem;
+  align-items: center;
+}
+
+.project-notes-editor-task-item input[type="checkbox"] {
+  accent-color: #6e4ca0;
+}
+
+.project-notes-editor-task-item > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.project-notes-editor-blockquote {
+  margin: 0.6rem 0;
+  border-left: 4px solid rgba(110, 76, 160, 0.26);
+  padding-left: 0.75rem;
+  color: #514062;
+  font-style: italic;
+}
+
+.project-notes-editor pre {
+  margin: 0.6rem 0;
+  overflow-x: auto;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 0.75rem;
+  font-size: 0.78rem;
+  line-height: 1.35rem;
+}
+
+.project-notes-editor code {
+  border-radius: 0.35rem;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 0.08rem 0.28rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.86em;
+}
+
+.project-notes-editor pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.project-notes-editor a {
+  font-weight: 900;
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.project-notes-editor hr {
+  margin: 0.85rem 0;
+  border: 0;
+  border-top: 1px solid #eadff1;
+}
+
+.project-notes-editor-table {
+  margin: 0.6rem 0;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  text-align: left;
+}
+
+.project-notes-editor-table th,
+.project-notes-editor-table td {
+  border: 1px solid rgba(81, 64, 98, 0.2);
+  padding: 0.28rem 0.45rem;
+  vertical-align: top;
+}
+
+.project-notes-editor-table th {
+  background: rgba(255, 255, 255, 0.5);
+  font-weight: 900;
+}
+
+.project-notes-editor-details {
+  margin: 0.6rem 0;
+  border-radius: 16px;
+  background: rgba(234, 220, 247, 0.52);
+  padding: 0.55rem 0.65rem;
+}
+
+.project-notes-editor-details > button {
+  float: left;
+  display: grid;
+  width: 1.35rem;
+  height: 1.5rem;
+  margin: 0 0.35rem 0 0;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #6e4ca0;
+  font: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.project-notes-editor-details-summary {
+  min-height: 1.5rem;
+  font-weight: 900;
+  color: #493856;
+}
+
+.project-notes-editor-details-content {
+  clear: both;
+  margin-top: 0.45rem;
+  padding-left: 1.7rem;
+}
+
+.project-notes-slash-menu {
+  position: fixed;
+  z-index: 80;
+  width: min(320px, calc(100vw - 24px));
+  max-height: min(360px, calc(100vh - 24px));
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 45px rgba(76, 54, 105, 0.18);
+  backdrop-filter: blur(18px);
+}
+
+.project-notes-slash-menu-search {
+  border-bottom: 1px solid rgba(234, 223, 241, 0.92);
+  padding: 0.62rem 0.75rem 0.5rem;
+  color: #74687c;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.project-notes-slash-menu-list {
+  display: grid;
+  max-height: min(304px, calc(100vh - 82px));
+  gap: 0.16rem;
+  overflow-y: auto;
+  padding: 0.38rem;
+}
+
+.project-notes-slash-menu-item {
+  display: grid;
+  width: 100%;
+  min-height: 3.15rem;
+  grid-template-columns: 2.2rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #342b3a;
+  cursor: pointer;
+  text-align: left;
+}
+
+.project-notes-slash-menu-item:hover,
+.project-notes-slash-menu-item.is-active {
+  background: #f1e8fb;
+}
+
+.project-notes-slash-menu-icon {
+  display: grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #6e4ca0;
+}
+
+.project-notes-slash-menu-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.05rem;
+}
+
+.project-notes-slash-menu-label,
+.project-notes-slash-menu-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-notes-slash-menu-label {
+  font-size: 0.85rem;
+  font-weight: 900;
+}
+
+.project-notes-slash-menu-hint {
+  color: #74687c;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.project-notes-slash-menu-shortcut {
+  justify-self: end;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.76);
+  padding: 0.15rem 0.38rem;
+  color: #6c5b75;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.project-notes-slash-menu-empty {
+  margin: 0;
+  padding: 1rem 0.75rem;
+  color: #74687c;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-align: center;
+}

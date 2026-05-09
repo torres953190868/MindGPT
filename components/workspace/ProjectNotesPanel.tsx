@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Eye, NotebookPen, PanelRightClose, PencilLine, PlusCircle } from "lucide-react";
+import { NotebookPen, PanelRightClose, PlusCircle } from "lucide-react";
+import { PROJECT_NOTES_MAX_LENGTH } from "@/lib/project-notes";
 import type { MindNode } from "@/lib/types";
-import { MarkdownMessage } from "./MarkdownMessage";
+import { ProjectNotesEditor, type ProjectNotesEditorHandle } from "./ProjectNotesEditor";
 
 type ProjectNotesPanelProps = {
   projectId: string;
@@ -14,11 +15,9 @@ type ProjectNotesPanelProps = {
   onClose: () => void;
 };
 
-type NotesMode = "edit" | "preview";
 type NotesSaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
 
 const NOTES_AUTOSAVE_DELAY_MS = 800;
-const PROJECT_NOTES_MAX_LENGTH = 60_000;
 
 function getLatestAssistantContent(node: MindNode | null) {
   if (!node) return "";
@@ -55,11 +54,11 @@ export function ProjectNotesPanel({
   const panelId = useId();
   const titleId = `${panelId}-title`;
   const notesErrorId = `${panelId}-notes-error`;
-  const [notesMode, setNotesMode] = useState<NotesMode>("edit");
   const [notesDraft, setNotesDraft] = useState(projectNotes);
   const [notesSaveStatus, setNotesSaveStatus] = useState<NotesSaveStatus>("idle");
   const [notesSaveError, setNotesSaveError] = useState<string | null>(null);
   const notesAutosaveTimerRef = useRef<number | null>(null);
+  const notesEditorRef = useRef<ProjectNotesEditorHandle>(null);
   const notesDraftRef = useRef(projectNotes);
   const notesDirtyRef = useRef(false);
   const notesSaveVersionRef = useRef(0);
@@ -141,6 +140,14 @@ export function ProjectNotesPanel({
 
   function handleNotesChange(value: string) {
     notesSaveVersionRef.current += 1;
+
+    if (value.length > PROJECT_NOTES_MAX_LENGTH) {
+      notesDirtyRef.current = true;
+      setNotesSaveStatus("error");
+      setNotesSaveError("Project notes are too long.");
+      return;
+    }
+
     notesDirtyRef.current = true;
     setNotesDraft(value);
     setNotesSaveStatus("dirty");
@@ -161,8 +168,10 @@ export function ProjectNotesPanel({
       return;
     }
 
-    setNotesMode("edit");
     handleNotesChange(nextNotes);
+    window.requestAnimationFrame(() => {
+      notesEditorRef.current?.focusEnd();
+    });
   }
 
   return (
@@ -205,43 +214,6 @@ export function ProjectNotesPanel({
           >
             {getNotesStatusLabel(notesSaveStatus)}
           </p>
-          <div
-            role="group"
-            aria-label="Project notes mode"
-            data-testid="project-notes-mode"
-            className="grid w-full min-w-0 grid-cols-2 gap-2 sm:w-auto"
-          >
-            <button
-              type="button"
-              onClick={() => setNotesMode("edit")}
-              aria-label="Edit project notes"
-              aria-pressed={notesMode === "edit"}
-              data-testid="project-notes-edit-button"
-              className={`inline-flex h-9 items-center justify-center gap-2 rounded-[14px] px-3 text-xs font-black transition ${
-                notesMode === "edit"
-                  ? "bg-[#dff5ea] text-[#376b50]"
-                  : "bg-white/75 text-[#776c80] hover:bg-white"
-              }`}
-            >
-              <PencilLine size={15} />
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => setNotesMode("preview")}
-              aria-label="Preview project notes"
-              aria-pressed={notesMode === "preview"}
-              data-testid="project-notes-preview-button"
-              className={`inline-flex h-9 items-center justify-center gap-2 rounded-[14px] px-3 text-xs font-black transition ${
-                notesMode === "preview"
-                  ? "bg-[#eadcf7] text-[#6e4ca0]"
-                  : "bg-white/75 text-[#776c80] hover:bg-white"
-              }`}
-            >
-              <Eye size={15} />
-              Preview
-            </button>
-          </div>
         </div>
 
         <button
@@ -256,35 +228,16 @@ export function ProjectNotesPanel({
           Add latest AI reply
         </button>
 
-        {notesMode === "edit" ? (
-          <textarea
-            value={notesDraft}
-            onChange={(event) => handleNotesChange(event.target.value)}
-            aria-label="Project notes"
-            aria-describedby={notesSaveError ? notesErrorId : undefined}
-            data-testid="project-notes-input"
-            maxLength={PROJECT_NOTES_MAX_LENGTH}
-            placeholder="Project notes..."
-            className="min-h-[320px] flex-1 resize-none rounded-[20px] border border-white bg-white/82 p-3 text-sm leading-6 text-[#332b38] outline-none placeholder:text-[#665a70] focus:border-[#b696d4] focus:ring-4 focus:ring-[#eadcf7]"
-          />
-        ) : (
-          <div
-            data-testid="project-notes-preview"
-            className="min-h-[320px] flex-1 overflow-auto rounded-[20px] border border-white bg-white/72 p-3 text-sm leading-6 text-[#514062]"
-          >
-            {notesDraft.trim() ? (
-              <MarkdownMessage content={notesDraft} testId="project-notes-preview-content" />
-            ) : (
-              <p
-                role="status"
-                data-testid="project-notes-empty-preview"
-                className="text-sm font-bold text-[#665a70]"
-              >
-                No notes yet.
-              </p>
-            )}
-          </div>
-        )}
+        <ProjectNotesEditor
+          ref={notesEditorRef}
+          value={notesDraft}
+          onChange={handleNotesChange}
+          maxLength={PROJECT_NOTES_MAX_LENGTH}
+          placeholder="Project notes..."
+          ariaLabel="Project notes"
+          ariaDescribedBy={notesSaveError ? notesErrorId : undefined}
+          testId="project-notes-input"
+        />
 
         {notesSaveError && (
           <p

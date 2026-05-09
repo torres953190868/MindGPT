@@ -324,39 +324,109 @@ test("adds the latest AI reply to editable project notes and persists it", async
     await page.goto(`/workspace/${project.id}`);
     await page.getByTestId("node-detail-notes-button").click();
 
-    const notesInput = page.getByTestId("project-notes-input");
+    const notesEditor = page.getByTestId("project-notes-input");
     await expect(page.getByTestId("project-notes-panel")).toBeVisible();
+    await expect(page.getByTestId("project-notes-preview-button")).toHaveCount(0);
+    await expect(page.getByTestId("project-notes-preview")).toHaveCount(0);
     await page.getByTestId("add-latest-ai-reply-note-button").click();
 
-    await expect(notesInput).toHaveValue(/## Seeded root node/);
-    await expect(notesInput).toHaveValue(/The workspace is \*\*ready\*\*/);
+    await expect(
+      notesEditor.getByRole("heading", { level: 2, name: "Seeded root node" }),
+    ).toBeVisible();
+    await expect(
+      notesEditor.getByRole("heading", { level: 2, name: "Workspace ready" }),
+    ).toBeVisible();
+    await expect(notesEditor.locator("strong").filter({ hasText: "ready" })).toBeVisible();
+    await expect(notesEditor.locator("li")).toHaveCount(2);
     await expect(page.getByTestId("project-notes-save-status")).toContainText("Saved", {
       timeout: 5_000,
     });
 
-    await page.getByTestId("project-notes-preview-button").click();
-    const notesPreview = page.getByTestId("project-notes-preview");
-    await expect(page.getByTestId("project-notes-preview-content")).toBeVisible();
-    await expect(
-      notesPreview.getByRole("heading", { level: 2, name: "Seeded root node" }),
-    ).toBeVisible();
-    await expect(
-      notesPreview.getByRole("heading", { level: 2, name: "Workspace ready" }),
-    ).toBeVisible();
-    await expect(notesPreview.locator("strong")).toHaveText("ready");
-    await expect(notesPreview.locator("li")).toHaveCount(2);
+    await notesEditor.press("ControlOrMeta+End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("# Quick heading");
+    await expect(notesEditor.getByRole("heading", { level: 1, name: "Quick heading" }))
+      .toBeVisible();
+
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("[] Task item");
+    await expect(notesEditor.getByRole("checkbox", { name: /Task item/ })).toBeVisible();
+
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("**bold**");
+    await expect(notesEditor.locator("strong").filter({ hasText: "bold" })).toBeVisible();
     await expect(page.getByTestId("conversation-message-content")).toHaveCount(2);
 
-    await page.getByTestId("project-notes-edit-button").click();
-    const notesValue = await notesInput.inputValue();
-    await notesInput.fill(`${notesValue}\n\n${manualNote}`);
+    await page.keyboard.press("Enter");
+    await page.keyboard.type(manualNote);
     await expect(page.getByTestId("project-notes-save-status")).toContainText("Saved", {
       timeout: 5_000,
     });
 
     await page.reload();
     await page.getByTestId("node-detail-notes-button").click();
-    await expect(page.getByTestId("project-notes-input")).toHaveValue(new RegExp(manualNote));
+    const reloadedNotesEditor = page.getByTestId("project-notes-input");
+    await expect(reloadedNotesEditor.getByText(manualNote)).toBeVisible();
+    await expect(
+      reloadedNotesEditor.getByRole("heading", { level: 1, name: "Quick heading" }),
+    ).toBeVisible();
+    await expect(reloadedNotesEditor.locator("strong").filter({ hasText: "bold" }))
+      .toBeVisible();
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("shows a slash block menu in project notes", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Project notes slash menu is covered once.");
+
+  const sourceProject = makeWorkspaceProject(`notes-slash-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.goto(`/workspace/${project.id}`);
+    await page.getByTestId("node-detail-notes-button").click();
+
+    const notesEditor = page.getByTestId("project-notes-input");
+    const slashMenu = page.getByTestId("project-notes-slash-menu");
+
+    await notesEditor.click();
+    await page.keyboard.type("Inline slash /path");
+    await expect(slashMenu).toHaveCount(0);
+
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("/");
+    await expect(slashMenu).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(slashMenu).toHaveCount(0);
+
+    await page.keyboard.press("Backspace");
+    await page.keyboard.type("/h1");
+    await expect(page.getByTestId("project-notes-slash-menu-item-heading-1")).toBeVisible();
+    await page.getByTestId("project-notes-slash-menu-item-heading-1").click();
+    await page.keyboard.type("Slash Heading");
+    await expect(
+      notesEditor.getByRole("heading", { level: 1, name: "Slash Heading" }),
+    ).toBeVisible();
+    await expect(notesEditor).not.toContainText("/h1");
+
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("/todo");
+    await expect(page.getByTestId("project-notes-slash-menu-item-todo-list")).toBeVisible();
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Slash task");
+    await expect(notesEditor.getByRole("checkbox", { name: /Slash task/ })).toBeVisible();
+    await expect(notesEditor).not.toContainText("/todo");
   } finally {
     if (projectIdToDelete) {
       await page.request

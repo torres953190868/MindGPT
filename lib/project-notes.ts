@@ -1,0 +1,1 @@
+export const PROJECT_NOTES_MAX_LENGTH = 60_000;

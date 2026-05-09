@@ -620,9 +620,9 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
       <header
         aria-label="Workspace header"
         data-testid="workspace-header"
-        className="flex items-center justify-between rounded-[26px] border border-white/80 bg-white/70 px-5 py-3 shadow-sm"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-white/80 bg-white/70 px-5 py-3 shadow-sm"
       >
-        <div>
+        <div className="min-w-0">
           <p className="text-xs font-black uppercase tracking-[0.18em] text-[#74687c]">
             BranchMind
           </p>
@@ -633,7 +633,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
         <nav
           aria-label="Workspace navigation"
           data-testid="workspace-navigation"
-          className="flex flex-wrap items-center justify-end gap-3"
+          className="flex w-full min-w-0 flex-wrap items-center justify-end gap-3 sm:w-auto"
         >
           <AuthPanel />
           <Link
