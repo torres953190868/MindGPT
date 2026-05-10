@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 
 function getDistDir(phase: string) {
-  if (phase === PHASE_DEVELOPMENT_SERVER) return ".next/development";
+  if (phase === PHASE_DEVELOPMENT_SERVER) return ".next-dev";
 
   return ".next";
 }

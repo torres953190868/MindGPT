@@ -1,7 +1,10 @@
 "use client";
 
 import {
+  type ChangeEvent,
+  type FormEvent,
   forwardRef,
+  type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -14,9 +17,11 @@ import { Blockquote } from "@tiptap/extension-blockquote";
 import { CharacterCount } from "@tiptap/extension-character-count";
 import { Details, DetailsContent, DetailsSummary } from "@tiptap/extension-details";
 import { Link } from "@tiptap/extension-link";
+import { BlockMath } from "@tiptap/extension-mathematics";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Placeholder } from "@tiptap/extension-placeholder";
 import { Markdown } from "@tiptap/markdown";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -32,6 +37,7 @@ import {
   ListTodo,
   Minus,
   Pilcrow,
+  Radical,
   Table2,
   TextQuote,
   type LucideIcon,
@@ -64,6 +70,22 @@ type SlashMenuState = {
   top: number;
 };
 
+type MathFormulaDialogState =
+  | {
+      latex: string;
+      mode: "insert";
+      range: SlashMenuRange;
+    }
+  | {
+      latex: string;
+      mode: "edit";
+      pos: number;
+    };
+
+type SlashCommandHelpers = {
+  openMathFormulaDialog: (range: SlashMenuRange) => void;
+};
+
 type SlashCommand = {
   aliases: string[];
   hint: string;
@@ -71,7 +93,7 @@ type SlashCommand = {
   id: string;
   label: string;
   shortcut: string;
-  run: (editor: Editor, range: SlashMenuRange) => boolean;
+  run: (editor: Editor, range: SlashMenuRange, helpers: SlashCommandHelpers) => boolean;
 };
 
 const NotionBlockquote = Blockquote.extend({
@@ -202,6 +224,18 @@ const slashCommands: SlashCommand[] = [
       editor.chain().focus().deleteRange(range).toggleCodeBlock().run(),
   },
   {
+    id: "math-equation",
+    label: "Math formula",
+    hint: "Display a LaTeX equation",
+    shortcut: "$$",
+    aliases: ["math", "formula", "equation", "latex"],
+    Icon: Radical,
+    run: (_editor, range, helpers) => {
+      helpers.openMathFormulaDialog(range);
+      return true;
+    },
+  },
+  {
     id: "divider",
     label: "Divider",
     hint: "Horizontal separator",
@@ -228,95 +262,107 @@ const slashCommands: SlashCommand[] = [
   },
 ];
 
-const editorExtensions = [
-  StarterKit.configure({
-    blockquote: false,
-    link: false,
-  }),
-  NotionBlockquote.configure({
-    HTMLAttributes: {
-      class: "project-notes-editor-blockquote",
-    },
-  }),
-  Link.configure({
-    autolink: true,
-    linkOnPaste: true,
-    openOnClick: false,
-    HTMLAttributes: {
-      rel: "noopener noreferrer",
-      target: "_blank",
-    },
-    isAllowedUri: (url, { defaultValidate }) => {
-      if (url.startsWith("#") || url.startsWith("/") || url.startsWith("./")) return true;
+function createEditorExtensions(onBlockMathClick: (node: ProseMirrorNode, pos: number) => void) {
+  return [
+    StarterKit.configure({
+      blockquote: false,
+      link: false,
+    }),
+    NotionBlockquote.configure({
+      HTMLAttributes: {
+        class: "project-notes-editor-blockquote",
+      },
+    }),
+    Link.configure({
+      autolink: true,
+      linkOnPaste: true,
+      openOnClick: false,
+      HTMLAttributes: {
+        rel: "noopener noreferrer",
+        target: "_blank",
+      },
+      isAllowedUri: (url, { defaultValidate }) => {
+        if (url.startsWith("#") || url.startsWith("/") || url.startsWith("./")) return true;
 
-      try {
-        const parsedUrl = new URL(url, "https://branchmind.local");
-        return ["http:", "https:", "mailto:"].includes(parsedUrl.protocol) && defaultValidate(url);
-      } catch {
-        return false;
-      }
-    },
-  }),
-  TaskList.configure({
-    HTMLAttributes: {
-      class: "project-notes-editor-task-list",
-    },
-  }),
-  TaskItem.configure({
-    nested: true,
-    HTMLAttributes: {
-      class: "project-notes-editor-task-item",
-    },
-  }),
-  Details.configure({
-    persist: true,
-    HTMLAttributes: {
-      class: "project-notes-editor-details",
-    },
-    renderToggleButton: ({ element, isOpen, node }) => {
-      const label = node.textContent.trim() || "toggle";
-      element.setAttribute("aria-label", isOpen ? `Collapse ${label}` : `Expand ${label}`);
-      element.textContent = isOpen ? "-" : "+";
-    },
-  }),
-  DetailsSummary.configure({
-    HTMLAttributes: {
-      class: "project-notes-editor-details-summary",
-    },
-  }),
-  DetailsContent.configure({
-    HTMLAttributes: {
-      class: "project-notes-editor-details-content",
-    },
-  }),
-  NotionToggleInputRule,
-  Table.configure({
-    HTMLAttributes: {
-      class: "project-notes-editor-table",
-    },
-  }),
-  TableRow,
-  TableHeader,
-  TableCell,
-  Placeholder.configure({
-    placeholder: ({ node }) => {
-      if (node.type.name === "heading") return "Heading";
-      if (node.type.name === "detailsSummary") return "Toggle title";
-      return "Project notes...";
-    },
-  }),
-  CharacterCount,
-  Markdown.configure({
-    indentation: {
-      style: "space",
-      size: 2,
-    },
-    markedOptions: {
-      gfm: true,
-      breaks: false,
-    },
-  }),
-];
+        try {
+          const parsedUrl = new URL(url, "https://branchmind.local");
+          return (
+            ["http:", "https:", "mailto:"].includes(parsedUrl.protocol) &&
+            defaultValidate(url)
+          );
+        } catch {
+          return false;
+        }
+      },
+    }),
+    TaskList.configure({
+      HTMLAttributes: {
+        class: "project-notes-editor-task-list",
+      },
+    }),
+    TaskItem.configure({
+      nested: true,
+      HTMLAttributes: {
+        class: "project-notes-editor-task-item",
+      },
+    }),
+    Details.configure({
+      persist: true,
+      HTMLAttributes: {
+        class: "project-notes-editor-details",
+      },
+      renderToggleButton: ({ element, isOpen, node }) => {
+        const label = node.textContent.trim() || "toggle";
+        element.setAttribute("aria-label", isOpen ? `Collapse ${label}` : `Expand ${label}`);
+        element.textContent = isOpen ? "-" : "+";
+      },
+    }),
+    DetailsSummary.configure({
+      HTMLAttributes: {
+        class: "project-notes-editor-details-summary",
+      },
+    }),
+    DetailsContent.configure({
+      HTMLAttributes: {
+        class: "project-notes-editor-details-content",
+      },
+    }),
+    NotionToggleInputRule,
+    Table.configure({
+      HTMLAttributes: {
+        class: "project-notes-editor-table",
+      },
+    }),
+    TableRow,
+    TableHeader,
+    TableCell,
+    BlockMath.configure({
+      katexOptions: {
+        displayMode: true,
+        throwOnError: false,
+      },
+      onClick: onBlockMathClick,
+    }),
+    Placeholder.configure({
+      placeholder: ({ node }) => {
+        if (node.type.name === "heading") return "Heading";
+        if (node.type.name === "detailsSummary") return "Toggle title";
+        return "Project notes...";
+      },
+    }),
+    CharacterCount,
+    Markdown.configure({
+      indentation: {
+        style: "space",
+        size: 2,
+      },
+      markedOptions: {
+        gfm: true,
+        breaks: false,
+      },
+    }),
+  ];
+}
 
 function filterSlashCommands(query: string) {
   const terms = query
@@ -392,12 +438,49 @@ export const ProjectNotesEditor = forwardRef<ProjectNotesEditorHandle, ProjectNo
     ref,
   ) {
     const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
+    const [mathFormulaDialog, setMathFormulaDialog] =
+      useState<MathFormulaDialogState | null>(null);
     const onChangeRef = useRef(onChange);
     const editorRef = useRef<Editor | null>(null);
+    const mathFormulaInputRef = useRef<HTMLTextAreaElement | null>(null);
+    const slashMenuListRef = useRef<HTMLDivElement | null>(null);
     const slashMenuRef = useRef<SlashMenuState | null>(null);
     const filteredSlashCommands = useMemo(
       () => filterSlashCommands(slashMenu?.query ?? ""),
       [slashMenu?.query],
+    );
+    const activeSlashCommandId =
+      slashMenu && filteredSlashCommands.length > 0
+        ? filteredSlashCommands[
+            Math.min(slashMenu.activeIndex, filteredSlashCommands.length - 1)
+          ].id
+        : null;
+    const mathFormulaFocusKey =
+      mathFormulaDialog?.mode === "edit"
+        ? `edit-${mathFormulaDialog.pos}`
+        : mathFormulaDialog
+          ? `insert-${mathFormulaDialog.range.from}-${mathFormulaDialog.range.to}`
+          : null;
+
+    const openMathFormulaDialog = useCallback((range: SlashMenuRange) => {
+      setMathFormulaDialog({
+        latex: "",
+        mode: "insert",
+        range,
+      });
+    }, []);
+
+    const handleBlockMathClick = useCallback((node: ProseMirrorNode, pos: number) => {
+      setMathFormulaDialog({
+        latex: String(node.attrs.latex ?? ""),
+        mode: "edit",
+        pos,
+      });
+    }, []);
+
+    const editorExtensions = useMemo(
+      () => createEditorExtensions(handleBlockMathClick),
+      [handleBlockMathClick],
     );
 
     const updateSlashMenu = useCallback((currentEditor: Editor) => {
@@ -417,11 +500,13 @@ export const ProjectNotesEditor = forwardRef<ProjectNotesEditorHandle, ProjectNo
         const currentSlashMenu = slashMenuRef.current;
         if (!currentEditor || !currentSlashMenu) return false;
 
-        const didRun = command.run(currentEditor, currentSlashMenu.range);
+        const didRun = command.run(currentEditor, currentSlashMenu.range, {
+          openMathFormulaDialog,
+        });
         hideSlashMenu();
         return didRun;
       },
-      [hideSlashMenu],
+      [hideSlashMenu, openMathFormulaDialog],
     );
 
     const handleEditorKeyDown = useCallback(
@@ -563,18 +648,108 @@ export const ProjectNotesEditor = forwardRef<ProjectNotesEditorHandle, ProjectNo
       };
     }, [editor, slashMenu, updateSlashMenu]);
 
+    useEffect(() => {
+      if (!activeSlashCommandId) return;
+
+      const activeElement = slashMenuListRef.current?.querySelector<HTMLElement>(
+        `#project-notes-slash-menu-item-${activeSlashCommandId}`,
+      );
+      activeElement?.scrollIntoView({ block: "nearest" });
+    }, [activeSlashCommandId]);
+
+    useEffect(() => {
+      if (!mathFormulaFocusKey) return undefined;
+
+      const animationFrame = window.requestAnimationFrame(() => {
+        mathFormulaInputRef.current?.focus();
+        mathFormulaInputRef.current?.select();
+      });
+
+      return () => {
+        window.cancelAnimationFrame(animationFrame);
+      };
+    }, [mathFormulaFocusKey]);
+
+    const closeMathFormulaDialog = useCallback(() => {
+      setMathFormulaDialog(null);
+      window.requestAnimationFrame(() => {
+        editorRef.current?.commands.focus();
+      });
+    }, []);
+
+    const handleMathFormulaInputChange = useCallback(
+      (event: ChangeEvent<HTMLTextAreaElement>) => {
+        const latex = event.currentTarget.value;
+        setMathFormulaDialog((currentDialog) =>
+          currentDialog ? { ...currentDialog, latex } : currentDialog,
+        );
+      },
+      [],
+    );
+
+    const handleMathFormulaInputKeyDown = useCallback(
+      (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeMathFormulaDialog();
+          return;
+        }
+
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          event.currentTarget.form?.requestSubmit();
+        }
+      },
+      [closeMathFormulaDialog],
+    );
+
+    const handleMathFormulaSubmit = useCallback(
+      (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+
+        const currentEditor = editorRef.current;
+        const currentDialog = mathFormulaDialog;
+        if (!currentEditor || !currentDialog) return;
+
+        const latex = currentDialog.latex.trim();
+        if (!latex) {
+          closeMathFormulaDialog();
+          return;
+        }
+
+        const didRun =
+          currentDialog.mode === "insert"
+            ? currentEditor
+                .chain()
+                .focus()
+                .insertContentAt(currentDialog.range, {
+                  attrs: { latex },
+                  type: "blockMath",
+                })
+                .run()
+            : currentEditor
+                .chain()
+                .focus()
+                .updateBlockMath({ latex, pos: currentDialog.pos })
+                .run();
+
+        if (didRun) {
+          setMathFormulaDialog(null);
+        }
+      },
+      [closeMathFormulaDialog, mathFormulaDialog],
+    );
+
     return (
-      <div className="min-h-[320px] min-w-0 flex-1 overflow-hidden rounded-[20px]">
-        <EditorContent editor={editor} className="h-full" />
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-[20px]">
+        <EditorContent editor={editor} className="min-h-0 flex-1" />
         {slashMenu && (
           <div
             role="listbox"
             aria-label="Project notes blocks"
             aria-activedescendant={
-              filteredSlashCommands.length > 0
-                ? `project-notes-slash-menu-item-${filteredSlashCommands[
-                    Math.min(slashMenu.activeIndex, filteredSlashCommands.length - 1)
-                  ].id}`
+              activeSlashCommandId
+                ? `project-notes-slash-menu-item-${activeSlashCommandId}`
                 : undefined
             }
             className="project-notes-slash-menu"
@@ -582,7 +757,11 @@ export const ProjectNotesEditor = forwardRef<ProjectNotesEditorHandle, ProjectNo
             style={{ left: slashMenu.left, top: slashMenu.top }}
           >
             <div className="project-notes-slash-menu-search">Blocks</div>
-            <div className="project-notes-slash-menu-list">
+            <div
+              ref={slashMenuListRef}
+              className="project-notes-slash-menu-list"
+              data-testid="project-notes-slash-menu-list"
+            >
               {filteredSlashCommands.map((command, index) => {
                 const isActive = index === slashMenu.activeIndex;
                 const { Icon } = command;
@@ -633,6 +812,52 @@ export const ProjectNotesEditor = forwardRef<ProjectNotesEditorHandle, ProjectNo
                 </p>
               )}
             </div>
+          </div>
+        )}
+        {mathFormulaDialog && (
+          <div
+            role="dialog"
+            aria-label={
+              mathFormulaDialog.mode === "edit" ? "Edit math formula" : "Insert math formula"
+            }
+            className="project-notes-math-popover"
+            data-testid="project-notes-math-popover"
+          >
+            <form className="project-notes-math-form" onSubmit={handleMathFormulaSubmit}>
+              <div className="project-notes-math-header">
+                <span className="project-notes-math-title">Math formula</span>
+              </div>
+              <textarea
+                ref={mathFormulaInputRef}
+                aria-label="LaTeX formula"
+                className="project-notes-math-input"
+                data-testid="project-notes-math-input"
+                onChange={handleMathFormulaInputChange}
+                onKeyDown={handleMathFormulaInputKeyDown}
+                placeholder="E = mc^2"
+                rows={3}
+                spellCheck={false}
+                value={mathFormulaDialog.latex}
+              />
+              <div className="project-notes-math-actions">
+                <button
+                  type="button"
+                  className="project-notes-math-button project-notes-math-button-secondary"
+                  data-testid="project-notes-math-cancel"
+                  onClick={closeMathFormulaDialog}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="project-notes-math-button project-notes-math-button-primary"
+                  data-testid="project-notes-math-submit"
+                  disabled={mathFormulaDialog.latex.trim().length === 0}
+                >
+                  {mathFormulaDialog.mode === "edit" ? "Update" : "Insert"}
+                </button>
+              </div>
+            </form>
           </div>
         )}
       </div>

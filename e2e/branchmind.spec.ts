@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { expect, type Page, test } from "@playwright/test";
-import type { Project } from "@/lib/types";
+import { expect, type Locator, type Page, test } from "@playwright/test";
+import type { ChatMessage, Project } from "@/lib/types";
 
 test.describe.configure({ mode: "serial" });
 
@@ -59,6 +59,51 @@ function makeWorkspaceProject(seed: string): Project {
 }
 
 type WorkspaceProject = Project;
+
+function makeScrollableWorkspaceProject(seed: string): WorkspaceProject {
+  const project = makeWorkspaceProject(`scroll-${seed}`);
+  const timestamp = project.createdAt;
+  const rootNode = project.nodes[project.rootNodeId];
+  const messages: ChatMessage[] = Array.from({ length: 30 }, (_, index) => {
+    const messageNumber = index + 1;
+    const role = index % 2 === 0 ? "user" : "assistant";
+    const paragraph = Array.from(
+      { length: 4 },
+      (_, lineIndex) =>
+        `Scrollable detail ${messageNumber}.${lineIndex + 1} keeps enough text in the panel to require an internal scroll container.`,
+    ).join("\n\n");
+
+    return {
+      id: `e2e-message-scroll-${seed}-${messageNumber}`,
+      role,
+      content:
+        role === "assistant"
+          ? `## Scroll reply ${messageNumber}\n\n${paragraph}\n\n- Nested evidence\n- More evidence`
+          : `Scroll prompt ${messageNumber}\n\n${paragraph}`,
+      createdAt: timestamp,
+    };
+  });
+  const notes = Array.from(
+    { length: 52 },
+    (_, index) =>
+      `## Notebook section ${index + 1}\n\nThis saved project note is intentionally long so the editor must scroll internally instead of resizing the notes window.\n\n- Stable note row\n- Additional note row`,
+  ).join("\n\n");
+
+  return {
+    ...project,
+    title: `E2E Scroll Containers ${seed}`,
+    notes,
+    nodes: {
+      ...project.nodes,
+      [project.rootNodeId]: {
+        ...rootNode,
+        title: "Scrollable root node",
+        summary: "A deterministic project with long conversation and notes content.",
+        messages,
+      },
+    },
+  };
+}
 
 function makeWorkspaceTreeProject(seed: string): WorkspaceProject {
   const project = makeWorkspaceProject(`tree-${seed}`);
@@ -136,6 +181,30 @@ function getOutlineRow(page: Page, nodeId: string) {
 
 function getOutlineToggle(page: Page, nodeId: string) {
   return page.locator(`[data-testid="conversation-outline-toggle"][data-node-id="${nodeId}"]`);
+}
+
+async function expectWheelScrolls(page: Page, locator: Locator) {
+  await expect
+    .poll(() =>
+      locator.evaluate((element) => {
+        const scrollElement = element as HTMLElement;
+        return scrollElement.scrollHeight - scrollElement.clientHeight;
+      }),
+    )
+    .toBeGreaterThan(24);
+
+  await locator.evaluate((element) => {
+    (element as HTMLElement).scrollTop = 0;
+  });
+  const scrollTopBefore = await locator.evaluate(
+    (element) => (element as HTMLElement).scrollTop,
+  );
+
+  await locator.hover();
+  await page.mouse.wheel(0, 700);
+  await expect
+    .poll(() => locator.evaluate((element) => (element as HTMLElement).scrollTop))
+    .toBeGreaterThan(scrollTopBefore + 24);
 }
 
 async function importProject(page: Page, project: WorkspaceProject): Promise<WorkspaceProject> {
@@ -398,6 +467,7 @@ test("shows a slash block menu in project notes", async ({ page }, testInfo) => 
 
     const notesEditor = page.getByTestId("project-notes-input");
     const slashMenu = page.getByTestId("project-notes-slash-menu");
+    const slashMenuList = page.getByTestId("project-notes-slash-menu-list");
 
     await notesEditor.click();
     await page.keyboard.type("Inline slash /path");
@@ -407,6 +477,18 @@ test("shows a slash block menu in project notes", async ({ page }, testInfo) => 
     await page.keyboard.press("Enter");
     await page.keyboard.type("/");
     await expect(slashMenu).toBeVisible();
+    await expect(slashMenuList).toBeVisible();
+    let keyboardScrollTop = 0;
+    for (let index = 0; index < 24; index += 1) {
+      await page.keyboard.press("ArrowDown");
+      keyboardScrollTop = await slashMenuList.evaluate(
+        (element) => (element as HTMLElement).scrollTop,
+      );
+      if (keyboardScrollTop > 0) break;
+    }
+    expect(keyboardScrollTop).toBeGreaterThan(0);
+    await expect(slashMenuList.locator('[role="option"][aria-selected="true"]'))
+      .toBeVisible();
     await page.keyboard.press("Escape");
     await expect(slashMenu).toHaveCount(0);
 
@@ -427,6 +509,31 @@ test("shows a slash block menu in project notes", async ({ page }, testInfo) => 
     await page.keyboard.type("Slash task");
     await expect(notesEditor.getByRole("checkbox", { name: /Slash task/ })).toBeVisible();
     await expect(notesEditor).not.toContainText("/todo");
+
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("/math");
+    await expect(page.getByTestId("project-notes-slash-menu-item-math-equation"))
+      .toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("project-notes-math-popover")).toBeVisible();
+    await page.getByTestId("project-notes-math-input").fill("E = mc^2");
+    await page.getByTestId("project-notes-math-submit").click();
+    const mathFormula = notesEditor.locator(
+      '[data-type="block-math"][data-latex="E = mc^2"]',
+    );
+    await expect(mathFormula.locator(".katex")).toBeVisible();
+    await expect(notesEditor).not.toContainText("/math");
+    await expect(page.getByTestId("project-notes-save-status")).toContainText("Saved", {
+      timeout: 5_000,
+    });
+
+    await page.reload();
+    await page.getByTestId("node-detail-notes-button").click();
+    const reloadedNotesEditor = page.getByTestId("project-notes-input");
+    await expect(
+      reloadedNotesEditor.locator('[data-type="block-math"][data-latex="E = mc^2"] .katex'),
+    ).toBeVisible();
   } finally {
     if (projectIdToDelete) {
       await page.request
@@ -534,6 +641,184 @@ test("shows project notes as a mobile drawer without horizontal overflow", async
     await page.getByTestId("node-detail-notes-button").click();
     await page.getByTestId("close-project-notes-button").click();
     await expect(page.getByTestId("project-notes-panel")).toHaveCount(0);
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("keeps long conversation content inside the node detail scroll area", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Conversation scrolling is covered once.");
+
+  const sourceProject = makeScrollableWorkspaceProject(`conversation-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`/workspace/${project.id}`);
+
+    const detailPanel = page.getByTestId("node-detail-panel");
+    const history = page.getByTestId("conversation-history");
+    await expect(detailPanel).toBeVisible();
+    await expect(page.getByTestId("conversation-message")).toHaveCount(30);
+
+    const metrics = await page.evaluate(() => {
+      const panel = document.querySelector<HTMLElement>('[data-testid="node-detail-panel"]');
+      const historyElement = document.querySelector<HTMLElement>(
+        '[data-testid="conversation-history"]',
+      );
+      if (!panel || !historyElement) {
+        throw new Error("Expected node detail panel and conversation history.");
+      }
+
+      return {
+        historyClientHeight: historyElement.clientHeight,
+        historyScrollHeight: historyElement.scrollHeight,
+        panelHeight: panel.getBoundingClientRect().height,
+        viewportHeight: window.innerHeight,
+      };
+    });
+
+    expect(metrics.panelHeight).toBeLessThanOrEqual(metrics.viewportHeight - 96);
+    expect(metrics.historyScrollHeight).toBeGreaterThan(metrics.historyClientHeight + 24);
+    await expectWheelScrolls(page, history);
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("keeps long project notes inside the fixed desktop side window", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Desktop notes scrolling is covered once.");
+
+  const sourceProject = makeScrollableWorkspaceProject(`notes-desktop-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.goto(`/workspace/${project.id}`);
+    await page.getByTestId("node-detail-notes-button").click();
+
+    const notesWindow = page.getByTestId("project-notes-window");
+    const notesEditor = page.getByTestId("project-notes-input");
+    await expect(notesWindow).toBeVisible();
+    await expect(
+      notesEditor.getByRole("heading", {
+        exact: true,
+        level: 2,
+        name: "Notebook section 1",
+      }),
+    ).toBeVisible();
+
+    const metrics = await page.evaluate(() => {
+      const notesWindowElement = document.querySelector<HTMLElement>(
+        '[data-testid="project-notes-window"]',
+      );
+      const notesPanelElement = document.querySelector<HTMLElement>(
+        '[data-testid="project-notes-panel"]',
+      );
+      const notesEditorElement = document.querySelector<HTMLElement>(
+        '[data-testid="project-notes-input"]',
+      );
+      if (!notesWindowElement || !notesPanelElement || !notesEditorElement) {
+        throw new Error("Expected project notes window, panel, and editor.");
+      }
+
+      return {
+        editorClientHeight: notesEditorElement.clientHeight,
+        editorScrollHeight: notesEditorElement.scrollHeight,
+        panelHeight: notesPanelElement.getBoundingClientRect().height,
+        viewportHeight: window.innerHeight,
+        windowHeight: notesWindowElement.getBoundingClientRect().height,
+      };
+    });
+
+    expect(metrics.windowHeight).toBeLessThanOrEqual(metrics.viewportHeight - 80);
+    expect(metrics.panelHeight).toBeLessThanOrEqual(metrics.windowHeight + 1);
+    expect(metrics.editorScrollHeight).toBeGreaterThan(metrics.editorClientHeight + 24);
+    await expectWheelScrolls(page, notesEditor);
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("keeps long project notes scrollable inside the mobile drawer", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chrome", "Mobile drawer scrolling is covered once.");
+
+  const sourceProject = makeScrollableWorkspaceProject(`notes-mobile-scroll-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/workspace/${project.id}`);
+    await page.getByTestId("node-detail-notes-button").click();
+
+    const notesWindow = page.getByTestId("project-notes-window");
+    const notesEditor = page.getByTestId("project-notes-input");
+    await expect(notesWindow).toBeVisible();
+    await expect(page.getByTestId("project-notes-drawer-backdrop")).toBeVisible();
+    await expect(
+      notesEditor.getByRole("heading", {
+        exact: true,
+        level: 2,
+        name: "Notebook section 1",
+      }),
+    ).toBeVisible();
+
+    const metrics = await page.evaluate(() => {
+      const notesWindowElement = document.querySelector<HTMLElement>(
+        '[data-testid="project-notes-window"]',
+      );
+      const notesEditorElement = document.querySelector<HTMLElement>(
+        '[data-testid="project-notes-input"]',
+      );
+      if (!notesWindowElement || !notesEditorElement) {
+        throw new Error("Expected project notes drawer and editor.");
+      }
+
+      return {
+        editorClientHeight: notesEditorElement.clientHeight,
+        editorScrollHeight: notesEditorElement.scrollHeight,
+        viewportHeight: window.innerHeight,
+        windowHeight: notesWindowElement.getBoundingClientRect().height,
+      };
+    });
+
+    expect(metrics.windowHeight).toBeLessThanOrEqual(metrics.viewportHeight - 20);
+    expect(metrics.editorScrollHeight).toBeGreaterThan(metrics.editorClientHeight + 24);
+
+    const scrolledTop = await notesEditor.evaluate((element) => {
+      const scrollElement = element as HTMLElement;
+      scrollElement.scrollTop = 0;
+      scrollElement.scrollBy({ top: 700 });
+      return scrollElement.scrollTop;
+    });
+    expect(scrolledTop).toBeGreaterThan(24);
   } finally {
     if (projectIdToDelete) {
       await page.request

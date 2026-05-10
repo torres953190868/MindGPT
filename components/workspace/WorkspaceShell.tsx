@@ -244,7 +244,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
     "--mobile-map-height": `${mobileMapHeight}px`,
   } as CSSProperties;
   const workspaceGridClassName =
-    "grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[var(--workspace-grid-columns)] xl:grid-cols-[var(--workspace-wide-grid-columns)]";
+    "grid min-h-0 flex-1 grid-cols-1 gap-4 lg:h-full lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:overflow-hidden xl:grid-cols-[var(--workspace-wide-grid-columns)]";
 
   const handleCollapseWorkspaceSidebar = useCallback(() => {
     setIsWorkspaceSidebarCollapsed(true);
@@ -615,7 +615,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
     <main
       aria-labelledby="workspace-title"
       data-testid="workspace-shell"
-      className="flex h-screen min-h-[720px] flex-col gap-4 p-4"
+      className="flex h-screen min-h-[720px] flex-col gap-4 p-4 lg:overflow-hidden"
     >
       <header
         aria-label="Workspace header"
@@ -680,7 +680,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
         <section
           aria-labelledby="mind-map-section-title"
           data-testid="mind-map-canvas"
-          className="relative h-[var(--mobile-map-height)] overflow-hidden rounded-[30px] border border-white/80 bg-white/40 p-2 shadow-xl shadow-[#e4d6ef]/45 lg:h-auto lg:min-h-[520px]"
+          className="relative h-[var(--mobile-map-height)] overflow-hidden rounded-[30px] border border-white/80 bg-white/40 p-2 shadow-xl shadow-[#e4d6ef]/45 lg:h-full lg:min-h-0"
         >
           <h2 id="mind-map-section-title" className="sr-only">
             Mind map canvas
@@ -766,7 +766,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
         {isProjectNotesSidePanelOpen && (
           <div
             data-testid="project-notes-window"
-            className="fixed bottom-3 right-3 top-3 z-40 flex w-[calc(100vw-24px)] max-w-[420px] min-w-0 xl:relative xl:inset-auto xl:z-auto xl:w-full xl:max-w-none"
+            className="fixed bottom-3 right-3 top-3 z-40 flex min-h-0 w-[calc(100vw-24px)] max-w-[420px] min-w-0 overflow-hidden xl:relative xl:inset-auto xl:z-auto xl:h-full xl:max-h-full xl:w-full xl:max-w-none"
           >
             <ProjectNotesPanel
               projectId={project.id}

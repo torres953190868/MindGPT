@@ -254,7 +254,7 @@ export function NodeDetailPanel({
       <aside
         aria-label="Node details"
         data-testid="node-detail-panel"
-        className="flex w-full flex-col rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40"
+        className="flex min-h-0 w-full max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:h-full lg:max-h-full"
       >
         <button
           type="button"
@@ -279,9 +279,9 @@ export function NodeDetailPanel({
     <aside
       aria-labelledby={titleId}
       data-testid="node-detail-panel"
-      className="flex min-h-0 w-full flex-col rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40"
+      className="flex min-h-0 w-full max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:h-full lg:max-h-full"
     >
-      <div className="space-y-3 border-b border-[#eadff1] pb-4">
+      <div className="shrink-0 space-y-3 border-b border-[#eadff1] pb-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-3">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-[#74687c]">
@@ -359,7 +359,7 @@ export function NodeDetailPanel({
         onKeyUp={captureSelectedSourceText}
         onMouseUp={captureSelectedSourceText}
         onTouchEnd={captureSelectedSourceText}
-        className="min-h-0 flex-1 space-y-3 overflow-auto py-4 pr-1"
+        className="min-h-0 flex-1 space-y-3 overflow-auto overscroll-contain py-4 pr-1"
       >
         {node.messages.length === 0 ? (
           <div
@@ -496,7 +496,7 @@ export function NodeDetailPanel({
         aria-describedby={error ? errorId : isCreating ? statusId : undefined}
         data-testid="message-composer"
         onSubmit={handleSubmit}
-        className="space-y-3 border-t border-[#eadff1] pt-4"
+        className="shrink-0 space-y-3 border-t border-[#eadff1] pt-4"
       >
         {selectedSourceText && (
           <div

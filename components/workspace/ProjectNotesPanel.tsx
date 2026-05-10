@@ -179,9 +179,9 @@ export function ProjectNotesPanel({
       id="project-notes-panel"
       aria-labelledby={titleId}
       data-testid="project-notes-panel"
-      className="flex min-h-0 w-full flex-col rounded-[28px] border border-white/80 bg-white/78 p-4 shadow-lg shadow-[#e4d6ef]/40"
+      className="flex h-full min-h-0 w-full max-h-full flex-col overflow-hidden rounded-[28px] border border-white/80 bg-white/78 p-4 shadow-lg shadow-[#e4d6ef]/40"
     >
-      <div className="flex items-start justify-between gap-3 border-b border-[#eadff1] pb-4">
+      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[#eadff1] pb-4">
         <div className="min-w-0 space-y-2">
           <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[#74687c]">
             <NotebookPen size={15} />
@@ -202,8 +202,8 @@ export function ProjectNotesPanel({
         </button>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden py-4">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
           <p
             role="status"
             aria-live="polite"
@@ -222,7 +222,7 @@ export function ProjectNotesPanel({
           disabled={!canAppendLatestAiReply}
           aria-label="Add latest AI reply to project notes"
           data-testid="add-latest-ai-reply-note-button"
-          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-[16px] bg-[#eadcf7] text-sm font-black text-[#6e4ca0] transition hover:bg-[#dfc9f3] disabled:cursor-not-allowed disabled:opacity-65"
+          className="inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-[16px] bg-[#eadcf7] text-sm font-black text-[#6e4ca0] transition hover:bg-[#dfc9f3] disabled:cursor-not-allowed disabled:opacity-65"
         >
           <PlusCircle size={16} />
           Add latest AI reply
@@ -244,7 +244,7 @@ export function ProjectNotesPanel({
             id={notesErrorId}
             role="alert"
             data-testid="project-notes-error-alert"
-            className="rounded-[18px] bg-[#ffeceb] px-3 py-2 text-sm font-bold text-[#8f3f3a]"
+            className="shrink-0 rounded-[18px] bg-[#ffeceb] px-3 py-2 text-sm font-bold text-[#8f3f3a]"
           >
             {notesSaveError}
           </p>
