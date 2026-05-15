@@ -7,6 +7,9 @@ dist/
 !.env.example
 data/branchmind-projects.json
 data/branchmind-projects.json.*.tmp
+data/branchmind-rag.json
+data/branchmind-rag.json.*.tmp
+data/rag-files/
 .playwright-mcp/
 reports/
 playwright-report/

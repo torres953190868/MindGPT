@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Brain, FolderKanban, ShieldCheck } from "lucide-react";
+import { Brain, FileText, FolderKanban, ShieldCheck } from "lucide-react";
 import { AuthPanel } from "@/components/AuthPanel";
 import { ProjectLauncher } from "@/components/ProjectLauncher";
 
@@ -31,6 +31,13 @@ export default function HomePage() {
               >
                 <FolderKanban size={18} />
                 Projects
+              </Link>
+              <Link
+                href="/reader"
+                className="inline-flex items-center gap-2 rounded-[18px] bg-white/75 px-4 py-3 text-[#554665] shadow-sm transition hover:bg-white"
+              >
+                <FileText size={17} />
+                PDF Reader
               </Link>
               <Link
                 href="/privacy"

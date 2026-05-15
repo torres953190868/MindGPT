@@ -2,7 +2,13 @@
 
 import { getChildPosition } from "@/lib/graph";
 import { createId } from "@/lib/ids";
-import type { BranchType, ChatMessage, MindNode, Project } from "@/lib/types";
+import type {
+  BranchType,
+  ChatAttachment,
+  ChatMessage,
+  MindNode,
+  Project,
+} from "@/lib/types";
 
 export type NodeStreamingEvent =
   | { type: "delta"; contentDelta: string }
@@ -17,11 +23,16 @@ function now() {
   return new Date().toISOString();
 }
 
-function makeMessage(role: ChatMessage["role"], content: string): ChatMessage {
+function makeMessage(
+  role: ChatMessage["role"],
+  content: string,
+  attachments: ChatAttachment[] = [],
+): ChatMessage {
   return {
     id: createId("msg"),
     role,
     content,
+    attachments,
     createdAt: now(),
   };
 }
@@ -31,6 +42,7 @@ export function createDraftChildProject(
   parentId: string,
   mode: Exclude<BranchType, "root">,
   instruction: string,
+  attachments: ChatAttachment[] = [],
 ) {
   const parent = project.nodes[parentId];
   if (!parent) return null;
@@ -44,7 +56,7 @@ export function createDraftChildProject(
     parentId,
     title: mode === "branch" ? "Generating branch..." : "Generating continuation...",
     summary: "Streaming DeepSeek response.",
-    messages: [makeMessage("user", instruction), assistantMessage],
+    messages: [makeMessage("user", instruction, attachments), assistantMessage],
     children: [],
     position: getChildPosition(
       parent,

@@ -10,7 +10,13 @@ import {
   readNodeStreamingEvents,
   removeDraftChildNode,
 } from "@/lib/client/node-streaming";
-import type { BranchType, NodePosition, Project } from "@/lib/types";
+import type {
+  BranchType,
+  ChatAttachment,
+  ChatModelSelection,
+  NodePosition,
+  Project,
+} from "@/lib/types";
 
 const LEGACY_PROJECTS_KEY = "branchmind.projects.v1";
 const LEGACY_ACTIVE_PROJECT_KEY = "branchmind.activeProjectId.v1";
@@ -35,13 +41,20 @@ type BranchMindState = {
     mode: Exclude<BranchType, "root">,
     instruction: string,
     sourceText?: string,
+    attachments?: ChatAttachment[],
+    modelSelection?: ChatModelSelection,
   ) => Promise<string | null>;
   editUserMessage: (
     nodeId: string,
     userMessageId: string,
     instruction: string,
+    modelSelection?: ChatModelSelection,
   ) => Promise<boolean>;
-  retryAssistantMessage: (nodeId: string, assistantMessageId: string) => Promise<boolean>;
+  retryAssistantMessage: (
+    nodeId: string,
+    assistantMessageId: string,
+    modelSelection?: ChatModelSelection,
+  ) => Promise<boolean>;
   updateProjectNotes: (projectId: string, notes: string) => Promise<boolean>;
   updateNodePosition: (nodeId: string, position: NodePosition) => Promise<void>;
   toggleNodeCollapsed: (nodeId: string) => Promise<void>;
@@ -122,11 +135,13 @@ async function regenerateNodeInPlace(
     instruction,
     userMessageId,
     assistantMessageId,
+    modelSelection,
   }: {
     nodeId: string;
     instruction?: string;
     userMessageId?: string;
     assistantMessageId?: string;
+    modelSelection?: ChatModelSelection;
   },
 ) {
   const state = get();
@@ -180,7 +195,12 @@ async function regenerateNodeInPlace(
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ instruction, userMessageId, assistantMessageId }),
+          body: JSON.stringify({
+            instruction,
+            userMessageId,
+            assistantMessageId,
+            modelSelection,
+          }),
         },
       );
 
@@ -355,7 +375,14 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
 
   selectNode: (nodeId) => set({ selectedNodeId: nodeId }),
 
-  createChildNode: async (parentId, mode, instruction, sourceText) => {
+  createChildNode: async (
+    parentId,
+    mode,
+    instruction,
+    sourceText,
+    attachments = [],
+    modelSelection,
+  ) => {
     const state = get();
     const project = state.projects.find((item) => item.id === state.activeProjectId);
     const parent = project?.nodes[parentId];
@@ -364,7 +391,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
       return null;
     }
 
-    const draft = createDraftChildProject(project, parentId, mode, trimmed);
+    const draft = createDraftChildProject(project, parentId, mode, trimmed, attachments);
     if (!draft) return null;
 
     set({
@@ -402,7 +429,14 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ parentId, mode, instruction: trimmed, sourceText }),
+          body: JSON.stringify({
+            parentId,
+            mode,
+            instruction: trimmed,
+            sourceText,
+            attachments,
+            modelSelection,
+          }),
         });
 
         await readNodeStreamingEvents(response, (event) => {
@@ -457,7 +491,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
     return draft.node.id;
   },
 
-  editUserMessage: async (nodeId, userMessageId, instruction) => {
+  editUserMessage: async (nodeId, userMessageId, instruction, modelSelection) => {
     const trimmed = instruction.trim();
     if (!trimmed) return false;
 
@@ -465,13 +499,15 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
       nodeId,
       instruction: trimmed,
       userMessageId,
+      modelSelection,
     });
   },
 
-  retryAssistantMessage: async (nodeId, assistantMessageId) => {
+  retryAssistantMessage: async (nodeId, assistantMessageId, modelSelection) => {
     return regenerateNodeInPlace(set, get, {
       nodeId,
       assistantMessageId,
+      modelSelection,
     });
   },
 

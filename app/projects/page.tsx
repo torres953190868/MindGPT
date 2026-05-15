@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Brain, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Brain, FileText, ShieldCheck } from "lucide-react";
 import { AuthPanel } from "@/components/AuthPanel";
 import { ProjectCardList } from "@/components/ProjectCardList";
 import { ProjectLauncher } from "@/components/ProjectLauncher";
@@ -33,6 +33,13 @@ export default function ProjectsPage() {
             >
               <ShieldCheck size={17} />
               Privacy
+            </Link>
+            <Link
+              href="/reader"
+              className="inline-flex items-center gap-2 rounded-[18px] bg-white/75 px-4 py-3 text-[#554665] shadow-sm transition hover:bg-white"
+            >
+              <FileText size={17} />
+              PDF Reader
             </Link>
             <Link
               href="/terms"

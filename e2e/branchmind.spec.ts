@@ -35,6 +35,7 @@ function makeWorkspaceProject(seed: string): Project {
             id: `e2e-message-user-${seed}`,
             role: "user",
             content: "Create a stable workspace for release checks.",
+            attachments: [],
             createdAt: timestamp,
           },
           {
@@ -42,6 +43,7 @@ function makeWorkspaceProject(seed: string): Project {
             role: "assistant",
             content:
               "## Workspace ready\n\nThe workspace is **ready** for deterministic E2E checks.\n\n- Stable selectors\n- Markdown rendering",
+            attachments: [],
             createdAt: timestamp,
           },
         ],
@@ -80,6 +82,7 @@ function makeScrollableWorkspaceProject(seed: string): WorkspaceProject {
         role === "assistant"
           ? `## Scroll reply ${messageNumber}\n\n${paragraph}\n\n- Nested evidence\n- More evidence`
           : `Scroll prompt ${messageNumber}\n\n${paragraph}`,
+      attachments: [],
       createdAt: timestamp,
     };
   });
@@ -280,6 +283,8 @@ test("loads a seeded workspace with stable test ids", async ({ page }) => {
     await expect(assistantMessage.locator("strong")).toHaveText("ready");
     await expect(assistantMessage.locator("li")).toHaveCount(2);
     await expect(page.getByTestId("message-composer")).toBeVisible();
+    await expect(page.getByTestId("chat-model-selector-button")).toBeVisible();
+    await expect(page.getByTestId("add-message-attachment-button")).toBeVisible();
     await expect(page.getByTestId("message-instruction-input")).toBeVisible();
     await expect(page.getByTestId("send-message-button")).toBeVisible();
     const mindMapCanvas = page.getByTestId("mind-map-canvas");
@@ -912,6 +917,193 @@ test("streams a node reply into a draft child node", async ({ page }) => {
     );
     await expect(page.getByTestId("message-streaming-status")).toHaveCount(0);
     await expect(page.getByTestId("streaming-assistant-response")).toHaveCount(0);
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("attaches file metadata to a sent message", async ({ page }) => {
+  const sourceProject = makeWorkspaceProject(`attachments-${makeSeed()}`);
+  const instruction = "Use these attached file names as context markers.";
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.goto(`/workspace/${project.id}`);
+    await expect(page.getByTestId("add-message-attachment-button")).toBeVisible();
+
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await page.getByTestId("add-message-attachment-button").click();
+    await page.getByTestId("upload-new-file-button").click();
+    const fileChooser = await fileChooserPromise;
+    await fileChooser.setFiles([
+      {
+        name: "notes.txt",
+        mimeType: "text/plain",
+        buffer: Buffer.from("attachment notes"),
+      },
+      {
+        name: "brief.pdf",
+        mimeType: "application/pdf",
+        buffer: Buffer.from("%PDF-1.4"),
+      },
+      {
+        name: "sketch.png",
+        mimeType: "image/png",
+        buffer: Buffer.from("png"),
+      },
+    ]);
+
+    await expect(page.getByTestId("pending-attachment-chip")).toHaveCount(3);
+    await page
+      .getByTestId("pending-attachment-chip")
+      .filter({ hasText: "brief.pdf" })
+      .getByTestId("remove-pending-attachment-button")
+      .click();
+    await expect(page.getByTestId("pending-attachment-chip")).toHaveCount(2);
+
+    await page.getByTestId("message-instruction-input").fill(instruction);
+    await page.getByTestId("send-message-button").click();
+
+    await expect(page.getByTestId("conversation-message").first()).toContainText(
+      instruction,
+    );
+    await expect(page.getByTestId("message-attachment")).toHaveCount(2);
+    await expect(page.getByTestId("conversation-history")).toContainText("notes.txt");
+    await expect(page.getByTestId("conversation-history")).toContainText("sketch.png");
+    await expect(page.getByTestId("conversation-history")).not.toContainText("brief.pdf");
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("selects an indexed PDF knowledge document without re-uploading", async ({ page }) => {
+  const seed = makeSeed();
+  const sourceProject = makeWorkspaceProject(`knowledge-${seed}`);
+  const instruction = "Use the selected knowledge PDF.";
+  const documentId = `doc-e2e-${seed}`;
+  let projectIdToDelete: string | null = null;
+  let uploadRequests = 0;
+  let indexRequests = 0;
+  let streamPayload: unknown = null;
+
+  await page.route("**/api/documents", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        documents: [
+          {
+            id: documentId,
+            fileName: "memory.pdf",
+            mimeType: "application/pdf",
+            pageCount: 12,
+            title: "Memory Systems",
+            status: "indexed",
+            errorMessage: null,
+            updatedAt: new Date().toISOString(),
+          },
+          {
+            id: `doc-pending-${seed}`,
+            fileName: "pending.pdf",
+            mimeType: "application/pdf",
+            pageCount: 0,
+            title: null,
+            status: "indexing",
+            errorMessage: null,
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      }),
+    });
+  });
+  await page.route("**/api/documents/upload", async (route) => {
+    uploadRequests += 1;
+    await route.fulfill({ status: 500, body: "Unexpected upload" });
+  });
+  await page.route("**/api/documents/**/index", async (route) => {
+    indexRequests += 1;
+    await route.fulfill({ status: 500, body: "Unexpected index" });
+  });
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+    await page.route(`**/api/projects/${project.id}/nodes/stream`, async (route) => {
+      streamPayload = route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        headers: { "Content-Type": "text/event-stream; charset=utf-8" },
+        body: 'event: error\ndata: {"message":"Captured request"}\n\n',
+      });
+    });
+
+    await page.goto(`/workspace/${project.id}`);
+    const addButtonBox = await page
+      .getByTestId("add-message-attachment-button")
+      .boundingBox();
+    const modelButtonBox = await page
+      .getByTestId("chat-model-selector-button")
+      .boundingBox();
+    expect(addButtonBox?.x ?? Number.POSITIVE_INFINITY).toBeLessThan(
+      modelButtonBox?.x ?? Number.NEGATIVE_INFINITY,
+    );
+
+    await page.getByTestId("add-message-attachment-button").click();
+    await expect(page.getByTestId("attachment-menu")).toBeVisible();
+    await expect(page.getByTestId("upload-new-file-button")).toBeVisible();
+    await expect(page.getByTestId("knowledge-menu-button")).toBeVisible();
+    await expect(page.getByTestId("knowledge-document-menu")).toHaveCount(0);
+    await expect(page.getByTestId("attachment-menu")).not.toContainText("memory.pdf");
+
+    await page.getByTestId("knowledge-menu-button").hover();
+    await expect(page.getByTestId("knowledge-document-menu")).toBeVisible();
+    await expect(page.getByTestId("knowledge-document-option")).toHaveCount(1);
+    await expect(page.getByTestId("knowledge-document-menu")).not.toContainText(
+      "pending.pdf",
+    );
+    await page
+      .getByTestId("knowledge-document-option")
+      .filter({ hasText: "Memory Systems" })
+      .click();
+    await expect(page.getByTestId("pending-attachment-chip")).toContainText("memory.pdf");
+    await expect(page.getByTestId("pending-attachment-chip")).toContainText("Knowledge PDF");
+
+    await page.getByTestId("message-instruction-input").fill(instruction);
+    await page.getByTestId("send-message-button").click();
+
+    await expect.poll(() => streamPayload).not.toBeNull();
+    const payload = streamPayload as {
+      attachments?: Array<Record<string, unknown>>;
+      instruction?: string;
+    };
+    expect(payload.instruction).toBe(instruction);
+    expect(payload.attachments).toEqual([
+      expect.objectContaining({
+        name: "memory.pdf",
+        mimeType: "application/pdf",
+        size: 0,
+        documentId,
+        documentStatus: "indexed",
+      }),
+    ]);
+    expect(uploadRequests).toBe(0);
+    expect(indexRequests).toBe(0);
   } finally {
     if (projectIdToDelete) {
       await page.request

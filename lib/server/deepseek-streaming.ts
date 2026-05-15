@@ -1,18 +1,17 @@
 import {
-  assertConfiguredChatProvider,
   createDeepSeekPayload,
   createProviderHttpError,
   DEEPSEEK_TIMEOUT_MS,
   deepSeekStreamChunkSchema,
   DeepSeekError,
   getActiveChatApiKey,
-  getActiveChatModel,
   getActiveChatUrl,
   getMockReply,
   isAbortError,
   isDeepSeekMockMode,
   parseDeepSeekResponse,
   parseRequiredReply,
+  resolveChatModelSelection,
   type BranchMindReplyRequest,
 } from "@/lib/server/deepseek-core";
 import type { ChatCompletionsProvider } from "@/lib/server/ai-provider";
@@ -228,9 +227,8 @@ export async function* streamDeepSeekReply(
     return;
   }
 
-  const provider = assertConfiguredChatProvider();
+  const { provider, model } = resolveChatModelSelection(body.modelSelection);
   const apiKey = getActiveChatApiKey(provider);
-  const model = getActiveChatModel(provider);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DEEPSEEK_TIMEOUT_MS);

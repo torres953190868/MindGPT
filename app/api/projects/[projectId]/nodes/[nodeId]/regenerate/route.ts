@@ -17,6 +17,7 @@ import {
   prepareRegenerateNodeContext,
   regenerateNodeForOwner,
 } from "@/lib/server/projects-service";
+import { getWorkspaceDocumentContextsForOwner } from "@/lib/server/rag/service";
 import { checkRateLimitAsync } from "@/lib/server/rate-limit";
 import { assertValidRequestOrigin } from "@/lib/server/security";
 import {
@@ -85,6 +86,11 @@ export async function POST(request: NextRequest, context: RegenerateNodeRouteCon
       nodeId,
       body,
     );
+    const documentContexts = await getWorkspaceDocumentContextsForOwner(
+      principal.id,
+      contextData.attachments,
+      contextData.instruction,
+    );
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
@@ -96,6 +102,8 @@ export async function POST(request: NextRequest, context: RegenerateNodeRouteCon
               role,
               content,
             })),
+            documentContexts,
+            modelSelection: body.modelSelection,
           })) {
             if (event.type === "delta") {
               controller.enqueue(encodeSse("delta", {

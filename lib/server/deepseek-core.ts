@@ -5,13 +5,19 @@ import {
   DEFAULT_DEEPSEEK_ALLOWED_MODELS,
   DEFAULT_DEEPSEEK_MODEL,
   getChatCompletionsProvider,
+  getConfiguredProviderId,
   getProviderAllowedModels,
   getProviderApiKey,
   getProviderIds,
   getProviderUrl,
   type ChatCompletionsProvider,
 } from "@/lib/server/ai-provider";
-import type { MockMode, MockReply } from "@/lib/types";
+import type {
+  ChatDocumentContext,
+  ChatModelSelection,
+  MockMode,
+  MockReply,
+} from "@/lib/types";
 
 export type ApiMessage = {
   role: "user" | "assistant" | "system";
@@ -24,6 +30,8 @@ export type BranchMindReplyRequest = {
   contextTitles?: string[];
   messages?: ApiMessage[];
   sourceText?: string;
+  documentContexts?: ChatDocumentContext[];
+  modelSelection?: ChatModelSelection;
 };
 
 export type DeepSeekChoice = {
@@ -187,8 +195,19 @@ export function getActiveChatUrl(provider = getActiveChatProvider()) {
   return getProviderUrl(provider);
 }
 
-export function getDeepSeekModel(provider = getActiveChatProvider()) {
-  const model = (process.env[provider.modelEnv] ?? provider.defaultModel).trim();
+function getRequestedModel(
+  provider: ChatCompletionsProvider,
+  modelOverride?: string,
+) {
+  const requestedModel = modelOverride?.trim();
+  return requestedModel || (process.env[provider.modelEnv] ?? provider.defaultModel).trim();
+}
+
+export function getDeepSeekModel(
+  provider = getActiveChatProvider(),
+  modelOverride?: string,
+) {
+  const model = getRequestedModel(provider, modelOverride);
 
   if (!getProviderAllowedModels(provider).has(model)) {
     throw new DeepSeekError(
@@ -201,6 +220,59 @@ export function getDeepSeekModel(provider = getActiveChatProvider()) {
   return model;
 }
 
+export function resolveChatModelSelection(selection?: ChatModelSelection) {
+  const explicitProviderId = selection?.providerId.trim().toLowerCase();
+  const provider = getChatCompletionsProvider(
+    explicitProviderId || getConfiguredProviderId(),
+  );
+
+  if (!provider) {
+    throw new DeepSeekError(
+      explicitProviderId
+        ? "Selected AI provider is not supported."
+        : "Configured AI provider is not supported.",
+      explicitProviderId ? 400 : 500,
+      {
+        code: "AI_PROVIDER_NOT_SUPPORTED",
+        expose: Boolean(explicitProviderId),
+      },
+    );
+  }
+
+  try {
+    return {
+      provider,
+      model: getDeepSeekModel(provider, selection?.model),
+    };
+  } catch (error) {
+    if (selection?.model && error instanceof DeepSeekError) {
+      throw new DeepSeekError("Selected AI model is not allowed.", 400, {
+        code: providerCode(provider, "MODEL_NOT_ALLOWED"),
+        expose: true,
+      });
+    }
+
+    throw error;
+  }
+}
+
+export function getChatModelCatalog() {
+  const active = resolveChatModelSelection();
+
+  return {
+    defaultSelection: {
+      providerId: active.provider.id,
+      model: active.model,
+    },
+    providers: Object.values(CHAT_COMPLETIONS_PROVIDERS).map((provider) => ({
+      id: provider.id,
+      displayName: provider.displayName,
+      configured: isDeepSeekMockMode() || Boolean(getProviderApiKey(provider)),
+      models: [...getProviderAllowedModels(provider)],
+    })),
+  };
+}
+
 export function getSupportedProviderIds() {
   return getProviderIds();
 }
@@ -209,8 +281,11 @@ export function getOpenCodeGoAllowedModels() {
   return CHAT_COMPLETIONS_PROVIDERS["opencode-go"].defaultAllowedModels;
 }
 
-export function getActiveChatModel(provider = getActiveChatProvider()) {
-  return getDeepSeekModel(provider);
+export function getActiveChatModel(
+  provider = getActiveChatProvider(),
+  modelOverride?: string,
+) {
+  return getDeepSeekModel(provider, modelOverride);
 }
 
 export function assertConfiguredChatProvider() {
@@ -245,14 +320,47 @@ export function getMockReply(body: BranchMindReplyRequest): MockReply {
   const source = body.sourceText
     ? ` Source text: ${compact(body.sourceText, 96)}`
     : "";
+  const documents = body.documentContexts?.length
+    ? ` Attached PDFs: ${body.documentContexts.map((context) => context.fileName).join(", ")}.`
+    : "";
   const content = [
     `Mock mode is enabled for ${mode} mode.`,
-    `Current path: ${context}.${source}`,
+    `Current path: ${context}.${source}${documents}`,
     `Instruction received: ${body.instruction}`,
     "Use this deterministic response for local development without sending data to DeepSeek.",
   ].join("\n\n");
 
   return safeReply(body.instruction, content);
+}
+
+function formatPageRange(pageStart: number, pageEnd: number) {
+  return pageStart === pageEnd ? `p. ${pageStart}` : `pp. ${pageStart}-${pageEnd}`;
+}
+
+function formatDocumentContexts(documentContexts: ChatDocumentContext[] = []) {
+  if (documentContexts.length === 0) return "";
+
+  return documentContexts
+    .map((document) => {
+      const title = document.title ? ` (${document.title})` : "";
+      const snippets = document.snippets
+        .map((snippet, index) => {
+          const section = snippet.headingPath.length
+            ? snippet.headingPath.join(" > ")
+            : "Untitled section";
+          return [
+            `[${index + 1}] ${formatPageRange(
+              snippet.pageStart,
+              snippet.pageEnd,
+            )} | ${section} | chunk ${snippet.chunkId}`,
+            snippet.content,
+          ].join("\n");
+        })
+        .join("\n\n");
+
+      return [`PDF: ${document.fileName}${title}`, snippets].join("\n");
+    })
+    .join("\n\n---\n\n");
 }
 
 function cleanReplyJson(raw: string) {
@@ -315,12 +423,16 @@ export function buildMessages(body: BranchMindReplyRequest): ApiMessage[] {
     : "No prior path.";
   const history = body.messages?.slice(-8) ?? [];
   const source = body.sourceText ? `\nSelected source text: ${body.sourceText}` : "";
+  const documentContexts = formatDocumentContexts(body.documentContexts);
+  const pdfContext = documentContexts
+    ? `\nRetrieved PDF context:\n${documentContexts}`
+    : "";
 
   return [
     {
       role: "system",
       content:
-        "You are BranchMind, a concise learning assistant. Return only valid JSON with keys title, summary, content. Match the user's language: answer in English when the user writes in English, and answer in Chinese when the user writes in Chinese. The title must be short. The summary must be concise. The content should be 300-600 characters unless the user asks otherwise.",
+        "You are BranchMind, a concise learning assistant. Return only valid JSON with keys title, summary, content. Match the user's language: answer in English when the user writes in English, and answer in Chinese when the user writes in Chinese. The title must be short. The summary must be concise. The content should be 300-600 characters unless the user asks otherwise. When retrieved PDF context is provided, use it as evidence, cite PDF file names and page numbers for factual claims, and say when the provided snippets do not contain enough evidence.",
     },
     {
       role: "user",
@@ -328,7 +440,7 @@ export function buildMessages(body: BranchMindReplyRequest): ApiMessage[] {
         `Node mode: ${mode}`,
         `Current path: ${context}`,
         `Recent node conversation: ${JSON.stringify(history)}`,
-        `User instruction: ${body.instruction}${source}`,
+        `User instruction: ${body.instruction}${source}${pdfContext}`,
       ].join("\n"),
     },
   ];

@@ -7,10 +7,40 @@ export type NodePosition = {
   y: number;
 };
 
+export type ChatAttachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
+  documentId?: string;
+  documentStatus?: "uploaded" | "parsing" | "parsed" | "indexing" | "indexed" | "failed";
+  errorMessage?: string | null;
+};
+
+export type ChatDocumentContext = {
+  documentId: string;
+  fileName: string;
+  title: string | null;
+  snippets: Array<{
+    chunkId: string;
+    pageStart: number;
+    pageEnd: number;
+    headingPath: string[];
+    content: string;
+  }>;
+};
+
+export type ChatModelSelection = {
+  providerId: string;
+  model: string;
+};
+
 export type ChatMessage = {
   id: string;
   role: ChatRole;
   content: string;
+  attachments: ChatAttachment[];
   createdAt: string;
 };
 

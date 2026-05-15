@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getBranchMindAuthContext } from "@/lib/server/auth";
 import { requestDeepSeekReply } from "@/lib/server/deepseek";
 import { jsonWithSession, safeErrorWithSession } from "@/lib/server/http";
+import { chatModelSelectionSchema } from "@/lib/server/node-request";
 import { checkRateLimitAsync } from "@/lib/server/rate-limit";
 import { assertValidRequestOrigin } from "@/lib/server/security";
 import { getOrCreateSession } from "@/lib/server/session";
@@ -22,6 +23,7 @@ const chatSchema = z.object({
     .max(16)
     .optional(),
   sourceText: z.string().trim().max(4_000).optional(),
+  modelSelection: chatModelSelectionSchema.optional(),
 });
 
 const CHAT_LIMIT = 10;

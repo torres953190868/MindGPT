@@ -1,5 +1,10 @@
-import { getSupabaseAdminClient, hasSupabaseServerConfig, requireSupabaseServerConfig } from "@/lib/supabase/server";
-import type { Database } from "@/lib/supabase/database.types";
+import { normalizeChatAttachments } from "@/lib/chat-attachments";
+import {
+  getSupabaseAdminClient,
+  hasSupabaseServerConfig,
+  requireSupabaseServerConfig,
+} from "@/lib/supabase/server";
+import type { Database, Json } from "@/lib/supabase/database.types";
 import type { ChatMessage, MindNode, Project } from "@/lib/types";
 import * as fileStore from "./projects-store";
 
@@ -102,6 +107,7 @@ export function projectToRows(project: Project) {
       node_id: node.id,
       role: message.role,
       content: message.content,
+      attachments: normalizeChatAttachments(message.attachments) as unknown as Json,
       sort_order: index,
       created_at: message.createdAt,
     })),
@@ -154,6 +160,9 @@ export function composeProjectsFromRows(
       id: messageRow.id,
       role: messageRow.role,
       content: messageRow.content,
+      attachments: normalizeChatAttachments(messageRow.attachments, {
+        fallbackCreatedAt: messageRow.created_at,
+      }),
       createdAt: messageRow.created_at,
     });
     messagesByNode.set(messageRow.node_id, messages);

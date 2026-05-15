@@ -119,7 +119,7 @@ describe("OpenCode Go provider", () => {
 
   it("streams through the Go provider configuration", async () => {
     vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
-    vi.stubEnv("OPENCODE_GO_MODEL", "qwen3.5-plus");
+    vi.stubEnv("OPENCODE_GO_MODEL", "qwen3.6-plus");
     const rawReply = JSON.stringify({
       title: "Go streaming",
       summary: "Go streaming summary",
@@ -147,7 +147,7 @@ describe("OpenCode Go provider", () => {
     );
     const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
     expect(requestBody).toMatchObject({
-      model: "qwen3.5-plus",
+      model: "qwen3.6-plus",
       stream: true,
     });
   });

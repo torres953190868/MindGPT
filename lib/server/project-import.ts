@@ -1,4 +1,5 @@
 import { createId } from "@/lib/ids";
+import { normalizeChatAttachments } from "@/lib/chat-attachments";
 import type {
   BranchType,
   ChatMessage,
@@ -107,10 +108,14 @@ function normalizeMessages(
       return [];
     }
 
-  return {
+    return {
       id: createUniqueId("msg", usedIds),
       role: message.role as ChatMessage["role"],
       content: message.content,
+      attachments: normalizeChatAttachments(message.attachments, {
+        createId: () => createUniqueId("attachment", usedIds),
+        fallbackCreatedAt: timestamp,
+      }),
       createdAt: isoString(message.createdAt, timestamp),
     };
   });

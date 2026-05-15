@@ -106,6 +106,129 @@ describe("requestDeepSeekReply", () => {
     expect(requestBody.messages[1].content).toContain("Selected source text: selected source");
   });
 
+  it("includes retrieved PDF context in node reply prompts", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  title: "PDF answer",
+                  summary: "Uses PDF context.",
+                  content: "The attached PDF discusses retrieval cues on page 3.",
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestDeepSeekReply({
+      instruction: "Summarize the attached PDF.",
+      documentContexts: [
+        {
+          documentId: "doc_memory",
+          fileName: "memory.pdf",
+          title: "Memory Systems",
+          snippets: [
+            {
+              chunkId: "chunk_memory",
+              pageStart: 3,
+              pageEnd: 3,
+              headingPath: ["Chapter 1", "Retrieval"],
+              content: "Retrieval cues help long term memory recall.",
+            },
+          ],
+        },
+      ],
+    });
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(requestBody.messages[0].content).toContain(
+      "When retrieved PDF context is provided",
+    );
+    expect(requestBody.messages[1].content).toContain("Retrieved PDF context:");
+    expect(requestBody.messages[1].content).toContain("PDF: memory.pdf (Memory Systems)");
+    expect(requestBody.messages[1].content).toContain(
+      "p. 3 | Chapter 1 > Retrieval | chunk chunk_memory",
+    );
+    expect(requestBody.messages[1].content).toContain(
+      "Retrieval cues help long term memory recall.",
+    );
+  });
+
+  it("uses a per-request provider and model selection", async () => {
+    vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
+    vi.stubEnv("OPENCODE_GO_ALLOWED_MODELS", "qwen3.6-plus");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  title: "Selected model",
+                  summary: "Selected model summary",
+                  content: "Selected model response.",
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const reply = await requestDeepSeekReply({
+      instruction: "Use the selected model",
+      modelSelection: {
+        providerId: "opencode-go",
+        model: "qwen3.6-plus",
+      },
+    });
+
+    expect(reply.title).toBe("Selected model");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://opencode.ai/zen/go/v1/chat/completions",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer go-key",
+        }),
+      }),
+    );
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(requestBody.model).toBe("qwen3.6-plus");
+  });
+
+  it("rejects disallowed per-request model selections as client errors", async () => {
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "deepseek-chat");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      requestDeepSeekReply({
+        instruction: "Use a blocked model",
+        modelSelection: {
+          providerId: "deepseek",
+          model: "not-allowed",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "DEEPSEEK_MODEL_NOT_ALLOWED",
+      message: "Selected AI model is not allowed.",
+      status: 400,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("retries retryable upstream API failures once", async () => {
     vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
     const fetchMock = vi.fn().mockImplementation(() =>

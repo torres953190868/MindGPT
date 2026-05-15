@@ -11,6 +11,7 @@ import {
   createChildNodeForOwner,
   prepareChildContext,
 } from "@/lib/server/projects-service";
+import { getWorkspaceDocumentContextsForOwner } from "@/lib/server/rag/service";
 import { checkRateLimitAsync } from "@/lib/server/rate-limit";
 import { assertValidRequestOrigin } from "@/lib/server/security";
 import { getOrCreateSession } from "@/lib/server/session";
@@ -55,6 +56,11 @@ export async function POST(request: NextRequest, context: NodesRouteContext) {
       projectId,
       body.parentId,
     );
+    const documentContexts = await getWorkspaceDocumentContextsForOwner(
+      principal.id,
+      body.attachments,
+      [body.instruction, body.sourceText].filter(Boolean).join("\n\n"),
+    );
     const reply = await requestDeepSeekReply({
       mode: body.mode,
       instruction: body.instruction,
@@ -64,6 +70,8 @@ export async function POST(request: NextRequest, context: NodesRouteContext) {
         content,
       })),
       sourceText: body.sourceText,
+      documentContexts,
+      modelSelection: body.modelSelection,
     });
     const result = await createChildNodeForOwner(
       principal.id,
@@ -72,6 +80,7 @@ export async function POST(request: NextRequest, context: NodesRouteContext) {
       body.mode,
       body.instruction,
       reply,
+      body.attachments,
     );
 
     return jsonWithSession(result, session);

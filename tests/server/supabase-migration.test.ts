@@ -10,6 +10,13 @@ const projectNotesMigration = readFileSync(
   join(process.cwd(), "supabase/migrations/20260508000000_branchmind_project_notes.sql"),
   "utf8",
 );
+const messageAttachmentsMigration = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/20260514000000_branchmind_message_attachments.sql",
+  ),
+  "utf8",
+);
 
 describe("Supabase foundation migration", () => {
   it("creates the beta persistence and distributed rate-limit tables", () => {
@@ -33,5 +40,11 @@ describe("Supabase foundation migration", () => {
 
   it("adds project notes persistence", () => {
     expect(projectNotesMigration).toContain("add column if not exists notes text not null default ''");
+  });
+
+  it("adds message attachment metadata persistence", () => {
+    expect(messageAttachmentsMigration).toContain(
+      "add column if not exists attachments jsonb not null default '[]'::jsonb",
+    );
   });
 });

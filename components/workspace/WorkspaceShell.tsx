@@ -15,6 +15,7 @@ import {
 } from "react";
 import { AuthPanel } from "@/components/AuthPanel";
 import { ProjectLauncher } from "@/components/ProjectLauncher";
+import type { ChatAttachment, ChatModelSelection } from "@/lib/types";
 import { useBranchMindStore } from "@/store/useBranchMindStore";
 import { MindMap } from "./MindMap";
 import { NodeDetailPanel } from "./NodeDetailPanel";
@@ -564,8 +565,17 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
       mode: "continue" | "branch",
       instruction: string,
       sourceText?: string,
+      attachments?: ChatAttachment[],
+      modelSelection?: ChatModelSelection,
     ) => {
-      return createChildNode(nodeId, mode, instruction, sourceText);
+      return createChildNode(
+        nodeId,
+        mode,
+        instruction,
+        sourceText,
+        attachments,
+        modelSelection,
+      );
     },
     [createChildNode],
   );

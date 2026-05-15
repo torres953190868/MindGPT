@@ -2,6 +2,7 @@ import { collectDescendantIds, getChildPosition, ROOT_POSITION } from "@/lib/gra
 import { createId } from "@/lib/ids";
 import type {
   BranchType,
+  ChatAttachment,
   ChatMessage,
   MindNode,
   MockReply,
@@ -13,11 +14,16 @@ function now() {
   return new Date().toISOString();
 }
 
-function makeMessage(role: ChatMessage["role"], content: string): ChatMessage {
+function makeMessage(
+  role: ChatMessage["role"],
+  content: string,
+  attachments: ChatAttachment[] = [],
+): ChatMessage {
   return {
     id: createId("msg"),
     role,
     content,
+    attachments,
     createdAt: now(),
   };
 }
@@ -58,6 +64,7 @@ export function addChildNode(
   mode: Exclude<BranchType, "root">,
   instruction: string,
   reply: MockReply,
+  attachments: ChatAttachment[] = [],
 ) {
   const parent = project.nodes[parentId];
   if (!parent) return null;
@@ -70,7 +77,10 @@ export function addChildNode(
     parentId,
     title: reply.title,
     summary: reply.summary,
-    messages: [makeMessage("user", instruction), makeMessage("assistant", reply.content)],
+    messages: [
+      makeMessage("user", instruction, attachments),
+      makeMessage("assistant", reply.content),
+    ],
     children: [],
     position: getChildPosition(
       parent,

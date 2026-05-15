@@ -4,17 +4,16 @@ import {
   delay,
   DeepSeekError,
   getActiveChatApiKey,
-  getActiveChatModel,
   getActiveChatUrl,
   getDeepSeekContent,
   getMockReply,
-  assertConfiguredChatProvider,
   isAbortError,
   isDeepSeekMockMode,
   MAX_DEEPSEEK_ATTEMPTS,
   parseDeepSeekResponse,
   parseReply,
   RETRY_DELAY_MS,
+  resolveChatModelSelection,
   type BranchMindReplyRequest,
   createProviderHttpError,
 } from "@/lib/server/deepseek-core";
@@ -78,9 +77,8 @@ export async function requestDeepSeekReply(
     return getMockReply(body);
   }
 
-  const provider = assertConfiguredChatProvider();
+  const { provider, model } = resolveChatModelSelection(body.modelSelection);
   const apiKey = getActiveChatApiKey(provider);
-  const model = getActiveChatModel(provider);
   let lastError: DeepSeekError | null = null;
 
   for (let attempt = 1; attempt <= MAX_DEEPSEEK_ATTEMPTS; attempt += 1) {

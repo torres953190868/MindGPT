@@ -22,24 +22,16 @@ export const OPENCODE_GO_CHAT_COMPLETIONS_URL =
 export const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
 export const DEFAULT_DEEPSEEK_ALLOWED_MODELS = [
   DEFAULT_DEEPSEEK_MODEL,
-  "deepseek-chat",
-  "deepseek-reasoner",
+  "deepseek-v4-pro",
 ];
 
-export const DEFAULT_OPENCODE_GO_MODEL = "deepseek-v4-flash";
+export const DEFAULT_OPENCODE_GO_MODEL = "glm-5.1";
 export const DEFAULT_OPENCODE_GO_ALLOWED_MODELS = [
-  "glm-5.1",
-  "glm-5",
-  "kimi-k2.5",
-  "kimi-k2.6",
-  "deepseek-v4-pro",
-  "deepseek-v4-flash",
-  "mimo-v2-pro",
-  "mimo-v2-omni",
-  "mimo-v2.5-pro",
-  "mimo-v2.5",
+  DEFAULT_OPENCODE_GO_MODEL,
   "qwen3.6-plus",
-  "qwen3.5-plus",
+  "mimo-v2.5-pro",
+  "deepseek-v4-pro",
+  "kimi-k2.6",
 ];
 
 export const CHAT_COMPLETIONS_PROVIDERS: Record<

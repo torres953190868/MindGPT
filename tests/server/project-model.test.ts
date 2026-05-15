@@ -95,6 +95,30 @@ describe("project model helpers", () => {
     ]);
   });
 
+  it("stores attachment metadata on child user messages", () => {
+    const project = createRootProject("Graph search", rootReply);
+    const rootId = project.rootNodeId;
+    const attachment = {
+      id: "attachment-test",
+      name: "notes.pdf",
+      mimeType: "application/pdf",
+      size: 2048,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+
+    const continued = addChildNode(
+      project,
+      rootId,
+      "continue",
+      "Summarize this file",
+      childReply,
+      [attachment],
+    );
+
+    expect(continued?.node.messages[0].attachments).toEqual([attachment]);
+    expect(continued?.node.messages[1].attachments).toEqual([]);
+  });
+
   it("updates node state without mutating the original project", () => {
     const project = createRootProject("Graph search", rootReply);
     const rootId = project.rootNodeId;

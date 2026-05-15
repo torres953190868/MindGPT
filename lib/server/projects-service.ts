@@ -17,7 +17,14 @@ import {
   withProjectOwner,
   type ProjectDto,
 } from "@/lib/server/projects-repository";
-import type { BranchType, MockReply, NodePosition, Project } from "@/lib/types";
+import type {
+  BranchType,
+  ChatAttachment,
+  ChatMessage,
+  MockReply,
+  NodePosition,
+  Project,
+} from "@/lib/types";
 import { HttpError } from "./http";
 
 type NodeUpdate = {
@@ -84,9 +91,7 @@ function resolveRegenerateInstruction(
 ) {
   if (typeof update.instruction === "string") return update.instruction.trim();
 
-  const message = update.userMessageId
-    ? node.messages.find((item) => item.id === update.userMessageId)
-    : node.messages.find((item) => item.role === "user");
+  const message = findRegenerateUserMessage(node, update);
 
   if (!message || message.role !== "user") {
     badRequest("User message was not found.", "USER_MESSAGE_NOT_FOUND");
@@ -113,6 +118,32 @@ function assertRegenerateTargets(
   if (!assistantMessage || assistantMessage.role !== "assistant") {
     badRequest("Assistant message was not found.", "ASSISTANT_MESSAGE_NOT_FOUND");
   }
+}
+
+function findRegenerateUserMessage(
+  node: Project["nodes"][string],
+  update: PrepareRegenerateNodeUpdate,
+): ChatMessage | null {
+  if (update.userMessageId) {
+    return (
+      node.messages.find(
+        (message) => message.id === update.userMessageId && message.role === "user",
+      ) ?? null
+    );
+  }
+
+  if (update.assistantMessageId) {
+    const assistantIndex = node.messages.findIndex(
+      (message) => message.id === update.assistantMessageId && message.role === "assistant",
+    );
+
+    for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+      const message = node.messages[index];
+      if (message.role === "user") return message;
+    }
+  }
+
+  return node.messages.find((message) => message.role === "user") ?? null;
 }
 
 export async function listProjects(ownerId: string) {
@@ -174,12 +205,13 @@ export async function createChildNodeForOwner(
   mode: Exclude<BranchType, "root">,
   instruction: string,
   reply: MockReply,
+  attachments: ChatAttachment[] = [],
 ) {
   const project = await readOwnedProject(ownerId, projectId);
   const parent = project?.nodes[parentId];
   if (!project || !parent) notFound();
 
-  const result = addChildNode(project, parentId, mode, instruction, reply);
+  const result = addChildNode(project, parentId, mode, instruction, reply, attachments);
   if (!result) notFound();
 
   const nextProject = withProjectOwner(result.project, ownerId);
@@ -303,10 +335,12 @@ export async function prepareRegenerateNodeContext(
   }
 
   const parent = node.parentId ? project.nodes[node.parentId] : null;
+  const userMessage = findRegenerateUserMessage(node, update);
 
   return {
     node,
     instruction,
+    attachments: userMessage?.attachments ?? [],
     mode: node.branchType,
     contextSummaries: parent ? getContextSummaries(project, parent.id) : [],
     messages: parent?.messages ?? [],

@@ -17,6 +17,7 @@ import {
   createChildNodeForOwner,
   prepareChildContext,
 } from "@/lib/server/projects-service";
+import { getWorkspaceDocumentContextsForOwner } from "@/lib/server/rag/service";
 import { checkRateLimitAsync } from "@/lib/server/rate-limit";
 import { assertValidRequestOrigin } from "@/lib/server/security";
 import {
@@ -84,6 +85,11 @@ export async function POST(request: NextRequest, context: NodesStreamRouteContex
       projectId,
       body.parentId,
     );
+    const documentContexts = await getWorkspaceDocumentContextsForOwner(
+      principal.id,
+      body.attachments,
+      [body.instruction, body.sourceText].filter(Boolean).join("\n\n"),
+    );
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
@@ -96,6 +102,8 @@ export async function POST(request: NextRequest, context: NodesStreamRouteContex
               content,
             })),
             sourceText: body.sourceText,
+            documentContexts,
+            modelSelection: body.modelSelection,
           })) {
             if (event.type === "delta") {
               controller.enqueue(encodeSse("delta", {
@@ -111,6 +119,7 @@ export async function POST(request: NextRequest, context: NodesStreamRouteContex
               body.mode,
               body.instruction,
               event.reply,
+              body.attachments,
             );
             controller.enqueue(encodeSse("complete", result));
           }
