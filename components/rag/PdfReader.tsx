@@ -259,8 +259,8 @@ export function PdfReader() {
   );
 
   return (
-    <section className="grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
-      <aside className="space-y-4 rounded-[24px] border border-white/80 bg-white/70 p-4 shadow-lg shadow-[#e8dcef]/35">
+    <section className="grid w-full min-w-0 max-w-full gap-5 overflow-hidden lg:grid-cols-[320px_minmax(0,1fr)] lg:overflow-visible">
+      <aside className="min-w-0 space-y-4 rounded-[24px] border border-white/80 bg-white/70 p-4 shadow-lg shadow-[#e8dcef]/35">
         <form onSubmit={handleUpload} className="space-y-3">
           <label
             htmlFor="pdf-upload"
@@ -298,7 +298,7 @@ export function PdfReader() {
                 onClick={() => selectDocument(document.id).catch((loadError: unknown) => {
                   setError(loadError instanceof Error ? loadError.message : "Load failed.");
                 })}
-                className={`w-full rounded-[18px] border px-3 py-3 text-left transition ${
+                className={`w-full min-w-0 rounded-[18px] border px-3 py-3 text-left transition ${
                   selectedId === document.id
                     ? "border-[#7c5fb1] bg-[#f5efff]"
                     : "border-white/80 bg-white/80 hover:bg-white"
@@ -306,7 +306,7 @@ export function PdfReader() {
               >
                 <span className="flex items-start gap-2">
                   <FileText size={17} className="mt-0.5 shrink-0 text-[#6c5784]" />
-                  <span className="min-w-0">
+                  <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-black text-[#332b38]">
                       {document.title || document.fileName}
                     </span>
@@ -326,11 +326,11 @@ export function PdfReader() {
         </div>
       </aside>
 
-      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <main className="min-w-0 space-y-4">
-          <div className="rounded-[24px] border border-white/80 bg-white/70 p-5 shadow-lg shadow-[#e8dcef]/35">
+      <div className="grid min-w-0 max-w-full gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <main className="min-w-0 max-w-full space-y-4">
+          <div className="min-w-0 rounded-[24px] border border-white/80 bg-white/70 p-5 shadow-lg shadow-[#e8dcef]/35">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-black uppercase tracking-normal text-[#76667f]">
                   Reader
                 </p>
@@ -343,7 +343,7 @@ export function PdfReader() {
                   type="button"
                   onClick={handleReindex}
                   disabled={indexing}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-[16px] bg-[#eef8f1] px-3 text-sm font-black text-[#3f6d50] transition hover:bg-[#dff0e5] disabled:opacity-60"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-[16px] bg-[#eef8f1] px-3 text-sm font-black text-[#3f6d50] transition hover:bg-[#dff0e5] disabled:opacity-60"
                 >
                   {indexing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />}
                   Re-index
@@ -386,7 +386,7 @@ export function PdfReader() {
             </div>
           </div>
 
-          <div className="rounded-[24px] border border-white/80 bg-white/70 p-5 shadow-lg shadow-[#e8dcef]/35">
+          <div className="min-w-0 rounded-[24px] border border-white/80 bg-white/70 p-5 shadow-lg shadow-[#e8dcef]/35">
             <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="inline-flex items-center gap-2 text-lg font-black text-[#332b38]">
                 <BookOpen size={19} />
@@ -398,7 +398,7 @@ export function PdfReader() {
                     type="button"
                     disabled={page.pageNumber <= 1}
                     onClick={() => loadPage(selectedDocument.id, page.pageNumber - 1)}
-                    className="grid h-9 w-9 place-items-center rounded-full bg-white/80 font-black text-[#554665] disabled:opacity-45"
+                    className="grid h-11 w-11 place-items-center rounded-full bg-white/80 font-black text-[#554665] disabled:opacity-45"
                     aria-label="Previous page"
                   >
                     <ChevronLeft size={16} />
@@ -407,7 +407,7 @@ export function PdfReader() {
                     type="button"
                     disabled={page.pageNumber >= selectedDocument.pageCount}
                     onClick={() => loadPage(selectedDocument.id, page.pageNumber + 1)}
-                    className="grid h-9 w-9 place-items-center rounded-full bg-white/80 font-black text-[#554665] disabled:opacity-45"
+                    className="grid h-11 w-11 place-items-center rounded-full bg-white/80 font-black text-[#554665] disabled:opacity-45"
                     aria-label="Next page"
                   >
                     <ChevronRight size={16} />
@@ -415,14 +415,14 @@ export function PdfReader() {
                 </div>
               )}
             </div>
-            <pre className="max-h-[560px] min-h-72 overflow-auto whitespace-pre-wrap rounded-[18px] bg-[#fffcfd] p-4 text-sm leading-7 text-[#372f3c]">
+            <pre className="max-h-[560px] min-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-[18px] bg-[#fffcfd] p-4 text-sm leading-7 text-[#372f3c]">
               {page?.cleanText || "No page text loaded."}
             </pre>
           </div>
         </main>
 
-        <aside className="space-y-4">
-          <div className="rounded-[24px] border border-white/80 bg-white/70 p-4 shadow-lg shadow-[#e8dcef]/35">
+        <aside className="min-w-0 space-y-4">
+          <div className="min-w-0 rounded-[24px] border border-white/80 bg-white/70 p-4 shadow-lg shadow-[#e8dcef]/35">
             <h2 className="text-sm font-black uppercase tracking-normal text-[#76667f]">
               TOC
             </h2>
@@ -438,7 +438,7 @@ export function PdfReader() {
                         })
                       : undefined
                   }
-                  className="w-full rounded-[16px] bg-white/75 px-3 py-2 text-left text-sm font-bold text-[#554665] transition hover:bg-white"
+                  className="w-full min-w-0 rounded-[16px] bg-white/75 px-3 py-2 text-left text-sm font-bold text-[#554665] transition hover:bg-white"
                   style={{ paddingLeft: `${Math.min(section.level, 4) * 10 + 12}px` }}
                 >
                   <span className="block truncate">{section.title}</span>
@@ -455,7 +455,7 @@ export function PdfReader() {
             </div>
           </div>
 
-          <div className="rounded-[24px] border border-white/80 bg-white/70 p-4 shadow-lg shadow-[#e8dcef]/35">
+          <div className="min-w-0 rounded-[24px] border border-white/80 bg-white/70 p-4 shadow-lg shadow-[#e8dcef]/35">
             <form onSubmit={handleAsk} className="space-y-3">
               <label
                 htmlFor="rag-question"
@@ -491,7 +491,7 @@ export function PdfReader() {
           )}
 
           {queryResult && (
-            <div className="space-y-4 rounded-[24px] border border-white/80 bg-white/70 p-4 shadow-lg shadow-[#e8dcef]/35">
+            <div className="min-w-0 space-y-4 rounded-[24px] border border-white/80 bg-white/70 p-4 shadow-lg shadow-[#e8dcef]/35">
               <div>
                 <h2 className="text-sm font-black uppercase tracking-normal text-[#76667f]">
                   Answer

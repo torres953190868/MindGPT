@@ -128,7 +128,7 @@ export function ProjectCardList() {
           disabled={isImporting}
           aria-label="Import BranchMind JSON project"
           data-testid="project-import-json-button"
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-[20px] bg-[#f1e8fb] px-4 text-sm font-black text-[#5d427d] shadow-sm transition hover:bg-[#e4d5f6] disabled:cursor-not-allowed disabled:opacity-65"
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-[20px] bg-[#f1e8fb] px-4 text-sm font-black text-[#5d427d] shadow-sm transition hover:bg-[#e4d5f6] disabled:cursor-not-allowed disabled:opacity-65 sm:w-auto"
         >
           <Upload size={17} />
           {isImporting ? "Importing..." : "Import JSON"}
@@ -204,7 +204,7 @@ export function ProjectCardList() {
               aria-labelledby={`project-${project.id}-title`}
               data-project-id={project.id}
               data-testid="project-card"
-              className="rounded-[24px] border border-white/80 bg-white/82 p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-xl hover:shadow-[#dbc9ec]/35"
+              className="rounded-[22px] border border-white/80 bg-white/82 p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-xl hover:shadow-[#dbc9ec]/35 md:rounded-[24px]"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -229,7 +229,7 @@ export function ProjectCardList() {
                     aria-label={`Export ${project.title} as JSON`}
                     data-project-id={project.id}
                     data-testid="export-project-json-button"
-                    className="grid h-10 w-10 place-items-center rounded-full bg-[#e5f6ee] text-[#3d7558] transition hover:bg-[#d5efdf]"
+                    className="grid h-11 w-11 place-items-center rounded-full bg-[#e5f6ee] text-[#3d7558] transition hover:bg-[#d5efdf]"
                   >
                     <Download size={17} />
                   </button>
@@ -239,7 +239,7 @@ export function ProjectCardList() {
                     aria-label={`Delete ${project.title}`}
                     data-project-id={project.id}
                     data-testid="delete-project-button"
-                    className="grid h-10 w-10 place-items-center rounded-full bg-[#ffe9ef] text-[#b85b73] transition hover:bg-[#ffd5df]"
+                    className="grid h-11 w-11 place-items-center rounded-full bg-[#ffe9ef] text-[#b85b73] transition hover:bg-[#ffd5df]"
                   >
                     <Trash2 size={17} />
                   </button>

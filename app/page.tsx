@@ -1,109 +1,133 @@
-import Link from "next/link";
-import { Brain, FileText, FolderKanban, ShieldCheck } from "lucide-react";
+import {
+  Brain,
+  FileText,
+  FolderKanban,
+  ScrollText,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
 import { AuthPanel } from "@/components/AuthPanel";
 import { ProjectLauncher } from "@/components/ProjectLauncher";
+import { ResponsiveHeader } from "@/components/ResponsiveHeader";
 
 export default function HomePage() {
   return (
     <main
       aria-labelledby="home-title"
       data-testid="home-page"
-      className="min-h-screen px-5 py-6"
+      className="home-research-canvas relative min-h-screen overflow-hidden px-5 py-6"
     >
-      <div className="mx-auto flex max-w-6xl flex-col gap-12">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="grid h-12 w-12 place-items-center rounded-[18px] bg-[#f7d8e5] text-[#7c4e70] shadow-sm">
-              <Brain size={24} />
-            </div>
-            <span className="text-xl font-extrabold text-[#342b3a]">BranchMind</span>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <nav
-              aria-label="Primary navigation"
-              className="flex flex-wrap items-center justify-end gap-3 text-sm font-extrabold"
-              data-testid="home-primary-navigation"
-            >
-              <Link
-                href="/projects"
-                data-testid="home-projects-link"
-                className="inline-flex items-center gap-2 rounded-[18px] bg-white/75 px-4 py-3 text-[#554665] shadow-sm transition hover:bg-white"
-              >
-                <FolderKanban size={18} />
-                Projects
-              </Link>
-              <Link
-                href="/reader"
-                className="inline-flex items-center gap-2 rounded-[18px] bg-white/75 px-4 py-3 text-[#554665] shadow-sm transition hover:bg-white"
-              >
-                <FileText size={17} />
-                PDF Reader
-              </Link>
-              <Link
-                href="/privacy"
-                data-testid="home-privacy-link"
-                className="inline-flex items-center gap-2 rounded-[18px] bg-white/75 px-4 py-3 text-[#554665] shadow-sm transition hover:bg-white"
-              >
-                <ShieldCheck size={17} />
-                Privacy
-              </Link>
-              <Link
-                href="/terms"
-                data-testid="home-terms-link"
-                className="rounded-[18px] bg-white/75 px-4 py-3 text-[#554665] shadow-sm transition hover:bg-white"
-              >
-                Terms
-              </Link>
-            </nav>
-            <AuthPanel />
-          </div>
-        </header>
+      <div className="branchmind-grid absolute inset-0 opacity-80" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-white/70 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[#fffced]/80 to-transparent" />
+
+      <div className="relative z-10 mx-auto flex min-h-[calc(100vh-3rem)] max-w-7xl flex-col">
+        <ResponsiveHeader
+          title="BranchMind"
+          icon={<Brain size={23} />}
+          navLabel="Primary navigation"
+          navTestId="home-primary-navigation"
+          actions={<AuthPanel />}
+          links={[
+            {
+              href: "/projects",
+              label: "Projects",
+              icon: <FolderKanban size={18} />,
+              testId: "home-projects-link",
+            },
+            { href: "/reader", label: "PDF Reader", icon: <FileText size={17} /> },
+            {
+              href: "/privacy",
+              label: "Privacy",
+              icon: <ShieldCheck size={17} />,
+              testId: "home-privacy-link",
+            },
+            {
+              href: "/terms",
+              label: "Terms",
+              icon: <ScrollText size={17} />,
+              testId: "home-terms-link",
+            },
+          ]}
+        />
 
         <section
           aria-labelledby="home-title"
           data-testid="home-hero"
-          className="grid min-h-[70vh] items-center gap-10 lg:grid-cols-[1.08fr_0.92fr]"
+          className="relative flex flex-1 items-center justify-center py-8 md:py-20"
         >
-          <div className="space-y-7">
-            <p className="inline-flex rounded-full bg-[#e5f6ee] px-4 py-2 text-sm font-extrabold text-[#3d7558]">
-              Visual AI learning workspace
-            </p>
-            <div className="space-y-5">
-              <h1
-                id="home-title"
-                className="max-w-3xl text-5xl font-black leading-tight text-[#312737] md:text-7xl"
-              >
-                BranchMind
-              </h1>
-              <p className="max-w-2xl text-lg leading-8 text-[#695d72]">
-                Turn one AI conversation into a branching knowledge map with connected nodes,
-                focused side paths, and a clear main thread.
+          <div className="pointer-events-none absolute inset-0 hidden lg:block" aria-hidden="true">
+            <svg
+              className="absolute left-1/2 top-1/2 h-[560px] w-[900px] -translate-x-1/2 -translate-y-[42%]"
+              viewBox="0 0 900 560"
+              fill="none"
+            >
+              <path
+                d="M245 265 C322 218 381 212 448 250 C520 292 587 275 656 210"
+                stroke="#bba5db"
+                strokeWidth="2"
+                strokeDasharray="7 8"
+                opacity="0.44"
+              />
+              <path
+                d="M305 365 C366 405 441 400 514 350 C570 312 612 320 684 365"
+                stroke="#9bcfb2"
+                strokeWidth="2"
+                strokeDasharray="7 8"
+                opacity="0.5"
+              />
+              <path
+                d="M410 180 C472 145 526 142 588 170"
+                stroke="#efbfd1"
+                strokeWidth="2"
+                strokeDasharray="7 8"
+                opacity="0.46"
+              />
+            </svg>
+
+            <div className="absolute left-[4%] top-[18%] w-64 rounded-[24px] border border-[#f1bfd1] bg-[#fff7fa]/80 p-4 shadow-lg shadow-[#edd3df]/50 backdrop-blur">
+              <p className="text-sm font-black text-[#5c4157]">Reinforcement Learning</p>
+              <p className="mt-2 text-sm leading-6 text-[#7c7184]">
+                Agent, reward, policy, and environment in one map.
               </p>
             </div>
-            <ProjectLauncher />
+            <div className="absolute right-[6%] top-[26%] w-60 rounded-[24px] border border-[#d7c4f5] bg-[#fbf8ff]/80 p-4 shadow-lg shadow-[#ded2ef]/50 backdrop-blur">
+              <p className="text-sm font-black text-[#5b4d7d]">Branch: Q-learning</p>
+              <p className="mt-2 text-sm leading-6 text-[#777088]">
+                Keep side explorations close without losing focus.
+              </p>
+            </div>
+            <div className="absolute bottom-[12%] left-[2%] w-60 rounded-[24px] border border-[#c8e8d4] bg-[#f7fff9]/80 p-4 shadow-lg shadow-[#d4e8dc]/50 backdrop-blur">
+              <p className="text-sm font-black text-[#3e6d52]">Continue: value functions</p>
+              <p className="mt-2 text-sm leading-6 text-[#697b70]">
+                Extend the main path with the original context intact.
+              </p>
+            </div>
+            <div className="absolute bottom-[17%] right-[2%] w-56 rounded-[24px] border border-[#f3e0a3] bg-[#fffbed]/80 p-4 shadow-lg shadow-[#efe5bf]/50 backdrop-blur">
+              <p className="text-sm font-black text-[#725b25]">Policy Optimization</p>
+              <p className="mt-2 text-sm leading-6 text-[#766b53]">
+                Compare tradeoffs before opening a deeper node.
+              </p>
+            </div>
           </div>
 
-          <div className="relative min-h-[440px] overflow-hidden rounded-[32px] border border-white/80 bg-white/60 p-6 shadow-2xl shadow-[#ddcdea]/45">
-            <div className="branchmind-grid absolute inset-0 opacity-90" />
-            <div className="relative h-full">
-              <div className="absolute left-4 top-8 w-64 rounded-[26px] border border-[#f3c4d3] bg-[#fff7fa] p-5 shadow-lg">
-                <p className="font-extrabold text-[#5c4157]">Reinforcement Learning</p>
-                <p className="mt-3 text-sm leading-6 text-[#7c7184]">
-                  Agent, reward, policy, and environment in one overview node.
-                </p>
-              </div>
-              <div className="absolute left-24 top-72 w-64 rounded-[26px] border border-[#c9e8d6] bg-[#f7fff9] p-5 shadow-lg">
-                <p className="font-extrabold text-[#3e6d52]">Continue: value functions</p>
-                <p className="mt-3 text-sm leading-6 text-[#697b70]">
-                  Main path continues without losing the starting context.
-                </p>
-              </div>
-              <div className="absolute right-2 top-32 w-64 rounded-[26px] border border-[#d9caf7] bg-[#fbf8ff] p-5 shadow-lg">
-                <p className="font-extrabold text-[#5b4d7d]">Branch: Q-learning</p>
-                <p className="mt-3 text-sm leading-6 text-[#777088]">
-                  A side node keeps deeper exploration separate.
-                </p>
-              </div>
+          <div className="relative z-10 mx-auto w-full max-w-3xl text-center">
+            <p className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/90 bg-[#e5f6ee]/80 px-4 py-2 text-sm font-extrabold text-[#3d7558] shadow-sm">
+              <Sparkles size={16} />
+              Visual AI learning workspace
+            </p>
+            <h1
+              id="home-title"
+              className="home-title-soft mt-5 text-5xl font-black leading-none text-[#312737] sm:text-6xl md:mt-8 md:text-8xl"
+            >
+              BranchMind
+            </h1>
+            <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-[#695d72] md:mt-6 md:text-xl md:leading-8">
+              Turn one AI conversation into a branching knowledge map with connected nodes,
+              focused side paths, and a clear main thread.
+            </p>
+            <div className="mx-auto mt-6 max-w-2xl md:mt-9">
+              <ProjectLauncher variant="composer" />
             </div>
           </div>
         </section>

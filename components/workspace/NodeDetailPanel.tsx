@@ -368,7 +368,7 @@ function MessageActionButton({
       aria-label={label}
       title={title}
       data-testid={testId}
-      className="grid h-8 w-8 place-items-center rounded-full text-current opacity-75 transition hover:bg-white/70 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-current/25 disabled:cursor-not-allowed disabled:opacity-35"
+      className="grid h-11 w-11 place-items-center rounded-full text-current opacity-75 transition hover:bg-white/70 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-current/25 disabled:cursor-not-allowed disabled:opacity-35 sm:h-8 sm:w-8"
     >
       {children}
     </button>
@@ -915,7 +915,7 @@ export function NodeDetailPanel({
           aria-label="Collapse node details panel"
           aria-expanded="true"
           data-testid="collapse-node-detail-panel-button"
-          className="grid h-10 w-10 place-items-center self-end rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+          className="grid h-11 w-11 place-items-center self-end rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
         >
           <PanelRightClose size={18} />
         </button>
@@ -951,7 +951,7 @@ export function NodeDetailPanel({
             aria-controls="conversation-history"
             aria-expanded="true"
             data-testid="collapse-node-detail-panel-button"
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
           >
             <PanelRightClose size={18} />
           </button>
@@ -966,7 +966,7 @@ export function NodeDetailPanel({
             aria-expanded={node.children.length > 0 ? !node.collapsed : undefined}
             aria-controls="mind-map"
             data-testid="toggle-node-button"
-            className="inline-flex h-10 items-center gap-2 rounded-[16px] bg-[#ffe4ec] px-3 text-sm font-black text-[#9a4c64] transition hover:bg-[#ffd3df] disabled:cursor-not-allowed disabled:opacity-65"
+            className="inline-flex h-11 items-center gap-2 rounded-[16px] bg-[#ffe4ec] px-3 text-sm font-black text-[#9a4c64] transition hover:bg-[#ffd3df] disabled:cursor-not-allowed disabled:opacity-65"
           >
             <Ribbon size={16} />
             {node.collapsed ? "Expand" : "Fold"}
@@ -978,7 +978,7 @@ export function NodeDetailPanel({
               onClick={() => onDeleteNode(node.id)}
               aria-label="Delete node"
               data-testid="delete-node-button"
-              className="inline-flex h-10 items-center gap-2 rounded-[16px] bg-[#ffeceb] px-3 text-sm font-black text-[#a4514b] transition hover:bg-[#ffd7d4] disabled:cursor-not-allowed disabled:opacity-65"
+              className="inline-flex h-11 items-center gap-2 rounded-[16px] bg-[#ffeceb] px-3 text-sm font-black text-[#a4514b] transition hover:bg-[#ffd7d4] disabled:cursor-not-allowed disabled:opacity-65"
             >
               <Trash2 size={16} />
               Delete
@@ -991,7 +991,7 @@ export function NodeDetailPanel({
             aria-controls="project-notes-panel"
             aria-expanded={isNotesOpen}
             data-testid="node-detail-notes-button"
-            className={`inline-flex h-10 items-center gap-2 rounded-[16px] px-3 text-sm font-black transition focus:outline-none focus:ring-4 focus:ring-[#eadcf7] ${
+            className={`inline-flex h-11 items-center gap-2 rounded-[16px] px-3 text-sm font-black transition focus:outline-none focus:ring-4 focus:ring-[#eadcf7] ${
               isNotesOpen
                 ? "bg-[#eadcf7] text-[#6e4ca0] hover:bg-[#dfc9f3]"
                 : "bg-white/75 text-[#776c80] hover:bg-white"
@@ -1189,7 +1189,7 @@ export function NodeDetailPanel({
             aria-label="Continue down"
             aria-pressed={mode === "continue"}
             data-testid="continue-down-button"
-            className={`inline-flex h-10 items-center justify-center gap-2 rounded-[16px] text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-65 ${
+            className={`inline-flex h-11 items-center justify-center gap-2 rounded-[16px] text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-65 ${
               mode === "continue"
                 ? "bg-[#dff5ea] text-[#376b50]"
                 : "bg-white/75 text-[#776c80] hover:bg-white"
@@ -1205,7 +1205,7 @@ export function NodeDetailPanel({
             aria-label="Branch right"
             aria-pressed={mode === "branch"}
             data-testid="branch-right-button"
-            className={`inline-flex h-10 items-center justify-center gap-2 rounded-[16px] text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-65 ${
+            className={`inline-flex h-11 items-center justify-center gap-2 rounded-[16px] text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-65 ${
               mode === "branch"
                 ? "bg-[#eadcf7] text-[#6e4ca0]"
                 : "bg-white/75 text-[#776c80] hover:bg-white"

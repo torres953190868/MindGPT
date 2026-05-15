@@ -196,7 +196,7 @@ export function ProjectNotesPanel({
           onClick={onClose}
           aria-label="Close project notes"
           data-testid="close-project-notes-button"
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
         >
           <PanelRightClose size={18} />
         </button>
@@ -222,7 +222,7 @@ export function ProjectNotesPanel({
           disabled={!canAppendLatestAiReply}
           aria-label="Add latest AI reply to project notes"
           data-testid="add-latest-ai-reply-note-button"
-          className="inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 rounded-[16px] bg-[#eadcf7] text-sm font-black text-[#6e4ca0] transition hover:bg-[#dfc9f3] disabled:cursor-not-allowed disabled:opacity-65"
+          className="inline-flex h-11 w-full shrink-0 items-center justify-center gap-2 rounded-[16px] bg-[#eadcf7] text-sm font-black text-[#6e4ca0] transition hover:bg-[#dfc9f3] disabled:cursor-not-allowed disabled:opacity-65"
         >
           <PlusCircle size={16} />
           Add latest AI reply

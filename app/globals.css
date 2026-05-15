@@ -39,6 +39,26 @@ textarea {
   background-size: 28px 28px;
 }
 
+.home-research-canvas {
+  background:
+    radial-gradient(circle at 16% 22%, rgba(255, 194, 209, 0.25), transparent 28%),
+    radial-gradient(circle at 84% 14%, rgba(198, 238, 216, 0.34), transparent 26%),
+    radial-gradient(circle at 52% 82%, rgba(218, 203, 244, 0.26), transparent 30%),
+    linear-gradient(135deg, #fffafb 0%, #f8fcff 48%, #fffced 100%);
+}
+
+.home-title-soft {
+  letter-spacing: 0;
+  text-shadow: 0 12px 34px rgba(102, 77, 128, 0.17);
+}
+
+@media (max-width: 1023px) {
+  .react-flow__controls button {
+    width: 44px !important;
+    height: 44px !important;
+  }
+}
+
 .project-notes-editor {
   height: 100%;
   min-height: 0;

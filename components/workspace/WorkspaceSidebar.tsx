@@ -10,10 +10,11 @@ import {
   Search,
   Sprout,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { MindNode, Project } from "@/lib/types";
 
 type WorkspaceSidebarProps = {
+  footer?: ReactNode;
   project: Project;
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
@@ -110,6 +111,7 @@ function getVisibleOutlineRows(
 }
 
 export function WorkspaceSidebar({
+  footer,
   project,
   selectedNodeId,
   onSelectNode,
@@ -182,7 +184,7 @@ export function WorkspaceSidebar({
         <div className="flex shrink-0 items-center gap-2">
           <Link
             href="/projects"
-            className="grid h-10 w-10 place-items-center rounded-full bg-[#f1e8fb] text-[#6c538d] transition hover:bg-[#e4d5f6] focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+            className="grid h-11 w-11 place-items-center rounded-full bg-[#f1e8fb] text-[#6c538d] transition hover:bg-[#e4d5f6] focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
             aria-label="Project list"
             data-testid="project-list-link"
           >
@@ -195,7 +197,7 @@ export function WorkspaceSidebar({
             aria-controls="conversation-outline"
             aria-expanded="true"
             data-testid="collapse-workspace-sidebar-button"
-            className="grid h-10 w-10 place-items-center rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+            className="grid h-11 w-11 place-items-center rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
           >
             <PanelLeftClose size={18} />
           </button>
@@ -246,6 +248,14 @@ export function WorkspaceSidebar({
           ))
         )}
       </nav>
+      {footer && (
+        <div
+          data-testid="workspace-sidebar-footer"
+          className="mt-auto border-t border-white/80 pt-3"
+        >
+          {footer}
+        </div>
+      )}
     </aside>
   );
 }
@@ -289,12 +299,12 @@ function OutlineItem({
           aria-expanded={expanded}
           data-testid="conversation-outline-toggle"
           data-node-id={node.id}
-          className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7] lg:mt-0.5 lg:h-5 lg:w-5"
         >
           {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         </button>
       ) : (
-        <span aria-hidden="true" className="mt-0.5 h-5 w-3.5 shrink-0" />
+        <span aria-hidden="true" className="h-11 w-11 shrink-0 lg:mt-0.5 lg:h-5 lg:w-3.5" />
       )}
       <button
         type="button"
@@ -303,7 +313,7 @@ function OutlineItem({
         aria-current={selected ? "true" : undefined}
         data-testid="conversation-outline-item"
         data-node-id={node.id}
-        className="flex min-w-0 flex-1 items-start gap-1.5 rounded-[12px] p-0.5 text-left outline-none transition focus:ring-4 focus:ring-[#eadcf7]"
+        className="flex min-h-11 min-w-0 flex-1 items-start gap-1.5 rounded-[12px] p-0.5 text-left outline-none transition focus:ring-4 focus:ring-[#eadcf7] lg:min-h-0"
       >
         <span
           aria-hidden="true"

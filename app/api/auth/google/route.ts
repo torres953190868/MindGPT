@@ -2,14 +2,13 @@ import type { NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { buildAuthCallbackUrl } from "@/lib/server/auth-redirect";
-import { jsonWithSession, safeErrorWithSession, HttpError } from "@/lib/server/http";
+import { HttpError, jsonWithSession, safeErrorWithSession } from "@/lib/server/http";
 import { assertValidRequestOrigin } from "@/lib/server/security";
 import { getOrCreateSession } from "@/lib/server/session";
 import { requireSupabaseServerConfig } from "@/lib/supabase/server";
 import { parseJsonBody } from "@/lib/server/validation";
 
-const magicLinkSchema = z.object({
-  email: z.string().trim().email().max(320),
+const googleAuthSchema = z.object({
   next: z.string().trim().max(2048).optional(),
 });
 
@@ -20,7 +19,7 @@ export async function POST(request: NextRequest) {
     assertValidRequestOrigin(request, {
       allowMissingOrigin: process.env.NODE_ENV !== "production",
     });
-    const { email, next } = await parseJsonBody(request, magicLinkSchema, {
+    const { next } = await parseJsonBody(request, googleAuthSchema, {
       maxBytes: 4 * 1024,
     });
     const config = requireSupabaseServerConfig();
@@ -28,19 +27,19 @@ export async function POST(request: NextRequest) {
       auth: { autoRefreshToken: false, persistSession: false },
     });
     const redirectTo = buildAuthCallbackUrl(request.url, next);
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: redirectTo },
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo },
     });
 
-    if (error) {
-      throw new HttpError("Unable to send sign-in email.", {
-        code: "MAGIC_LINK_FAILED",
+    if (error || !data.url) {
+      throw new HttpError("Unable to start Google sign-in.", {
+        code: "GOOGLE_AUTH_FAILED",
         status: 502,
       });
     }
 
-    return jsonWithSession({ ok: true }, session);
+    return jsonWithSession({ url: data.url }, session);
   } catch (error) {
     return safeErrorWithSession(error, session);
   }

@@ -210,6 +210,32 @@ async function expectWheelScrolls(page: Page, locator: Locator) {
     .toBeGreaterThan(scrollTopBefore + 24);
 }
 
+async function getElementWidth(locator: Locator) {
+  return locator.evaluate((element) => element.getBoundingClientRect().width);
+}
+
+async function dragResizeHandle(page: Page, handle: Locator, deltaX: number) {
+  const handleBox = await handle.boundingBox();
+  if (!handleBox) throw new Error("Expected resize handle to be measurable.");
+
+  const startX = handleBox.x + handleBox.width / 2;
+  const startY = handleBox.y + handleBox.height / 2;
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + deltaX, startY, { steps: 8 });
+  await page.mouse.up();
+}
+
+async function expectNoHorizontalOverflow(page: Page) {
+  const overflow = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+
+  expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
+}
+
 async function importProject(page: Page, project: WorkspaceProject): Promise<WorkspaceProject> {
   const response = await page.request.post("/api/projects/import", {
     headers: API_MUTATION_HEADERS,
@@ -226,6 +252,16 @@ async function importProject(page: Page, project: WorkspaceProject): Promise<Wor
   }
 
   return importedProject;
+}
+
+async function mockAuthSession(page: Page, session: { configured: boolean; user: null | { id: string; email: string | null } }) {
+  await page.route("**/api/auth/session", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(session),
+    });
+  });
 }
 
 test("navigates the project shell with stable test ids", async ({ page }) => {
@@ -245,6 +281,66 @@ test("navigates the project shell with stable test ids", async ({ page }) => {
   await expect(
     page.getByTestId("project-grid").or(page.getByTestId("project-empty-state")),
   ).toBeVisible();
+});
+
+test("shows compact account entry in desktop and mobile headers", async ({ page }) => {
+  await mockAuthSession(page, { configured: true, user: null });
+
+  await page.goto("/");
+  await expect(page.getByTestId("auth-email-input")).toHaveCount(0);
+  const desktopSignIn = page.locator('[data-testid="account-sign-in-button"]:visible').first();
+  await expect(desktopSignIn).toBeVisible();
+  await desktopSignIn.click();
+  await expect(page.locator('[data-testid="account-sign-in-popover"]:visible')).toBeVisible();
+  await expect(page.locator('[data-testid="auth-email-input"]:visible')).toBeVisible();
+  await expect(page.locator('[data-testid="google-sign-in-button"]:visible')).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 780 });
+  await page.goto("/reader");
+  await expect(page.locator('[data-testid="account-sign-in-button"]:visible')).toHaveCount(0);
+  await page.locator("summary").filter({ hasText: "Menu" }).click();
+  await expect(page.getByTestId("responsive-header-mobile-actions")).toBeVisible();
+  await expect(page.locator('[data-testid="account-sign-in-button"]:visible')).toBeVisible();
+});
+
+test("shows signed-in account menu state", async ({ page }) => {
+  await mockAuthSession(page, {
+    configured: true,
+    user: { id: "user_e2e_auth", email: "learner@example.com" },
+  });
+
+  await page.goto("/projects");
+  const accountButton = page.locator('[data-testid="account-menu-button"]:visible').first();
+  await expect(accountButton).toContainText("learner@example.com");
+  await accountButton.click();
+  await expect(page.locator('[data-testid="account-menu-popover"]:visible')).toContainText(
+    "learner@example.com",
+  );
+  await expect(page.locator('[data-testid="sign-out-button"]:visible')).toBeVisible();
+});
+
+test("places the workspace account entry in the sidebar footer", async ({ page }) => {
+  await mockAuthSession(page, { configured: true, user: null });
+  const sourceProject = makeWorkspaceProject(`account-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.goto(`/workspace/${project.id}`);
+    await expect(page.getByTestId("workspace-navigation")).not.toContainText("Sign in");
+    await expect(page.getByTestId("workspace-sidebar-footer")).toBeVisible();
+    await expect(
+      page.getByTestId("workspace-sidebar-footer").getByTestId("account-sign-in-button"),
+    ).toBeVisible();
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
 });
 
 test("loads a seeded workspace with stable test ids", async ({ page }) => {
@@ -310,6 +406,75 @@ test("loads a seeded workspace with stable test ids", async ({ page }) => {
     await mindMapCanvas.getByTestId("expand-node-detail-panel-button").click();
     await expect(page.getByTestId("node-detail-panel")).toBeVisible();
     await expect(page.getByTestId("conversation-history")).toBeVisible();
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("workspace sidebars resize and snap like VS Code", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Desktop sidebar resizing is covered once.");
+
+  const sourceProject = makeWorkspaceProject(`sidebars-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.goto(`/workspace/${project.id}`);
+
+    const mindMapCanvas = page.getByTestId("mind-map-canvas");
+    const workspaceSidebar = page.getByTestId("workspace-sidebar");
+    const nodeDetailPanel = page.getByTestId("node-detail-panel");
+
+    await expect(workspaceSidebar).toBeVisible();
+    await expect(nodeDetailPanel).toBeVisible();
+
+    await dragResizeHandle(page, page.getByTestId("resize-workspace-sidebar"), 430);
+    await expect.poll(() => getElementWidth(workspaceSidebar)).toBeGreaterThan(560);
+    await expect.poll(() => getElementWidth(mindMapCanvas)).toBeGreaterThan(219);
+    await expectNoHorizontalOverflow(page);
+
+    const wideSidebarWidth = await getElementWidth(workspaceSidebar);
+    await dragResizeHandle(
+      page,
+      page.getByTestId("resize-workspace-sidebar"),
+      -(wideSidebarWidth + 120),
+    );
+    await expect(workspaceSidebar).toHaveCount(0);
+    await expect(mindMapCanvas.getByTestId("expand-workspace-sidebar-button")).toBeVisible();
+
+    await mindMapCanvas.getByTestId("expand-workspace-sidebar-button").click();
+    await expect(workspaceSidebar).toBeVisible();
+    await expect.poll(() => getElementWidth(workspaceSidebar)).toBeGreaterThan(560);
+
+    const detailWidthBeforeSnap = await getElementWidth(nodeDetailPanel);
+    await dragResizeHandle(
+      page,
+      page.getByTestId("resize-node-details-panel"),
+      detailWidthBeforeSnap + 120,
+    );
+    await expect(nodeDetailPanel).toHaveCount(0);
+    await expect(mindMapCanvas.getByTestId("expand-node-detail-panel-button")).toBeVisible();
+
+    await mindMapCanvas.getByTestId("expand-node-detail-panel-button").click();
+    await expect(nodeDetailPanel).toBeVisible();
+    await expect.poll(() => getElementWidth(nodeDetailPanel)).toBeGreaterThanOrEqual(300);
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.getByTestId("node-detail-notes-button").click();
+    await expect(page.getByTestId("project-notes-panel")).toBeVisible();
+    await expect(page.getByTestId("resize-project-notes-panel")).toBeVisible();
+
+    await dragResizeHandle(page, page.getByTestId("resize-workspace-sidebar"), 900);
+    await dragResizeHandle(page, page.getByTestId("resize-node-details-panel"), -900);
+    await expect.poll(() => getElementWidth(mindMapCanvas)).toBeGreaterThan(219);
+    await expectNoHorizontalOverflow(page);
   } finally {
     if (projectIdToDelete) {
       await page.request

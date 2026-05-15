@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { ArrowLeft, FileCheck, ShieldCheck } from "lucide-react";
+import { ArrowLeft, FileCheck, FolderKanban, ShieldCheck } from "lucide-react";
+import { ResponsiveHeader } from "@/components/ResponsiveHeader";
 
 export const metadata: Metadata = {
   title: "Terms | BranchMind",
@@ -53,38 +53,32 @@ export default function TermsPage() {
       data-testid="terms-page"
     >
       <div className="mx-auto flex max-w-4xl flex-col gap-8">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <Link
-            href="/"
-            aria-label="Back to BranchMind home"
-            data-testid="terms-home-link"
-            className="inline-flex items-center gap-2 rounded-[18px] bg-white/75 px-4 py-3 font-bold text-[#554665] shadow-sm transition hover:bg-white"
-          >
-            <ArrowLeft size={18} />
-            Home
-          </Link>
-          <nav
-            aria-label="Compliance navigation"
-            data-testid="terms-compliance-navigation"
-            className="flex flex-wrap items-center gap-3 text-sm font-extrabold"
-          >
-            <Link
-              href="/privacy"
-              data-testid="terms-privacy-link"
-              className="inline-flex items-center gap-2 rounded-[18px] bg-white/75 px-4 py-3 text-[#554665] shadow-sm transition hover:bg-white"
-            >
-              <ShieldCheck size={17} />
-              Privacy
-            </Link>
-            <Link
-              href="/projects"
-              data-testid="terms-projects-link"
-              className="rounded-[18px] bg-white/75 px-4 py-3 text-[#554665] shadow-sm transition hover:bg-white"
-            >
-              Projects
-            </Link>
-          </nav>
-        </header>
+        <ResponsiveHeader
+          title="Terms of Use"
+          icon={<FileCheck size={22} />}
+          navLabel="Compliance navigation"
+          navTestId="terms-compliance-navigation"
+          links={[
+            {
+              href: "/",
+              label: "Home",
+              icon: <ArrowLeft size={18} />,
+              testId: "terms-home-link",
+            },
+            {
+              href: "/privacy",
+              label: "Privacy",
+              icon: <ShieldCheck size={17} />,
+              testId: "terms-privacy-link",
+            },
+            {
+              href: "/projects",
+              label: "Projects",
+              icon: <FolderKanban size={17} />,
+              testId: "terms-projects-link",
+            },
+          ]}
+        />
 
         <section
           aria-labelledby="terms-title"

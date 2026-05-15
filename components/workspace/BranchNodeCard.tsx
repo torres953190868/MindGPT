@@ -82,7 +82,7 @@ export function BranchNodeCard({ data }: NodeProps) {
         </span>
       </button>
 
-      <div className="nodrag mt-4 flex items-center gap-2">
+      <div className="nodrag mt-4 hidden items-center gap-2 sm:flex">
         <button
           type="button"
           disabled={creationDisabled}

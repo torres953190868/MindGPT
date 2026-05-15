@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { ArrowLeft, FileText, FolderKanban } from "lucide-react";
+import { ArrowLeft, FileText, FolderKanban, ScrollText } from "lucide-react";
+import { ResponsiveHeader } from "@/components/ResponsiveHeader";
 
 export const metadata: Metadata = {
   title: "Privacy Policy | BranchMind",
@@ -53,38 +53,32 @@ export default function PrivacyPage() {
       data-testid="privacy-page"
     >
       <div className="mx-auto flex max-w-4xl flex-col gap-8">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <Link
-            href="/"
-            aria-label="Back to BranchMind home"
-            data-testid="privacy-home-link"
-            className="inline-flex items-center gap-2 rounded-[18px] bg-white/75 px-4 py-3 font-bold text-[#554665] shadow-sm transition hover:bg-white"
-          >
-            <ArrowLeft size={18} />
-            Home
-          </Link>
-          <nav
-            aria-label="Compliance navigation"
-            data-testid="privacy-compliance-navigation"
-            className="flex flex-wrap items-center gap-3 text-sm font-extrabold"
-          >
-            <Link
-              href="/projects"
-              data-testid="privacy-projects-link"
-              className="inline-flex items-center gap-2 rounded-[18px] bg-white/75 px-4 py-3 text-[#554665] shadow-sm transition hover:bg-white"
-            >
-              <FolderKanban size={17} />
-              Projects
-            </Link>
-            <Link
-              href="/terms"
-              data-testid="privacy-terms-link"
-              className="rounded-[18px] bg-white/75 px-4 py-3 text-[#554665] shadow-sm transition hover:bg-white"
-            >
-              Terms
-            </Link>
-          </nav>
-        </header>
+        <ResponsiveHeader
+          title="Privacy Policy"
+          icon={<FileText size={22} />}
+          navLabel="Compliance navigation"
+          navTestId="privacy-compliance-navigation"
+          links={[
+            {
+              href: "/",
+              label: "Home",
+              icon: <ArrowLeft size={18} />,
+              testId: "privacy-home-link",
+            },
+            {
+              href: "/projects",
+              label: "Projects",
+              icon: <FolderKanban size={17} />,
+              testId: "privacy-projects-link",
+            },
+            {
+              href: "/terms",
+              label: "Terms",
+              icon: <ScrollText size={17} />,
+              testId: "privacy-terms-link",
+            },
+          ]}
+        />
 
         <section
           aria-labelledby="privacy-title"
