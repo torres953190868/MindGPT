@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -H 127.0.0.1 -p 3002",
     "build": "next build",
     "start": "next start",
     "test": "vitest run --configLoader native --pool threads",
     "e2e": "playwright test",
     "smoke:prod": "node scripts/production-smoke.mjs",
+    "migrate:supabase": "node scripts/migrate-local-data-to-supabase.mjs",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit"
   },

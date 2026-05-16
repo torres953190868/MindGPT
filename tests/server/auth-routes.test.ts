@@ -1,39 +1,18 @@
 import { NextRequest } from "next/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildAuthCallbackUrl,
   sanitizeAuthNext,
 } from "@/lib/server/auth-redirect";
 
-const createClientMock = vi.hoisted(() => vi.fn());
+const createSupabaseCookieClientMock = vi.hoisted(() => vi.fn());
 const signInWithOtpMock = vi.hoisted(() => vi.fn());
 const signInWithOAuthMock = vi.hoisted(() => vi.fn());
+const exchangeCodeForSessionMock = vi.hoisted(() => vi.fn());
 
-vi.mock("@supabase/supabase-js", () => ({
-  createClient: createClientMock,
+vi.mock("@/lib/supabase/server", () => ({
+  createSupabaseCookieClient: createSupabaseCookieClientMock,
 }));
-
-const originalSupabaseEnv = {
-  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
-};
-
-function setSupabaseEnv() {
-  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://supabase.branchmind.example";
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon_test_key";
-  process.env.SUPABASE_SERVICE_ROLE_KEY = "service_role_test_key";
-}
-
-function restoreSupabaseEnv() {
-  for (const [key, value] of Object.entries(originalSupabaseEnv)) {
-    if (value === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = value;
-    }
-  }
-}
 
 function createJsonRequest(
   url: string,
@@ -77,20 +56,17 @@ describe("auth redirects", () => {
 describe("auth routes", () => {
   beforeEach(() => {
     vi.resetModules();
-    setSupabaseEnv();
-    createClientMock.mockReset();
+    createSupabaseCookieClientMock.mockReset();
     signInWithOtpMock.mockReset();
     signInWithOAuthMock.mockReset();
-    createClientMock.mockReturnValue({
+    exchangeCodeForSessionMock.mockReset();
+    createSupabaseCookieClientMock.mockResolvedValue({
       auth: {
         signInWithOtp: signInWithOtpMock,
         signInWithOAuth: signInWithOAuthMock,
+        exchangeCodeForSession: exchangeCodeForSessionMock,
       },
     });
-  });
-
-  afterEach(() => {
-    restoreSupabaseEnv();
   });
 
   it("passes a sanitized callback URL to Supabase magic-link auth", async () => {
@@ -105,6 +81,7 @@ describe("auth routes", () => {
     );
 
     expect(response.status).toBe(200);
+    expect(createSupabaseCookieClientMock).toHaveBeenCalledOnce();
     expect(signInWithOtpMock).toHaveBeenCalledWith({
       email: "learner@example.com",
       options: {
@@ -138,6 +115,7 @@ describe("auth routes", () => {
     expect(body.url).toBe(
       "https://supabase.branchmind.example/auth/v1/authorize?provider=google",
     );
+    expect(createSupabaseCookieClientMock).toHaveBeenCalledOnce();
     expect(signInWithOAuthMock).toHaveBeenCalledWith({
       provider: "google",
       options: {
@@ -174,5 +152,40 @@ describe("auth routes", () => {
 
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe("https://branchmind.example/projects");
+    expect(createSupabaseCookieClientMock).not.toHaveBeenCalled();
+  });
+
+  it("exchanges callback codes for a Supabase cookie session", async () => {
+    exchangeCodeForSessionMock.mockResolvedValue({ error: null });
+    const { GET } = await import("@/app/auth/callback/route");
+
+    const response = await GET(
+      new NextRequest(
+        "https://branchmind.example/auth/callback?code=auth-code&next=%2Freader",
+      ),
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("https://branchmind.example/reader");
+    expect(createSupabaseCookieClientMock).toHaveBeenCalledOnce();
+    expect(exchangeCodeForSessionMock).toHaveBeenCalledWith("auth-code");
+  });
+
+  it("marks callback redirects when code exchange fails", async () => {
+    exchangeCodeForSessionMock.mockResolvedValue({ error: new Error("PKCE failed") });
+    const { GET } = await import("@/app/auth/callback/route");
+
+    const response = await GET(
+      new NextRequest(
+        "https://branchmind.example/auth/callback?code=auth-code&next=%2Freader%3Fdocument%3Ddoc_1",
+      ),
+    );
+
+    const location = new URL(response.headers.get("location") ?? "");
+    expect(response.status).toBe(307);
+    expect(location.origin).toBe("https://branchmind.example");
+    expect(location.pathname).toBe("/reader");
+    expect(location.searchParams.get("document")).toBe("doc_1");
+    expect(location.searchParams.get("auth")).toBe("failed");
   });
 });

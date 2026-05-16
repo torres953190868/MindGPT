@@ -28,7 +28,7 @@ Create `.env.local` with:
 - `OPENCODE_GO_API_KEY` - Required when `AI_PROVIDER=opencode-go`
 - `OPENCODE_GO_MODEL` - Optional for OpenCode Go, defaults to `glm-5.1`
 - `NEXT_PUBLIC_SUPABASE_URL` - Required in production for Supabase-backed project storage
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Required in production for Supabase client helpers
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` or `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` - Required in production for Supabase client helpers
 - `SUPABASE_SERVICE_ROLE_KEY` - Required in production for server-side project repository access
 - `BRANCHMIND_PROJECTS_BACKEND` - Optional, `auto` by default. `auto` uses Supabase when configured and falls back to local file storage only outside production.
 

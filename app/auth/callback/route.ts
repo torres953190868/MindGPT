@@ -6,11 +6,16 @@ export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
   const next = sanitizeAuthNext(requestUrl.searchParams.get("next"));
+  const redirectUrl = new URL(next, requestUrl.origin);
 
   if (code) {
     const supabase = await createSupabaseCookieClient();
-    await supabase.auth.exchangeCodeForSession(code);
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+    if (error) {
+      redirectUrl.searchParams.set("auth", "failed");
+    }
   }
 
-  return NextResponse.redirect(new URL(next, requestUrl.origin));
+  return NextResponse.redirect(redirectUrl);
 }

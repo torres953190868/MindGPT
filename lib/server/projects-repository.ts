@@ -19,6 +19,11 @@ export type ProjectDto = Omit<Project, "ownerSessionId">;
 export type OwnedProject = Project & { ownerSessionId: string };
 export type ProjectsBackend = "file" | "supabase";
 
+type SupabaseProjectSchemaCapabilities = {
+  messageAttachments: boolean;
+  projectNotes: boolean;
+};
+
 export type ProjectsRepository = {
   backend: ProjectsBackend;
   readProjects: () => Promise<OwnedProject[]>;
@@ -32,6 +37,35 @@ export type ProjectsRepository = {
 function assertNoError(error: { message: string } | null, operation: string) {
   if (!error) return;
   throw new Error(`Supabase ${operation} failed: ${error.message}`);
+}
+
+function isMissingColumnError(error: { message: string } | null) {
+  return Boolean(
+    error?.message &&
+      /column .* does not exist|could not find .* column/i.test(error.message),
+  );
+}
+
+let schemaCapabilitiesPromise:
+  | Promise<SupabaseProjectSchemaCapabilities>
+  | undefined;
+
+async function getSchemaCapabilities(
+  client = getSupabaseAdminClient(),
+): Promise<SupabaseProjectSchemaCapabilities> {
+  schemaCapabilitiesPromise ??= Promise.all([
+    client
+      .from("branchmind_projects")
+      .select("id,notes", { count: "exact", head: true }),
+    client
+      .from("branchmind_messages")
+      .select("id,attachments", { count: "exact", head: true }),
+  ]).then(([projectsResult, messagesResult]) => ({
+    projectNotes: !isMissingColumnError(projectsResult.error),
+    messageAttachments: !isMissingColumnError(messagesResult.error),
+  }));
+
+  return schemaCapabilitiesPromise;
 }
 
 function requireProjectOwner(project: Project) {
@@ -160,7 +194,7 @@ export function composeProjectsFromRows(
       id: messageRow.id,
       role: messageRow.role,
       content: messageRow.content,
-      attachments: normalizeChatAttachments(messageRow.attachments, {
+      attachments: normalizeChatAttachments((messageRow as Partial<MessageRow>).attachments, {
         fallbackCreatedAt: messageRow.created_at,
       }),
       createdAt: messageRow.created_at,
@@ -212,7 +246,7 @@ export function composeProjectsFromRows(
       id: projectRow.id,
       ownerSessionId: projectRow.owner_session_id,
       title: projectRow.title,
-      notes: projectRow.notes,
+      notes: projectRow.notes ?? "",
       rootNodeId: projectRow.root_node_id,
       nodes,
       createdAt: projectRow.created_at,
@@ -277,8 +311,21 @@ class SupabaseProjectsRepository implements ProjectsRepository {
 
   async saveProject(project: Project) {
     const client = getSupabaseAdminClient();
+    const capabilities = await getSchemaCapabilities(client);
     const { projectRow, nodeRows, messageRows } = projectToRows(project);
-    const upsertProject = await client.from("branchmind_projects").upsert(projectRow);
+    const supportedProjectRow = { ...projectRow } as ProjectInsert & Record<string, unknown>;
+    if (!capabilities.projectNotes) delete supportedProjectRow.notes;
+    const supportedMessageRows = messageRows.map((messageRow) => {
+      const supportedMessageRow = {
+        ...messageRow,
+      } as MessageInsert & Record<string, unknown>;
+      if (!capabilities.messageAttachments) delete supportedMessageRow.attachments;
+      return supportedMessageRow as MessageInsert;
+    });
+
+    const upsertProject = await client
+      .from("branchmind_projects")
+      .upsert(supportedProjectRow as ProjectInsert);
     assertNoError(upsertProject.error, "upsert project");
 
     const deleteMessages = await client
@@ -298,10 +345,10 @@ class SupabaseProjectsRepository implements ProjectsRepository {
       assertNoError(insertNodes.error, "insert project nodes");
     }
 
-    if (messageRows.length > 0) {
+    if (supportedMessageRows.length > 0) {
       const insertMessages = await client
         .from("branchmind_messages")
-        .insert(messageRows);
+        .insert(supportedMessageRows);
       assertNoError(insertMessages.error, "insert project messages");
     }
   }
