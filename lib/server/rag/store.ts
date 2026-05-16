@@ -56,7 +56,15 @@ export type RagRepository = {
     update?: Partial<
       Pick<
         RagDocument,
-        "errorMessage" | "pageCount" | "title" | "parserVersion" | "chunkVersion"
+        | "errorMessage"
+        | "errorCode"
+        | "errorStage"
+        | "errorRequestId"
+        | "errorDetails"
+        | "pageCount"
+        | "title"
+        | "parserVersion"
+        | "chunkVersion"
       >
     >,
   ) => Promise<RagDocument>;
@@ -69,6 +77,7 @@ export type RagRepository = {
   getSections: (documentId: string) => Promise<RagSection[]>;
   replaceChunks: (documentId: string, chunks: RagChunk[]) => Promise<RagChunk[]>;
   getChunks: (documentId: string) => Promise<RagChunk[]>;
+  transferOwner: (fromUserId: string, toUserId: string) => Promise<number>;
 };
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -127,8 +136,22 @@ function toDocument(row: DocumentRow): RagDocument {
     parserVersion: row.parser_version,
     chunkVersion: row.chunk_version,
     errorMessage: row.error_message,
+    errorCode: row.error_code ?? null,
+    errorStage: (row.error_stage as RagDocument["errorStage"]) ?? null,
+    errorRequestId: row.error_request_id ?? null,
+    errorDetails: row.error_details ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function normalizeDocument(document: RagDocument): RagDocument {
+  return {
+    ...document,
+    errorCode: document.errorCode ?? null,
+    errorStage: document.errorStage ?? null,
+    errorRequestId: document.errorRequestId ?? null,
+    errorDetails: document.errorDetails ?? null,
   };
 }
 
@@ -345,6 +368,10 @@ class FileRagRepository implements RagRepository {
         parserVersion: PDF_PARSER_VERSION,
         chunkVersion: DEFAULT_CHUNK_VERSION,
         errorMessage: null,
+        errorCode: null,
+        errorStage: null,
+        errorRequestId: null,
+        errorDetails: null,
         createdAt,
         updatedAt: createdAt,
       };
@@ -361,16 +388,17 @@ class FileRagRepository implements RagRepository {
     const data = await readDataFile();
     return data.documents
       .filter((document) => document.userId === userId)
+      .map(normalizeDocument)
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }
 
   async getDocument(userId: string, documentId: string) {
     const data = await readDataFile();
-    return (
+    const document =
       data.documents.find(
         (document) => document.id === documentId && document.userId === userId,
-      ) ?? null
-    );
+      ) ?? null;
+    return document ? normalizeDocument(document) : null;
   }
 
   async readDocumentFile(document: RagDocument) {
@@ -398,6 +426,11 @@ class FileRagRepository implements RagRepository {
         ...data.documents[index],
         ...update,
         status,
+        errorMessage: update.errorMessage ?? null,
+        errorCode: update.errorCode ?? null,
+        errorStage: update.errorStage ?? null,
+        errorRequestId: update.errorRequestId ?? null,
+        errorDetails: update.errorDetails ?? null,
         updatedAt: now(),
       };
       data.documents[index] = document;
@@ -421,6 +454,10 @@ class FileRagRepository implements RagRepository {
         status: "parsed",
         parserVersion: PDF_PARSER_VERSION,
         errorMessage: null,
+        errorCode: null,
+        errorStage: null,
+        errorRequestId: null,
+        errorDetails: null,
         updatedAt: now(),
       };
 
@@ -483,6 +520,22 @@ class FileRagRepository implements RagRepository {
       .filter((chunk) => chunk.documentId === documentId)
       .sort((left, right) => left.chunkIndex - right.chunkIndex);
   }
+
+  async transferOwner(fromUserId: string, toUserId: string) {
+    if (fromUserId === toUserId) return 0;
+
+    return enqueueWrite(async () => {
+      const data = await readDataFile();
+      let transferredCount = 0;
+      data.documents = data.documents.map((document) => {
+        if (document.userId !== fromUserId) return document;
+        transferredCount += 1;
+        return { ...document, userId: toUserId, updatedAt: now() };
+      });
+      await writeDataFile(data);
+      return transferredCount;
+    });
+  }
 }
 
 class SupabaseRagRepository implements RagRepository {
@@ -504,6 +557,10 @@ class SupabaseRagRepository implements RagRepository {
       parser_version: PDF_PARSER_VERSION,
       chunk_version: DEFAULT_CHUNK_VERSION,
       error_message: null,
+      error_code: null,
+      error_stage: null,
+      error_request_id: null,
+      error_details: null,
       created_at: createdAt,
       updated_at: createdAt,
     };
@@ -569,7 +626,11 @@ class SupabaseRagRepository implements RagRepository {
       .from("documents")
       .update({
         status,
-        error_message: update.errorMessage,
+        error_message: update.errorMessage ?? null,
+        error_code: update.errorCode ?? null,
+        error_stage: update.errorStage ?? null,
+        error_request_id: update.errorRequestId ?? null,
+        error_details: update.errorDetails ?? null,
         page_count: update.pageCount,
         title: update.title,
         parser_version: update.parserVersion,
@@ -627,6 +688,10 @@ class SupabaseRagRepository implements RagRepository {
         status: "parsed",
         parser_version: PDF_PARSER_VERSION,
         error_message: null,
+        error_code: null,
+        error_stage: null,
+        error_request_id: null,
+        error_details: null,
         updated_at: now(),
       })
       .eq("id", document.id)
@@ -707,6 +772,19 @@ class SupabaseRagRepository implements RagRepository {
     assertNoError(error, "read document chunks");
     return (data ?? []).map(toChunk);
   }
+
+  async transferOwner(fromUserId: string, toUserId: string) {
+    if (fromUserId === toUserId) return 0;
+
+    const { data, error } = await getSupabaseAdminClient()
+      .from("documents")
+      .update({ user_id: toUserId, updated_at: now() })
+      .eq("user_id", fromUserId)
+      .select("id");
+
+    assertNoError(error, "transfer document owner");
+    return data?.length ?? 0;
+  }
 }
 
 const fileRepository = new FileRagRepository();
@@ -737,4 +815,8 @@ export async function requireOwnedDocument(userId: string, documentId: string) {
   const document = await repository.getDocument(userId, documentId);
   if (!document) notFound();
   return document;
+}
+
+export async function transferRagOwner(fromUserId: string, toUserId: string) {
+  return getRagRepository().transferOwner(fromUserId, toUserId);
 }

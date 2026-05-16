@@ -19,6 +19,7 @@ import {
   Search,
   Upload,
 } from "lucide-react";
+import { formatRequestReference, readJsonApi } from "@/lib/client/api";
 
 type DocumentStatus =
   | "uploaded"
@@ -35,6 +36,9 @@ type RagDocument = {
   title: string | null;
   status: DocumentStatus;
   errorMessage: string | null;
+  errorCode: string | null;
+  errorStage: string | null;
+  errorRequestId: string | null;
   updatedAt: string;
 };
 
@@ -79,26 +83,6 @@ type DocumentDetails = {
   chunkCount: number;
 };
 
-async function readApi<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
-  const data = (await response.json().catch(() => null)) as unknown;
-
-  if (!response.ok) {
-    const message =
-      data &&
-      typeof data === "object" &&
-      "error" in data &&
-      typeof (data as { error?: { message?: unknown } }).error?.message === "string"
-        ? (data as { error: { message: string } }).error.message
-        : "Request failed.";
-    throw new Error(
-      message,
-    );
-  }
-
-  return data as T;
-}
-
 function statusLabel(status: DocumentStatus) {
   const labels: Record<DocumentStatus, string> = {
     uploaded: "Uploaded",
@@ -130,15 +114,18 @@ export function PdfReader() {
 
   const selectedDocument = details?.document ?? null;
   const canAsk = selectedDocument?.status === "indexed" && !querying;
+  const selectedDocumentErrorReference = formatRequestReference(
+    selectedDocument?.errorRequestId,
+  );
 
   const loadDocuments = useCallback(async () => {
-    const data = await readApi<{ documents: RagDocument[] }>("/api/documents");
+    const data = await readJsonApi<{ documents: RagDocument[] }>("/api/documents");
     setDocuments(data.documents);
     return data.documents;
   }, []);
 
   const loadPage = useCallback(async (documentId: string, pageNumber: number) => {
-    const data = await readApi<{ page: RagPage }>(
+    const data = await readJsonApi<{ page: RagPage }>(
       `/api/documents/${documentId}/pages/${pageNumber}`,
     );
     setPage(data.page);
@@ -146,7 +133,7 @@ export function PdfReader() {
 
   const selectDocument = useCallback(async (documentId: string, pageNumber?: number) => {
     setSelectedId(documentId);
-    const nextDetails = await readApi<DocumentDetails>(
+    const nextDetails = await readJsonApi<DocumentDetails>(
       `/api/documents/${documentId}`,
     );
     setDetails(nextDetails);
@@ -183,7 +170,7 @@ export function PdfReader() {
     try {
       setError(null);
       setUploading(true);
-      const upload = await readApi<{ document: RagDocument }>(
+      const upload = await readJsonApi<{ document: RagDocument }>(
         "/api/documents/upload",
         {
           method: "POST",
@@ -195,7 +182,7 @@ export function PdfReader() {
       await selectDocument(uploadedId);
 
       setIndexing(true);
-      await readApi(`/api/documents/${uploadedId}/index`, { method: "POST" });
+      await readJsonApi(`/api/documents/${uploadedId}/index`, { method: "POST" });
       await loadDocuments();
       await selectDocument(uploadedId);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -216,7 +203,7 @@ export function PdfReader() {
     try {
       setError(null);
       setIndexing(true);
-      await readApi(`/api/documents/${selectedId}/index`, { method: "POST" });
+      await readJsonApi(`/api/documents/${selectedId}/index`, { method: "POST" });
       await loadDocuments();
       await selectDocument(selectedId, page?.pageNumber);
     } catch (indexError) {
@@ -234,7 +221,7 @@ export function PdfReader() {
     try {
       setError(null);
       setQuerying(true);
-      const result = await readApi<RagQueryResult>(
+      const result = await readJsonApi<RagQueryResult>(
         `/api/documents/${selectedId}/query`,
         {
           method: "POST",
@@ -352,10 +339,17 @@ export function PdfReader() {
             </div>
 
             {selectedDocument?.status === "failed" && selectedDocument.errorMessage && (
-              <p className="mt-4 flex items-start gap-2 rounded-[18px] bg-[#ffeceb] px-4 py-3 text-sm font-bold text-[#8f3f3a]">
+              <div className="mt-4 flex items-start gap-2 rounded-[18px] bg-[#ffeceb] px-4 py-3 text-sm font-bold text-[#8f3f3a]">
                 <AlertCircle size={17} className="mt-0.5 shrink-0" />
-                {selectedDocument.errorMessage}
-              </p>
+                <div className="min-w-0">
+                  <p>{selectedDocument.errorMessage}</p>
+                  {selectedDocumentErrorReference && (
+                    <p className="mt-1 font-mono text-xs text-[#9c5752]">
+                      {selectedDocumentErrorReference}
+                    </p>
+                  )}
+                </div>
+              </div>
             )}
 
             <div className="mt-4 grid gap-3 sm:grid-cols-3">

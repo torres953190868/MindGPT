@@ -76,9 +76,24 @@ function isMockMode() {
 }
 
 function sleep(ms: number) {
+  if (ms <= 0) return Promise.resolve();
+
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function getRetryDelayMs(attempt: number, status?: number) {
+  const configured = Number(process.env.EMBEDDING_RETRY_DELAY_MS);
+  const baseDelayMs =
+    Number.isFinite(configured) && configured >= 0 ? configured : 250;
+  const multiplier = status === 429 ? 4 : 1;
+  return baseDelayMs * multiplier * 2 ** (attempt - 1);
+}
+
+function isRetryableEmbeddingError(error: unknown) {
+  if (!(error instanceof RagError)) return true;
+  return error.status === 429 || error.status >= 500;
 }
 
 function parseEmbeddingResponse(data: unknown) {
@@ -175,6 +190,7 @@ function assertDashScopeApiKey() {
   if (!key) {
     throw new RagError("DASHSCOPE_API_KEY is not configured.", {
       code: "DASHSCOPE_API_KEY_MISSING",
+      details: { provider: "dashscope" },
       status: 500,
     });
   }
@@ -186,6 +202,7 @@ function assertGeminiApiKey() {
   if (!key) {
     throw new RagError("GEMINI_API_KEY is not configured.", {
       code: "GEMINI_API_KEY_MISSING",
+      details: { provider: "gemini" },
       status: 500,
     });
   }
@@ -251,6 +268,12 @@ export class DashScopeEmbeddingProvider implements EmbeddingProvider {
           );
           throw new RagError(message, {
             code: "DASHSCOPE_EMBEDDING_FAILED",
+            details: {
+              model: this.model,
+              provider: "dashscope",
+              retryable: response.status === 429 || response.status >= 500,
+              upstreamStatus: response.status,
+            },
             status: response.status >= 400 ? response.status : 502,
           });
         }
@@ -260,14 +283,26 @@ export class DashScopeEmbeddingProvider implements EmbeddingProvider {
           .map((item) => item.embedding);
       } catch (error) {
         lastError = error;
-        if (error instanceof RagError && error.status < 500) throw error;
-        if (attempt < 3) await sleep(250 * 2 ** (attempt - 1));
+        if (!isRetryableEmbeddingError(error)) throw error;
+        if (attempt < 3) {
+          await sleep(
+            getRetryDelayMs(
+              attempt,
+              error instanceof RagError ? error.status : undefined,
+            ),
+          );
+        }
       }
     }
 
     if (lastError instanceof Error) throw lastError;
     throw new RagError("DashScope embedding request failed.", {
       code: "DASHSCOPE_EMBEDDING_FAILED",
+      details: {
+        model: this.model,
+        provider: "dashscope",
+        retryable: true,
+      },
       status: 502,
     });
   }
@@ -365,6 +400,12 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
           );
           throw new RagError(message, {
             code: "GEMINI_EMBEDDING_FAILED",
+            details: {
+              model: this.model,
+              provider: "gemini",
+              retryable: response.status === 429 || response.status >= 500,
+              upstreamStatus: response.status,
+            },
             status: response.status >= 400 ? response.status : 502,
           });
         }
@@ -375,14 +416,26 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
           : embeddings;
       } catch (error) {
         lastError = error;
-        if (error instanceof RagError && error.status < 500) throw error;
-        if (attempt < 3) await sleep(250 * 2 ** (attempt - 1));
+        if (!isRetryableEmbeddingError(error)) throw error;
+        if (attempt < 3) {
+          await sleep(
+            getRetryDelayMs(
+              attempt,
+              error instanceof RagError ? error.status : undefined,
+            ),
+          );
+        }
       }
     }
 
     if (lastError instanceof Error) throw lastError;
     throw new RagError("Gemini embedding request failed.", {
       code: "GEMINI_EMBEDDING_FAILED",
+      details: {
+        model: this.model,
+        provider: "gemini",
+        retryable: true,
+      },
       status: 502,
     });
   }
@@ -432,6 +485,7 @@ export function getEmbeddingProvider(): EmbeddingProvider {
 
   throw new RagError(`Unsupported embedding provider: ${provider}.`, {
     code: "EMBEDDING_PROVIDER_UNSUPPORTED",
+    details: { provider },
     status: 500,
   });
 }

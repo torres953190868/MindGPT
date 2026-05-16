@@ -10,6 +10,9 @@ import type {
   Project,
 } from "@/lib/types";
 
+export const PENDING_ROOT_TITLE = "Generating answer...";
+export const PENDING_ROOT_SUMMARY = "Streaming AI response.";
+
 function now() {
   return new Date().toISOString();
 }
@@ -28,7 +31,11 @@ function makeMessage(
   };
 }
 
-export function createRootProject(topic: string, reply: MockReply): Project {
+export function createRootProject(
+  topic: string,
+  reply: MockReply,
+  attachments: ChatAttachment[] = [],
+): Project {
   const timestamp = now();
   const projectId = createId("project");
   const nodeId = createId("node_root");
@@ -38,7 +45,10 @@ export function createRootProject(topic: string, reply: MockReply): Project {
     parentId: null,
     title: reply.title,
     summary: reply.summary,
-    messages: [makeMessage("user", topic), makeMessage("assistant", reply.content)],
+    messages: [
+      makeMessage("user", topic, attachments),
+      makeMessage("assistant", reply.content),
+    ],
     children: [],
     position: ROOT_POSITION,
     branchType: "root",
@@ -55,6 +65,44 @@ export function createRootProject(topic: string, reply: MockReply): Project {
     nodes: { [nodeId]: rootNode },
     createdAt: timestamp,
     updatedAt: timestamp,
+  };
+}
+
+export function createPendingRootProject(
+  topic: string,
+  attachments: ChatAttachment[] = [],
+) {
+  const timestamp = now();
+  const projectId = createId("project");
+  const nodeId = createId("node_root");
+  const assistantMessage = makeMessage("assistant", "");
+  const rootNode: MindNode = {
+    id: nodeId,
+    projectId,
+    parentId: null,
+    title: PENDING_ROOT_TITLE,
+    summary: PENDING_ROOT_SUMMARY,
+    messages: [makeMessage("user", topic, attachments), assistantMessage],
+    children: [],
+    position: ROOT_POSITION,
+    branchType: "root",
+    collapsed: false,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  return {
+    assistantMessageId: assistantMessage.id,
+    node: rootNode,
+    project: {
+      id: projectId,
+      title: topic.trim(),
+      notes: "",
+      rootNodeId: nodeId,
+      nodes: { [nodeId]: rootNode },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
   };
 }
 

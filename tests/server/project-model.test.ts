@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { getContextTitles } from "@/lib/graph";
 import {
   addChildNode,
+  createPendingRootProject,
   createRootProject,
+  PENDING_ROOT_SUMMARY,
+  PENDING_ROOT_TITLE,
   regenerateNode,
   removeNode,
   setNodeCollapsed,
@@ -64,6 +67,62 @@ describe("project model helpers", () => {
       "  Graph search  ",
       "Root content",
     ]);
+  });
+
+  it("stores attachment metadata on the root user message", () => {
+    const attachment = {
+      id: "attachment-root-test",
+      name: "source.pdf",
+      mimeType: "application/pdf",
+      size: 0,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      documentId: "document-root-test",
+      documentStatus: "indexed" as const,
+    };
+
+    const project = createRootProject("Graph search", rootReply, [attachment]);
+    const rootNode = project.nodes[project.rootNodeId];
+
+    expect(rootNode.messages[0].attachments).toEqual([attachment]);
+    expect(rootNode.messages[1].attachments).toEqual([]);
+  });
+
+  it("creates a pending root project with an empty assistant message for streaming", () => {
+    const attachment = {
+      id: "attachment-pending-root-test",
+      name: "pending-source.pdf",
+      mimeType: "application/pdf",
+      size: 0,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      documentId: "document-pending-root-test",
+      documentStatus: "indexed" as const,
+    };
+
+    const result = createPendingRootProject("  Stream root topic  ", [attachment]);
+    const rootNode = result.project.nodes[result.project.rootNodeId];
+    const [userMessage, assistantMessage] = rootNode.messages;
+
+    expect(result.project.title).toBe("Stream root topic");
+    expect(result.node.id).toBe(result.project.rootNodeId);
+    expect(result.assistantMessageId).toBe(assistantMessage.id);
+    expect(rootNode).toMatchObject({
+      projectId: result.project.id,
+      parentId: null,
+      title: PENDING_ROOT_TITLE,
+      summary: PENDING_ROOT_SUMMARY,
+      branchType: "root",
+      collapsed: false,
+    });
+    expect(userMessage).toMatchObject({
+      role: "user",
+      content: "  Stream root topic  ",
+      attachments: [attachment],
+    });
+    expect(assistantMessage).toMatchObject({
+      role: "assistant",
+      content: "",
+      attachments: [],
+    });
   });
 
   it("adds continue and branch children with deterministic offsets", () => {

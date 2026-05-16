@@ -10,14 +10,13 @@ export type BranchNodeData = {
   onSelect: (nodeId: string) => void;
   onCreate: (nodeId: string, mode: "continue" | "branch") => void;
   onToggle: (nodeId: string) => void;
-  isCreating: boolean;
   isStreaming: boolean;
   creationDisabled: boolean;
 };
 
 export function BranchNodeCard({ data }: NodeProps) {
   const nodeData = data as BranchNodeData;
-  const { mindNode, selected, onSelect, onCreate, onToggle, isCreating, isStreaming, creationDisabled } =
+  const { mindNode, selected, onSelect, onCreate, onToggle, isStreaming, creationDisabled } =
     nodeData;
   const nodeTitleId = `branch-node-${mindNode.id}-title`;
   const nodeSummaryId = `branch-node-${mindNode.id}-summary`;
@@ -135,26 +134,6 @@ export function BranchNodeCard({ data }: NodeProps) {
         >
           <Ribbon size={17} />
         </button>
-        {isCreating && (
-          <span
-            role="status"
-            aria-live="polite"
-            data-testid="node-creation-status"
-            className="rounded-full bg-[#fff5c9] px-3 py-2 text-xs font-black text-[#755816]"
-          >
-            DeepSeek...
-          </span>
-        )}
-        {isStreaming && (
-          <span
-            role="status"
-            aria-live="polite"
-            data-testid="node-streaming-status"
-            className="rounded-full bg-[#dff5ea] px-3 py-2 text-xs font-black text-[#376f51]"
-          >
-            Streaming...
-          </span>
-        )}
       </div>
     </article>
   );

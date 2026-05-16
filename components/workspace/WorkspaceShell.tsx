@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Map as MapIcon, MessageSquare, NotebookPen, PanelLeftOpen, PanelRightOpen } from "lucide-react";
+import {
+  Map as MapIcon,
+  MessageSquare,
+  NotebookPen,
+  PanelLeftOpen,
+  PanelRightOpen,
+  RefreshCcw,
+} from "lucide-react";
 import {
   type CSSProperties,
   type MouseEvent,
@@ -308,12 +315,21 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
   const selectedNodeId = useBranchMindStore((state) => state.selectedNodeId);
   const creatingNodeId = useBranchMindStore((state) => state.creatingNodeId);
   const streamingNodeId = useBranchMindStore((state) => state.streamingNodeId);
+  const pendingProjectSync = useBranchMindStore(
+    (state) => state.pendingProjectSyncs[projectId] ?? null,
+  );
   const aiError = useBranchMindStore((state) => state.aiError);
   const selectProject = useBranchMindStore((state) => state.selectProject);
   const selectNode = useBranchMindStore((state) => state.selectNode);
+  const startPendingInitialProjectStream = useBranchMindStore(
+    (state) => state.startPendingInitialProjectStream,
+  );
   const createChildNode = useBranchMindStore((state) => state.createChildNode);
   const editUserMessage = useBranchMindStore((state) => state.editUserMessage);
   const retryAssistantMessage = useBranchMindStore((state) => state.retryAssistantMessage);
+  const retryPendingProjectSync = useBranchMindStore(
+    (state) => state.retryPendingProjectSync,
+  );
   const updateProjectNotes = useBranchMindStore((state) => state.updateProjectNotes);
   const updateNodePosition = useBranchMindStore((state) => state.updateNodePosition);
   const toggleNodeCollapsed = useBranchMindStore((state) => state.toggleNodeCollapsed);
@@ -333,9 +349,21 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
     () => projects.find((item) => item.id === projectId) ?? null,
     [projectId, projects],
   );
+
+  useEffect(() => {
+    if (!hydrated || !project) return;
+    startPendingInitialProjectStream(projectId);
+  }, [hydrated, project, projectId, startPendingInitialProjectStream]);
+
   const selectedNode = project && selectedNodeId ? project.nodes[selectedNodeId] : null;
+  const isProjectSyncBlocking =
+    pendingProjectSync !== null && pendingProjectSync.status !== "synced";
+  const pendingSyncNodeId = isProjectSyncBlocking ? pendingProjectSync.nodeId : null;
+  const effectiveCreatingNodeId = creatingNodeId ?? pendingSyncNodeId;
+  const effectiveStreamingNodeId = streamingNodeId ?? pendingSyncNodeId;
   const isSelectedNodeCreating = selectedNode
-    ? creatingNodeId === selectedNode.id || streamingNodeId === selectedNode.id
+    ? effectiveCreatingNodeId === selectedNode.id ||
+      effectiveStreamingNodeId === selectedNode.id
     : false;
   const isProjectNotesSidePanelOpen =
     isProjectNotesPanelOpen && !isNodeDetailPanelCollapsed;
@@ -898,6 +926,29 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
         </p>
       )}
 
+      {pendingProjectSync?.status === "failed" && (
+        <div
+          role="alert"
+          aria-live="polite"
+          data-testid="project-sync-status"
+          data-status={pendingProjectSync.status}
+          className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-[#ffeceb] px-4 py-3 text-sm font-bold text-[#8f3f3a]"
+        >
+          <span>
+            {`Sync failed. ${pendingProjectSync.error ?? "Your project is saved in this browser."}`}
+          </span>
+          <button
+            type="button"
+            data-testid="retry-project-sync-button"
+            onClick={() => retryPendingProjectSync(projectId)}
+            className="inline-flex min-h-9 items-center gap-2 rounded-[14px] bg-white/80 px-3 text-xs font-black text-[#7a3e3a] transition hover:bg-white"
+          >
+            <RefreshCcw size={15} />
+            Retry
+          </button>
+        </div>
+      )}
+
       <div
         role="tablist"
         aria-label="Workspace mobile views"
@@ -989,8 +1040,8 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
             onCreateNode={handleQuickCreate}
             onToggleNode={toggleNodeCollapsed}
             onMoveNode={updateNodePosition}
-            creatingNodeId={creatingNodeId}
-            streamingNodeId={streamingNodeId}
+            creatingNodeId={effectiveCreatingNodeId}
+            streamingNodeId={effectiveStreamingNodeId}
           />
         </section>
         {!isNodeDetailPanelCollapsed && (
@@ -1049,7 +1100,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
             data-testid="project-notes-window"
             className={
               isProjectNotesMobileViewOpen
-                ? "min-h-[calc(100svh-12rem)] min-w-0 overflow-hidden xl:relative xl:inset-auto xl:z-auto xl:h-full xl:max-h-full xl:w-full xl:max-w-none"
+                ? "h-[calc(100svh-12rem)] max-h-[calc(100svh-12rem)] min-h-0 min-w-0 overflow-hidden xl:relative xl:inset-auto xl:z-auto xl:h-full xl:max-h-full xl:w-full xl:max-w-none"
                 : "fixed bottom-3 right-3 top-3 z-40 flex min-h-0 w-[calc(100vw-24px)] max-w-[420px] min-w-0 overflow-hidden xl:relative xl:inset-auto xl:z-auto xl:h-full xl:max-h-full xl:w-full xl:max-w-none"
             }
           >

@@ -107,6 +107,25 @@ describe("GeminiEmbeddingProvider", () => {
     });
   });
 
+  it("retries transient Gemini rate limits", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "test-gemini-key");
+    vi.stubEnv("EMBEDDING_RETRY_DELAY_MS", "0");
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { error: { message: "Resource exhausted. Please try again later." } },
+          { status: 429 },
+        ),
+      )
+      .mockResolvedValueOnce(jsonResponse({ embeddings: [{ values: [0.7, 0.8] }] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const provider = new GeminiEmbeddingProvider("gemini-embedding-2", 2);
+    await expect(provider.embedTexts(["alpha"])).resolves.toEqual([[0.7, 0.8]]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("selects Gemini when configured as the embedding provider", () => {
     vi.stubEnv("EMBEDDING_PROVIDER", "gemini");
     vi.stubEnv("EMBEDDING_MODEL", "");

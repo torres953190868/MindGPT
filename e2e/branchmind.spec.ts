@@ -264,18 +264,61 @@ async function mockAuthSession(page: Page, session: { configured: boolean; user:
   });
 }
 
+async function mockHomeModelCatalog(page: Page) {
+  await page.route("**/api/chat/models", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        defaultSelection: {
+          providerId: "deepseek",
+          model: "deepseek-v4-flash",
+        },
+        providers: [
+          {
+            id: "deepseek",
+            displayName: "DeepSeek",
+            configured: true,
+            models: ["deepseek-v4-flash"],
+          },
+          {
+            id: "opencode-go",
+            displayName: "OpenCode Go",
+            configured: true,
+            models: ["qwen3.6-plus", "kimi-k2.6"],
+          },
+        ],
+      }),
+    });
+  });
+}
+
 test("navigates the project shell with stable test ids", async ({ page }) => {
   await page.goto("/");
+  const isMobile = (page.viewportSize()?.width ?? 1280) < 768;
 
-  await expect(page.getByTestId("home-primary-navigation")).toBeVisible();
-  await expect(page.getByTestId("home-projects-link")).toBeVisible();
-  await expect(page.getByTestId("home-privacy-link")).toBeVisible();
-  await expect(page.getByTestId("home-terms-link")).toBeVisible();
+  if (isMobile) {
+    await page.locator("summary").filter({ hasText: "Menu" }).click();
+    await expect(page.getByRole("link", { name: "Projects" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Privacy" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Terms" })).toBeVisible();
+  } else {
+    await expect(page.getByTestId("home-primary-navigation")).toBeVisible();
+    await expect(page.getByTestId("home-projects-link")).toBeVisible();
+    await expect(page.getByTestId("home-privacy-link")).toBeVisible();
+    await expect(page.getByTestId("home-terms-link")).toBeVisible();
+  }
 
-  await page.getByTestId("home-projects-link").click();
+  if (isMobile) {
+    await page.getByRole("link", { name: "Projects" }).click();
+  } else {
+    await page.getByTestId("home-projects-link").click();
+  }
 
   await expect(page).toHaveURL(/\/projects$/);
-  await expect(page.getByTestId("projects-navigation")).toBeVisible();
+  if (!isMobile) {
+    await expect(page.getByTestId("projects-navigation")).toBeVisible();
+  }
   await expect(page.getByTestId("project-card-list")).toBeVisible();
   await expect(page.getByTestId("project-search-input")).toBeVisible();
   await expect(
@@ -283,16 +326,433 @@ test("navigates the project shell with stable test ids", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("home launcher restores a stored model after hydration", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Home composer controls are covered once.");
+
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  await mockHomeModelCatalog(page);
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      "branchmind.chatModelSelection.v1",
+      JSON.stringify({
+        providerId: "opencode-go",
+        model: "kimi-k2.6",
+      }),
+    );
+  });
+
+  await page.goto("/");
+  await expect(page.getByTestId("chat-model-selector-button")).toContainText("Kimi K2.6");
+  expect(consoleErrors.join("\n")).not.toContain("Hydration failed");
+});
+
+test("home launcher sends the selected model without model-named loading copy", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Home composer controls are covered once.");
+
+  const seed = makeSeed();
+  const instruction = `Create a model-selected project ${seed}.`;
+  let syncPayload: unknown = null;
+  let releaseSync!: () => void;
+  const releaseSyncPromise = new Promise<void>((resolve) => {
+    releaseSync = resolve;
+  });
+
+  await mockHomeModelCatalog(page);
+  await page.route("**/api/documents", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ documents: [] }),
+    });
+  });
+  await page.route("**/api/projects", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ projects: [] }),
+      });
+      return;
+    }
+
+    await route.fallback();
+  });
+  await page.route("**/api/projects/**/sync", async (route) => {
+    syncPayload = route.request().postDataJSON();
+    await releaseSyncPromise;
+    const payload = syncPayload as { project: Project };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ project: payload.project }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByTestId("chat-model-selector-button").click();
+  await expect(page.getByTestId("chat-model-menu")).toBeVisible();
+  await page
+    .getByTestId("chat-model-option")
+    .filter({ hasText: "Kimi K2.6" })
+    .click();
+  await page.getByTestId("project-topic-input").fill(instruction);
+  await page.getByTestId("create-project-button").click();
+
+  await expect(page).toHaveURL(/\/workspace\/project_/);
+  await expect(page.getByTestId("workspace-shell")).toBeVisible();
+  await expect(page.getByTestId("chat-model-selector-button")).toContainText("Kimi K2.6");
+  await expect(page.getByTestId("project-sync-status")).toHaveCount(0);
+  await expect.poll(() => syncPayload).not.toBeNull();
+  const pendingRecord = await page.evaluate(() => {
+    const raw = window.localStorage.getItem("branchmind.pendingProjectSync.v1");
+    return raw ? JSON.parse(raw).records?.[0] : null;
+  });
+  expect(pendingRecord?.project?.title).toBe(instruction);
+  expect(pendingRecord?.modelSelection).toEqual({
+    providerId: "opencode-go",
+    model: "kimi-k2.6",
+  });
+  releaseSync();
+});
+
+test("home launcher keeps a failed local project sync across reload", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Failed local sync is covered once.");
+
+  const instruction = `Keep a failed local project ${makeSeed()}.`;
+  let syncRequests = 0;
+
+  await page.route("**/api/projects", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ projects: [] }),
+      });
+      return;
+    }
+
+    await route.fallback();
+  });
+  await page.route("**/api/projects/**/sync", async (route) => {
+    syncRequests += 1;
+    await route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { message: "Delayed Supabase sync" } }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByTestId("project-topic-input").fill(instruction);
+  await page.getByTestId("create-project-button").click();
+
+  await expect(page).toHaveURL(/\/workspace\/project_/);
+  await expect.poll(() => syncRequests).toBe(1);
+  await expect(page.getByTestId("project-sync-status")).toHaveAttribute(
+    "data-status",
+    "failed",
+  );
+  await expect(page.getByTestId("retry-project-sync-button")).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByTestId("workspace-shell")).toBeVisible();
+  await expect(page.locator("#workspace-title")).toContainText(instruction);
+  await expect(page.getByTestId("project-sync-status")).toHaveAttribute(
+    "data-status",
+    "failed",
+  );
+
+  const pendingRecord = await page.evaluate(() => {
+    const raw = window.localStorage.getItem("branchmind.pendingProjectSync.v1");
+    return raw ? JSON.parse(raw).records?.[0] : null;
+  });
+  expect(pendingRecord?.project?.title).toBe(instruction);
+  expect(pendingRecord?.status).toBe("failed");
+});
+
+test("home launcher opens the workspace while the initial root answer streams", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Initial streaming is covered once.");
+
+  const instruction = `Stream the first project answer ${makeSeed()}.`;
+  let projectIdToDelete: string | null = null;
+
+  try {
+    await page.goto("/");
+    await page.getByTestId("project-topic-input").fill(instruction);
+    await page.getByTestId("create-project-button").click();
+
+    await expect(page).toHaveURL(/\/workspace\/project_/);
+    projectIdToDelete = new URL(page.url()).pathname.split("/").filter(Boolean).pop() ?? null;
+
+    await expect(page.getByTestId("workspace-shell")).toBeVisible();
+    await expect(page.getByTestId("message-streaming-status")).toBeVisible();
+    await expect(page.getByTestId("conversation-history")).toContainText(
+      "Mock mode is enabled",
+    );
+    await expect(page.getByTestId("message-streaming-status")).toBeVisible();
+    await expect(page.getByTestId("conversation-history")).toContainText(
+      `Instruction received: ${instruction}`,
+    );
+    await expect(page.getByTestId("message-streaming-status")).toHaveCount(0);
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => null);
+    }
+  }
+});
+
+test("home launcher uploads and indexes PDF attachments before creating a project", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Home PDF upload is covered once.");
+
+  const seed = makeSeed();
+  const documentId = `doc-home-upload-${seed}`;
+  const instruction = `Create a PDF-attached project ${seed}.`;
+  let syncPayload: unknown = null;
+  let uploadRequests = 0;
+  let indexRequests = 0;
+
+  await mockHomeModelCatalog(page);
+  await page.route("**/api/documents", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ documents: [] }),
+    });
+  });
+  await page.route("**/api/documents/upload", async (route) => {
+    uploadRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        document: {
+          id: documentId,
+          fileName: "home-source.pdf",
+          mimeType: "application/pdf",
+          status: "uploaded",
+          errorMessage: null,
+        },
+      }),
+    });
+  });
+  await page.route("**/api/documents/**/index", async (route) => {
+    indexRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        document: {
+          id: documentId,
+          fileName: "home-source.pdf",
+          mimeType: "application/pdf",
+          status: "indexed",
+          errorMessage: null,
+        },
+      }),
+    });
+  });
+  await page.route("**/api/projects", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ projects: [] }),
+      });
+      return;
+    }
+
+    await route.fallback();
+  });
+  await page.route("**/api/projects/**/sync", async (route) => {
+    syncPayload = route.request().postDataJSON();
+    const payload = syncPayload as { project: Project };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ project: payload.project }),
+    });
+  });
+
+  await page.goto("/");
+  const fileChooserPromise = page.waitForEvent("filechooser");
+  await page.getByTestId("add-message-attachment-button").click();
+  await page.getByTestId("upload-new-file-button").click();
+  const fileChooser = await fileChooserPromise;
+  await fileChooser.setFiles({
+    name: "home-source.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4"),
+  });
+
+  await expect(page.getByTestId("pending-attachment-chip")).toContainText(
+    "home-source.pdf",
+  );
+  await page.getByTestId("project-topic-input").fill(instruction);
+  await page.getByTestId("create-project-button").click();
+
+  await expect.poll(() => syncPayload).not.toBeNull();
+  const payload = syncPayload as { project: Project };
+  const rootNode = payload.project.nodes[payload.project.rootNodeId];
+  expect(rootNode.messages[0].content).toBe(instruction);
+  expect(rootNode.messages[0].attachments).toEqual([
+    expect.objectContaining({
+      name: "home-source.pdf",
+      mimeType: "application/pdf",
+      documentId,
+      documentStatus: "indexed",
+    }),
+  ]);
+  expect(uploadRequests).toBe(1);
+  expect(indexRequests).toBe(1);
+});
+
+test("home launcher selects an indexed knowledge PDF without re-uploading", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Home knowledge selection is covered once.");
+
+  const seed = makeSeed();
+  const documentId = `doc-home-knowledge-${seed}`;
+  const instruction = `Create a knowledge-attached project ${seed}.`;
+  let syncPayload: unknown = null;
+  let uploadRequests = 0;
+  let indexRequests = 0;
+
+  await mockHomeModelCatalog(page);
+  await page.route("**/api/documents", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        documents: [
+          {
+            id: documentId,
+            fileName: "home-memory.pdf",
+            mimeType: "application/pdf",
+            pageCount: 9,
+            title: "Home Memory",
+            status: "indexed",
+            errorMessage: null,
+            updatedAt: new Date().toISOString(),
+          },
+          {
+            id: `doc-home-pending-${seed}`,
+            fileName: "home-pending.pdf",
+            mimeType: "application/pdf",
+            pageCount: 0,
+            title: null,
+            status: "indexing",
+            errorMessage: null,
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      }),
+    });
+  });
+  await page.route("**/api/documents/upload", async (route) => {
+    uploadRequests += 1;
+    await route.fulfill({ status: 500, body: "Unexpected upload" });
+  });
+  await page.route("**/api/documents/**/index", async (route) => {
+    indexRequests += 1;
+    await route.fulfill({ status: 500, body: "Unexpected index" });
+  });
+  await page.route("**/api/projects", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ projects: [] }),
+      });
+      return;
+    }
+
+    await route.fallback();
+  });
+  await page.route("**/api/projects/**/sync", async (route) => {
+    syncPayload = route.request().postDataJSON();
+    const payload = syncPayload as { project: Project };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ project: payload.project }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByTestId("add-message-attachment-button").click();
+  await expect(page.getByTestId("attachment-menu")).toBeVisible();
+  await page.getByTestId("knowledge-menu-button").hover();
+  await expect(page.getByTestId("knowledge-document-option")).toHaveCount(1);
+  await expect(page.getByTestId("knowledge-document-menu")).not.toContainText(
+    "home-pending.pdf",
+  );
+  await page
+    .getByTestId("knowledge-document-option")
+    .filter({ hasText: "Home Memory" })
+    .click();
+  await expect(page.getByTestId("pending-attachment-chip")).toContainText(
+    "home-memory.pdf",
+  );
+
+  await page.getByTestId("project-topic-input").fill(instruction);
+  await page.getByTestId("create-project-button").click();
+
+  await expect.poll(() => syncPayload).not.toBeNull();
+  const payload = syncPayload as { project: Project };
+  const rootNode = payload.project.nodes[payload.project.rootNodeId];
+  expect(rootNode.messages[0].content).toBe(instruction);
+  expect(rootNode.messages[0].attachments).toEqual([
+    expect.objectContaining({
+      name: "home-memory.pdf",
+      mimeType: "application/pdf",
+      size: 0,
+      documentId,
+      documentStatus: "indexed",
+    }),
+  ]);
+  expect(uploadRequests).toBe(0);
+  expect(indexRequests).toBe(0);
+});
+
 test("shows compact account entry in desktop and mobile headers", async ({ page }) => {
   await mockAuthSession(page, { configured: true, user: null });
 
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
   await expect(page.getByTestId("auth-email-input")).toHaveCount(0);
   const desktopSignIn = page.locator('[data-testid="account-sign-in-button"]:visible').first();
   await expect(desktopSignIn).toBeVisible();
+  await expect(desktopSignIn).toHaveAttribute("href", /\/auth\/sign-in/);
   await desktopSignIn.click();
-  await expect(page.locator('[data-testid="account-sign-in-popover"]:visible')).toBeVisible();
+  await expect(page).toHaveURL(/\/auth\/sign-in/);
   await expect(page.locator('[data-testid="auth-email-input"]:visible')).toBeVisible();
+  await expect(page.locator('[data-testid="auth-password-input"]:visible')).toBeVisible();
   await expect(page.locator('[data-testid="google-sign-in-button"]:visible')).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 780 });
@@ -309,6 +769,7 @@ test("shows signed-in account menu state", async ({ page }) => {
     user: { id: "user_e2e_auth", email: "learner@example.com" },
   });
 
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/projects");
   const accountButton = page.locator('[data-testid="account-menu-button"]:visible').first();
   await expect(accountButton).toContainText("learner@example.com");
@@ -321,6 +782,7 @@ test("shows signed-in account menu state", async ({ page }) => {
 
 test("places the workspace account entry in the sidebar footer", async ({ page }) => {
   await mockAuthSession(page, { configured: true, user: null });
+  await page.setViewportSize({ width: 1280, height: 800 });
   const sourceProject = makeWorkspaceProject(`account-${makeSeed()}`);
   let projectIdToDelete: string | null = null;
 
@@ -344,6 +806,7 @@ test("places the workspace account entry in the sidebar footer", async ({ page }
 });
 
 test("loads a seeded workspace with stable test ids", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
   const sourceProject = makeWorkspaceProject(makeSeed());
   let projectIdToDelete: string | null = null;
 
@@ -789,11 +1252,13 @@ test("shows project notes as a mobile drawer without horizontal overflow", async
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/workspace/${project.id}`);
+    await page.getByTestId("workspace-mobile-view-chat").click();
+    await expect(page.getByTestId("node-detail-notes-button")).toBeVisible();
     await page.getByTestId("node-detail-notes-button").click();
 
     await expect(page.getByTestId("project-notes-window")).toBeVisible();
-    await expect(page.getByTestId("project-notes-drawer-backdrop")).toBeVisible();
     await expect(page.getByTestId("project-notes-panel")).toBeVisible();
+    await expect(page.getByTestId("project-notes-drawer-backdrop")).toHaveCount(0);
     await expect(page.getByTestId("resize-project-notes-panel")).toBeHidden();
     const overflow = await page.evaluate(() => ({
       clientWidth: document.documentElement.clientWidth,
@@ -801,11 +1266,7 @@ test("shows project notes as a mobile drawer without horizontal overflow", async
     }));
     expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
 
-    await page.keyboard.press("Escape");
-    await expect(page.getByTestId("project-notes-panel")).toHaveCount(0);
-
-    await page.getByTestId("node-detail-notes-button").click();
-    await page.getByTestId("project-notes-drawer-backdrop").click({ position: { x: 6, y: 6 } });
+    await page.getByTestId("close-project-notes-button").click();
     await expect(page.getByTestId("project-notes-panel")).toHaveCount(0);
 
     await page.getByTestId("node-detail-notes-button").click();
@@ -946,12 +1407,14 @@ test("keeps long project notes scrollable inside the mobile drawer", async ({
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/workspace/${project.id}`);
+    await page.getByTestId("workspace-mobile-view-chat").click();
+    await expect(page.getByTestId("node-detail-notes-button")).toBeVisible();
     await page.getByTestId("node-detail-notes-button").click();
 
     const notesWindow = page.getByTestId("project-notes-window");
     const notesEditor = page.getByTestId("project-notes-input");
     await expect(notesWindow).toBeVisible();
-    await expect(page.getByTestId("project-notes-drawer-backdrop")).toBeVisible();
+    await expect(page.getByTestId("project-notes-drawer-backdrop")).toHaveCount(0);
     await expect(
       notesEditor.getByRole("heading", {
         exact: true,
@@ -998,7 +1461,9 @@ test("keeps long project notes scrollable inside the mobile drawer", async ({
   }
 });
 
-test("shows the workspace sidebar as a collapsible tree outline", async ({ page }) => {
+test("shows the workspace sidebar as a collapsible tree outline", async ({
+  page,
+}, testInfo) => {
   const sourceProject = makeWorkspaceTreeProject(makeSeed());
   let projectIdToDelete: string | null = null;
 
@@ -1010,6 +1475,9 @@ test("shows the workspace sidebar as a collapsible tree outline", async ({ page 
     const gradient = getNodeByTitle(project, "Gradient Descent Details");
 
     await page.goto(`/workspace/${project.id}`);
+    if (testInfo.project.name === "mobile-chrome") {
+      await page.getByTestId("workspace-mobile-view-outline").click();
+    }
 
     await expect(page.getByTestId("conversation-outline-row")).toHaveCount(4);
     await expect(getOutlineRow(page, root.id)).toHaveAttribute("data-depth", "0");
@@ -1027,6 +1495,10 @@ test("shows the workspace sidebar as a collapsible tree outline", async ({ page 
     await expect(page.getByTestId("node-detail-panel")).toContainText(
       "Gradient Descent Details",
     );
+
+    if (testInfo.project.name === "mobile-chrome") {
+      await page.getByTestId("workspace-mobile-view-outline").click();
+    }
 
     await getOutlineToggle(page, basics.id).click();
     await expect(getOutlineRow(page, gradient.id)).toHaveCount(0);
@@ -1046,7 +1518,9 @@ test("shows the workspace sidebar as a collapsible tree outline", async ({ page 
   }
 });
 
-test("streams a node reply into a draft child node", async ({ page }) => {
+test("streams a node reply into a draft child node", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Streaming chat is covered once.");
+
   const sourceProject = makeWorkspaceProject(`streaming-${makeSeed()}`);
   const instruction = "Stream a child answer for this workspace.";
   let projectIdToDelete: string | null = null;
@@ -1068,7 +1542,6 @@ test("streams a node reply into a draft child node", async ({ page }) => {
     await page.getByTestId("send-message-button").click();
 
     await expect(page.getByTestId("branch-node-card")).toHaveCount(2);
-    await expect(page.getByTestId("node-streaming-status")).toBeVisible();
     await expect(page.getByTestId("streaming-assistant-response")).toBeVisible();
     await expect(page.getByTestId("message-streaming-status")).toBeVisible();
     await expect(page.getByTestId("conversation-message")).toHaveCount(2);
@@ -1091,7 +1564,9 @@ test("streams a node reply into a draft child node", async ({ page }) => {
   }
 });
 
-test("attaches file metadata to a sent message", async ({ page }) => {
+test("attaches file metadata to a sent message", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Attachment messaging is covered once.");
+
   const sourceProject = makeWorkspaceProject(`attachments-${makeSeed()}`);
   const instruction = "Use these attached file names as context markers.";
   let projectIdToDelete: string | null = null;
@@ -1152,7 +1627,11 @@ test("attaches file metadata to a sent message", async ({ page }) => {
   }
 });
 
-test("selects an indexed PDF knowledge document without re-uploading", async ({ page }) => {
+test("selects an indexed PDF knowledge document without re-uploading", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Knowledge attachment selection is covered once.");
+
   const seed = makeSeed();
   const sourceProject = makeWorkspaceProject(`knowledge-${seed}`);
   const instruction = "Use the selected knowledge PDF.";
@@ -1281,6 +1760,8 @@ test("selects an indexed PDF knowledge document without re-uploading", async ({ 
 test("imports wrapper and legacy JSON, rejects invalid JSON, and exports without owner data", async ({
   page,
 }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Import/export is covered once.");
+
   const seed = makeSeed();
   const wrapperProject = makeWorkspaceProject(`wrapper-${seed}`);
   const legacyProject = makeWorkspaceProject(`legacy-${seed}`);

@@ -6,6 +6,7 @@ const MAX_ATTACHMENT_ID_LENGTH = 120;
 const MAX_ATTACHMENT_NAME_LENGTH = 240;
 const MAX_ATTACHMENT_MIME_TYPE_LENGTH = 120;
 const MAX_ATTACHMENT_ERROR_LENGTH = 500;
+const MAX_ATTACHMENT_REQUEST_ID_LENGTH = 160;
 const DOCUMENT_STATUSES = new Set([
   "uploaded",
   "parsing",
@@ -88,10 +89,15 @@ export function normalizeChatAttachments(
       attachment.errorMessage,
       MAX_ATTACHMENT_ERROR_LENGTH,
     );
+    const errorRequestId = cleanOptionalString(
+      attachment.errorRequestId,
+      MAX_ATTACHMENT_REQUEST_ID_LENGTH,
+    );
 
     if (documentId) normalized.documentId = documentId;
     if (documentStatus) normalized.documentStatus = documentStatus;
     if (errorMessage) normalized.errorMessage = errorMessage;
+    if (errorRequestId) normalized.errorRequestId = errorRequestId;
 
     return normalized;
   });

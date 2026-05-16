@@ -159,6 +159,10 @@ export type Database = {
           parser_version: string;
           chunk_version: string;
           error_message: string | null;
+          error_code: string | null;
+          error_stage: string | null;
+          error_request_id: string | null;
+          error_details: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -175,6 +179,10 @@ export type Database = {
           parser_version: string;
           chunk_version: string;
           error_message?: string | null;
+          error_code?: string | null;
+          error_stage?: string | null;
+          error_request_id?: string | null;
+          error_details?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -191,6 +199,10 @@ export type Database = {
           parser_version?: string;
           chunk_version?: string;
           error_message?: string | null;
+          error_code?: string | null;
+          error_stage?: string | null;
+          error_request_id?: string | null;
+          error_details?: Json | null;
           created_at?: string;
           updated_at?: string;
         };

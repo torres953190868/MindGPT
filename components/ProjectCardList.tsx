@@ -24,7 +24,25 @@ export function ProjectCardList() {
   const deleteProject = useBranchMindStore((state) => state.deleteProject);
 
   useEffect(() => {
-    hydrate();
+    void hydrate({ force: true });
+  }, [hydrate]);
+
+  useEffect(() => {
+    function refreshVisibleProjects() {
+      void hydrate({ force: true });
+    }
+
+    function refreshWhenVisible() {
+      if (document.visibilityState === "visible") refreshVisibleProjects();
+    }
+
+    window.addEventListener("focus", refreshVisibleProjects);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      window.removeEventListener("focus", refreshVisibleProjects);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, [hydrate]);
 
   const visibleProjects = useMemo(() => {

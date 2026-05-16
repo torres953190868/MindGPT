@@ -32,6 +32,7 @@ export type ProjectsRepository = {
   updateProjects: (updater: (projects: OwnedProject[]) => Project[] | Promise<Project[]>) => Promise<OwnedProject[]>;
   saveProject: (project: Project) => Promise<void>;
   deleteProject: (projectId: string) => Promise<void>;
+  transferOwner: (fromOwnerId: string, toOwnerId: string) => Promise<number>;
 };
 
 function assertNoError(error: { message: string } | null, operation: string) {
@@ -357,6 +358,19 @@ class SupabaseProjectsRepository implements ProjectsRepository {
     await this.deleteProjects([projectId]);
   }
 
+  async transferOwner(fromOwnerId: string, toOwnerId: string) {
+    if (fromOwnerId === toOwnerId) return 0;
+
+    const { data, error } = await getSupabaseAdminClient()
+      .from("branchmind_projects")
+      .update({ owner_session_id: toOwnerId })
+      .eq("owner_session_id", fromOwnerId)
+      .select("id");
+
+    assertNoError(error, "transfer project owner");
+    return data?.length ?? 0;
+  }
+
   private async deleteProjects(projectIds: string[]) {
     if (projectIds.length === 0) return;
 
@@ -417,6 +431,19 @@ const fileRepository: ProjectsRepository = {
       projects.filter((project) => project.id !== projectId),
     );
   },
+  transferOwner: async (fromOwnerId, toOwnerId) => {
+    if (fromOwnerId === toOwnerId) return 0;
+
+    let transferredCount = 0;
+    await fileStore.updateProjects((projects) =>
+      projects.map((project) => {
+        if (project.ownerSessionId !== fromOwnerId) return project;
+        transferredCount += 1;
+        return { ...project, ownerSessionId: toOwnerId };
+      }),
+    );
+    return transferredCount;
+  },
 };
 
 function getConfiguredBackend(): ProjectsBackend | "auto" {
@@ -454,4 +481,7 @@ export async function readProjectsForSession(sessionId: string) { return getProj
 export async function writeProjects(projects: Project[]) { return getProjectsRepository().writeProjects(projects); }
 export async function updateProjects(updater: (projects: OwnedProject[]) => Project[] | Promise<Project[]>) {
   return getProjectsRepository().updateProjects(updater);
+}
+export async function transferProjectsOwner(fromOwnerId: string, toOwnerId: string) {
+  return getProjectsRepository().transferOwner(fromOwnerId, toOwnerId);
 }

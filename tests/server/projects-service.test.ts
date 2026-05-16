@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatAttachment, Project } from "@/lib/types";
 
 const readProjectsMock = vi.hoisted(() => vi.fn());
+const readProjectsForSessionMock = vi.hoisted(() => vi.fn());
+const deleteProjectMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/server/projects-repository", async (importOriginal) => {
   const actual =
@@ -11,11 +13,16 @@ vi.mock("@/lib/server/projects-repository", async (importOriginal) => {
     ...actual,
     getProjectsRepository: vi.fn(() => ({
       readProjects: readProjectsMock,
+      readProjectsForSession: readProjectsForSessionMock,
+      deleteProject: deleteProjectMock,
     })),
   };
 });
 
-import { prepareRegenerateNodeContext } from "@/lib/server/projects-service";
+import {
+  deleteProjectForOwner,
+  prepareRegenerateNodeContext,
+} from "@/lib/server/projects-service";
 
 const attachmentA: ChatAttachment = {
   id: "attachment-a",
@@ -99,7 +106,11 @@ function makeProject(): Project {
 describe("prepareRegenerateNodeContext", () => {
   beforeEach(() => {
     readProjectsMock.mockReset();
+    readProjectsForSessionMock.mockReset();
+    deleteProjectMock.mockReset();
     readProjectsMock.mockResolvedValue([makeProject()]);
+    readProjectsForSessionMock.mockResolvedValue([]);
+    deleteProjectMock.mockResolvedValue(undefined);
   });
 
   it("keeps the edited user message attachments for regenerate RAG", async () => {
@@ -129,5 +140,37 @@ describe("prepareRegenerateNodeContext", () => {
 
     expect(context.instruction).toBe("Second prompt");
     expect(context.attachments).toEqual([attachmentB]);
+  });
+});
+
+describe("deleteProjectForOwner", () => {
+  beforeEach(() => {
+    readProjectsMock.mockReset();
+    readProjectsForSessionMock.mockReset();
+    deleteProjectMock.mockReset();
+    readProjectsForSessionMock.mockResolvedValue([]);
+    deleteProjectMock.mockResolvedValue(undefined);
+  });
+
+  it("deletes owned projects and returns the refreshed owner list", async () => {
+    readProjectsMock.mockResolvedValue([makeProject()]);
+
+    await expect(
+      deleteProjectForOwner("owner_regenerate", "project_regenerate"),
+    ).resolves.toEqual([]);
+
+    expect(deleteProjectMock).toHaveBeenCalledWith("project_regenerate");
+    expect(readProjectsForSessionMock).toHaveBeenCalledWith("owner_regenerate");
+  });
+
+  it("treats missing or stale project deletes as idempotent", async () => {
+    readProjectsMock.mockResolvedValue([]);
+
+    await expect(
+      deleteProjectForOwner("owner_regenerate", "project_regenerate"),
+    ).resolves.toEqual([]);
+
+    expect(deleteProjectMock).not.toHaveBeenCalled();
+    expect(readProjectsForSessionMock).toHaveBeenCalledWith("owner_regenerate");
   });
 });

@@ -15,12 +15,14 @@ export type ApiErrorBody = {
 };
 
 export type JsonResponseOptions = {
+  logContext?: Record<string, unknown>;
   requestId?: string;
 };
 
 export type ErrorResponseOptions = JsonResponseOptions & {
   code?: string;
   details?: unknown;
+  logContext?: Record<string, unknown>;
 };
 
 export class HttpError extends Error {
@@ -106,6 +108,34 @@ function getErrorDetails(error: unknown) {
 
 function isExposableError(error: unknown, status: number) {
   return status < 500 && getObject(error)?.expose === true;
+}
+
+export function getSafeErrorCode(error: unknown, status = getSafeErrorStatus(error)) {
+  return getErrorCode(error, status);
+}
+
+function getErrorLogMessage(error: unknown) {
+  const message = getObject(error)?.message;
+  return typeof message === "string" ? message : "Unknown error";
+}
+
+export function logApiError(
+  error: unknown,
+  status: number,
+  requestId: string,
+  context: Record<string, unknown> = {},
+) {
+  if (status < 500) return;
+
+  const code = getErrorCode(error, status);
+  console.error("BranchMind API request failed", {
+    ...context,
+    requestId,
+    status,
+    code,
+    name: getObject(error)?.name,
+    message: getErrorLogMessage(error),
+  });
 }
 
 function withResponseHeaders(init: ResponseInit | undefined, requestId: string) {
@@ -214,9 +244,12 @@ export function safeErrorWithSession(
   options: JsonResponseOptions = {},
 ) {
   const status = getSafeErrorStatus(error);
+  const requestId = options.requestId ?? createRequestId();
+  logApiError(error, status, requestId, options.logContext);
+
   return errorWithSession(getSafeErrorMessage(status, error), status, session, {
     code: getErrorCode(error, status),
     details: isExposableError(error, status) ? getErrorDetails(error) : undefined,
-    requestId: options.requestId,
+    requestId,
   });
 }

@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  ApiRequestError,
+  formatApiErrorMessage,
+  getApiErrorMeta,
+} from "@/lib/client/api";
 import { getChildPosition } from "@/lib/graph";
 import { createId } from "@/lib/ids";
 import type {
@@ -214,23 +219,24 @@ export function removeDraftChildNode(project: Project, nodeId: string) {
   };
 }
 
-function getApiErrorMessage(data: unknown) {
-  const payload = data as { error?: string | { message?: string } } | null;
-  const error = payload?.error;
+function getErrorString(payload: Record<string, unknown>, key: string) {
+  const value = payload[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
 
-  if (typeof error === "string") return error;
-  if (error && typeof error === "object" && typeof error.message === "string") {
-    return error.message;
-  }
-
-  return null;
+function getErrorStatus(payload: Record<string, unknown>) {
+  const status = Number(payload.status ?? 500);
+  return Number.isInteger(status) && status >= 400 && status <= 599 ? status : 500;
 }
 
 async function assertStreamingResponse(response: Response) {
   if (response.ok) return;
 
   const data = (await response.json().catch(() => null)) as unknown;
-  throw new Error(getApiErrorMessage(data) ?? "Request failed.");
+  throw new ApiRequestError(formatApiErrorMessage(data, response.status), {
+    ...getApiErrorMeta(data),
+    status: response.status,
+  });
 }
 
 function parseSseEvent(block: string): SseEvent | null {
@@ -267,8 +273,18 @@ function parseNodeStreamingEvent({ event, data }: SseEvent): NodeStreamingEvent 
   }
 
   if (event === "error") {
-    throw new Error(
-      typeof payload.message === "string" ? payload.message : "Request failed.",
+    const status = getErrorStatus(payload);
+    const code = getErrorString(payload, "code");
+    const requestId = getErrorString(payload, "requestId");
+    const message =
+      typeof payload.message === "string" ? payload.message : "Request failed.";
+    throw new ApiRequestError(
+      requestId ? `${message} (Reference: ${requestId})` : message,
+      {
+        code,
+        requestId,
+        status,
+      },
     );
   }
 

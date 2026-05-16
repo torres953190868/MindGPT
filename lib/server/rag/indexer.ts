@@ -1,23 +1,35 @@
 import { chunkDocument } from "./chunker";
 import { CHUNK_CONFIG, DEFAULT_CHUNK_VERSION, PDF_PARSER_VERSION } from "./config";
+import {
+  createRagFailureDiagnostic,
+  logRagFailureDiagnostic,
+} from "./diagnostics";
 import { getEmbeddingProvider } from "./embeddings";
 import { RagError } from "./errors";
 import { parsePdf } from "./parser";
 import { getRagRepository, requireOwnedDocument, type SaveParsedResult } from "./store";
+import type { RagErrorStage } from "./types";
 
-function exposeMessage(error: unknown) {
-  if (error instanceof RagError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Document indexing failed.";
-}
+const CLEAR_RAG_ERROR = {
+  errorCode: null,
+  errorDetails: null,
+  errorMessage: null,
+  errorRequestId: null,
+  errorStage: null,
+};
 
-export async function indexDocumentForOwner(userId: string, documentId: string) {
+export async function indexDocumentForOwner(
+  userId: string,
+  documentId: string,
+  options: { requestId: string },
+) {
   const repository = getRagRepository();
   const document = await requireOwnedDocument(userId, documentId);
+  let stage: RagErrorStage = "parsing";
 
   try {
     await repository.setDocumentStatus(document.id, "parsing", {
-      errorMessage: null,
+      ...CLEAR_RAG_ERROR,
       parserVersion: PDF_PARSER_VERSION,
       chunkVersion: DEFAULT_CHUNK_VERSION,
     });
@@ -39,7 +51,7 @@ export async function indexDocumentForOwner(userId: string, documentId: string) 
       }
       parsedResult = {
         document: await repository.setDocumentStatus(document.id, "parsed", {
-          errorMessage: null,
+          ...CLEAR_RAG_ERROR,
           parserVersion: PDF_PARSER_VERSION,
           chunkVersion: DEFAULT_CHUNK_VERSION,
         }),
@@ -48,8 +60,9 @@ export async function indexDocumentForOwner(userId: string, documentId: string) 
       };
     }
 
+    stage = "chunking";
     const indexingDocument = await repository.setDocumentStatus(document.id, "indexing", {
-      errorMessage: null,
+      ...CLEAR_RAG_ERROR,
     });
     const chunks = chunkDocument(
       indexingDocument,
@@ -65,6 +78,7 @@ export async function indexDocumentForOwner(userId: string, documentId: string) 
       });
     }
 
+    stage = "embedding";
     const embeddingProvider = getEmbeddingProvider();
     const embeddings = await embeddingProvider.embedTexts(
       chunks.map((chunk) => chunk.content),
@@ -82,9 +96,10 @@ export async function indexDocumentForOwner(userId: string, documentId: string) 
       embeddingModel: embeddingProvider.model,
     }));
 
+    stage = "persisting";
     await repository.replaceChunks(document.id, embeddedChunks);
     const indexedDocument = await repository.setDocumentStatus(document.id, "indexed", {
-      errorMessage: null,
+      ...CLEAR_RAG_ERROR,
       pageCount: parsedResult.document.pageCount,
       title: parsedResult.document.title,
       parserVersion: PDF_PARSER_VERSION,
@@ -99,8 +114,17 @@ export async function indexDocumentForOwner(userId: string, documentId: string) 
       embeddingModel: embeddingProvider.model,
     };
   } catch (error) {
+    const diagnostic = createRagFailureDiagnostic(error, {
+      requestId: options.requestId,
+      stage,
+    });
+    logRagFailureDiagnostic(document, diagnostic);
     await repository.setDocumentStatus(document.id, "failed", {
-      errorMessage: exposeMessage(error),
+      errorCode: diagnostic.code,
+      errorDetails: diagnostic.details,
+      errorMessage: diagnostic.message,
+      errorRequestId: diagnostic.requestId,
+      errorStage: diagnostic.stage,
     });
     throw error;
   }

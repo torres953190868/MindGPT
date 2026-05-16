@@ -10,7 +10,7 @@ const documentStatusSchema = z.enum([
   "failed",
 ]);
 
-const chatAttachmentSchema = z.object({
+export const chatAttachmentSchema = z.object({
   id: z.string().trim().min(1).max(120),
   name: z.string().trim().min(1).max(240),
   mimeType: z.string().trim().max(120),
@@ -22,6 +22,7 @@ const chatAttachmentSchema = z.object({
   documentId: z.string().trim().min(1).max(120).optional(),
   documentStatus: documentStatusSchema.optional(),
   errorMessage: z.string().trim().max(500).nullable().optional(),
+  errorRequestId: z.string().trim().max(160).nullable().optional(),
 });
 
 export const chatModelSelectionSchema = z.object({

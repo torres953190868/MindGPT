@@ -8,6 +8,8 @@ export type DocumentStatus =
   | "indexed"
   | "failed";
 
+export type RagErrorStage = "parsing" | "chunking" | "embedding" | "persisting";
+
 export type SectionSource =
   | "pdf_outline"
   | "font_heuristic"
@@ -58,6 +60,10 @@ export type RagDocument = {
   parserVersion: string;
   chunkVersion: string;
   errorMessage: string | null;
+  errorCode: string | null;
+  errorStage: RagErrorStage | null;
+  errorRequestId: string | null;
+  errorDetails: Json | null;
   createdAt: string;
   updatedAt: string;
 };

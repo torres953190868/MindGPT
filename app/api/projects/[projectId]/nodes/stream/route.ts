@@ -4,8 +4,10 @@ import { getBranchMindAuthContext } from "@/lib/server/auth";
 import { streamDeepSeekReply } from "@/lib/server/deepseek-streaming";
 import {
   getSafeErrorMessage,
+  getSafeErrorCode,
   getSafeErrorStatus,
   jsonWithSession,
+  logApiError,
   safeErrorWithSession,
 } from "@/lib/server/http";
 import {
@@ -19,6 +21,7 @@ import {
 } from "@/lib/server/projects-service";
 import { getWorkspaceDocumentContextsForOwner } from "@/lib/server/rag/service";
 import { checkRateLimitAsync } from "@/lib/server/rate-limit";
+import { getOrCreateRequestId } from "@/lib/server/request";
 import { assertValidRequestOrigin } from "@/lib/server/security";
 import {
   commitSessionCookie,
@@ -37,13 +40,18 @@ function encodeSse(event: "delta" | "complete" | "error", data: unknown) {
   return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
-function createSseResponse(stream: ReadableStream<Uint8Array>, session: BranchMindSession) {
+function createSseResponse(
+  stream: ReadableStream<Uint8Array>,
+  session: BranchMindSession,
+  requestId: string,
+) {
   const response = new NextResponse(stream, {
     headers: {
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
       "Content-Type": "text/event-stream; charset=utf-8",
       "X-Accel-Buffering": "no",
+      "x-request-id": requestId,
     },
   });
 
@@ -52,6 +60,7 @@ function createSseResponse(stream: ReadableStream<Uint8Array>, session: BranchMi
 
 export async function POST(request: NextRequest, context: NodesStreamRouteContext) {
   const fallbackSession = getOrCreateSession(request);
+  const requestId = getOrCreateRequestId(request);
 
   try {
     assertValidRequestOrigin(request, {
@@ -77,6 +86,7 @@ export async function POST(request: NextRequest, context: NodesStreamRouteContex
           status: 429,
           headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
         },
+        { requestId },
       );
     }
 
@@ -124,8 +134,16 @@ export async function POST(request: NextRequest, context: NodesStreamRouteContex
             controller.enqueue(encodeSse("complete", result));
           }
         } catch (error) {
+          const status = getSafeErrorStatus(error);
+          logApiError(error, status, requestId, {
+            action: "stream-node",
+            projectId,
+          });
           controller.enqueue(encodeSse("error", {
-            message: getSafeErrorMessage(getSafeErrorStatus(error), error),
+            code: getSafeErrorCode(error, status),
+            message: getSafeErrorMessage(status, error),
+            requestId,
+            status,
           }));
         } finally {
           controller.close();
@@ -133,8 +151,8 @@ export async function POST(request: NextRequest, context: NodesStreamRouteContex
       },
     });
 
-    return createSseResponse(stream, session);
+    return createSseResponse(stream, session, requestId);
   } catch (error) {
-    return safeErrorWithSession(error, fallbackSession);
+    return safeErrorWithSession(error, fallbackSession, { requestId });
   }
 }

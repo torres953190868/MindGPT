@@ -43,6 +43,7 @@ function getProvider() {
   if (!provider) {
     throw new RagError("Configured LLM provider is not supported.", {
       code: "LLM_PROVIDER_NOT_SUPPORTED",
+      details: { provider: providerId() },
       status: 500,
     });
   }
@@ -59,6 +60,7 @@ function getModel(provider: ChatCompletionsProvider) {
   if (!getProviderAllowedModels(provider).has(model)) {
     throw new RagError(`Configured ${provider.displayName} model is not allowed.`, {
       code: "LLM_MODEL_NOT_ALLOWED",
+      details: { model, provider: provider.id },
       status: 500,
     });
   }
@@ -71,6 +73,7 @@ function getApiKey(provider: ChatCompletionsProvider) {
   if (!apiKey) {
     throw new RagError(`${provider.apiKeyEnv} is not configured.`, {
       code: "LLM_API_KEY_MISSING",
+      details: { provider: provider.id },
       status: 500,
     });
   }
@@ -261,6 +264,12 @@ async function requestAnswer(
         : `${provider.displayName} answer request failed.`;
     throw new RagError(message, {
       code: "LLM_REQUEST_FAILED",
+      details: {
+        model,
+        provider: provider.id,
+        retryable: response.status === 429 || response.status >= 500,
+        upstreamStatus: response.status,
+      },
       status: response.status >= 400 ? response.status : 502,
     });
   }

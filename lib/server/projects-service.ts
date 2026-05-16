@@ -1,6 +1,7 @@
 import { getContextTitles } from "@/lib/graph";
 import {
   createRootProject,
+  createPendingRootProject,
   addChildNode,
   regenerateNode,
   removeNode,
@@ -154,8 +155,9 @@ export async function createProjectForOwner(
   ownerId: string,
   topic: string,
   reply: MockReply,
+  attachments: ChatAttachment[] = [],
 ) {
-  const project = withProjectOwner(createRootProject(topic, reply), ownerId);
+  const project = withProjectOwner(createRootProject(topic, reply, attachments), ownerId);
   await getProjectsRepository().saveProject(project);
 
   return {
@@ -164,11 +166,118 @@ export async function createProjectForOwner(
   };
 }
 
+export async function createPendingProjectForOwner(
+  ownerId: string,
+  topic: string,
+  attachments: ChatAttachment[] = [],
+) {
+  const result = createPendingRootProject(topic, attachments);
+  const project = withProjectOwner(result.project, ownerId);
+  await getProjectsRepository().saveProject(project);
+
+  return {
+    project: toProjectDto(project),
+    projects: await listProjects(ownerId),
+    initialStream: {
+      nodeId: result.node.id,
+      assistantMessageId: result.assistantMessageId,
+    },
+  };
+}
+
+function assertSyncProjectGraph(projectId: string, project: Project) {
+  if (project.id !== projectId) {
+    throw new HttpError("Project ID does not match the sync route.", {
+      code: "PROJECT_ID_MISMATCH",
+      expose: true,
+      status: 400,
+    });
+  }
+
+  const rootNode = project.nodes[project.rootNodeId];
+  if (!rootNode) {
+    throw new HttpError("Project is missing its root node.", {
+      code: "PROJECT_ROOT_MISSING",
+      expose: true,
+      status: 400,
+    });
+  }
+
+  if (rootNode.parentId !== null || rootNode.branchType !== "root") {
+    throw new HttpError("Project root node is invalid.", {
+      code: "PROJECT_ROOT_INVALID",
+      expose: true,
+      status: 400,
+    });
+  }
+
+  for (const [nodeId, node] of Object.entries(project.nodes)) {
+    if (node.id !== nodeId || node.projectId !== project.id) {
+      throw new HttpError("Project node IDs are invalid.", {
+        code: "PROJECT_NODE_INVALID",
+        expose: true,
+        status: 400,
+      });
+    }
+
+    if (node.parentId && !project.nodes[node.parentId]) {
+      throw new HttpError("Project node parent is invalid.", {
+        code: "PROJECT_NODE_PARENT_INVALID",
+        expose: true,
+        status: 400,
+      });
+    }
+
+    for (const childId of node.children) {
+      const child = project.nodes[childId];
+      if (!child || child.parentId !== node.id) {
+        throw new HttpError("Project node children are invalid.", {
+          code: "PROJECT_NODE_CHILD_INVALID",
+          expose: true,
+          status: 400,
+        });
+      }
+    }
+  }
+}
+
+export async function syncProjectForOwner(
+  ownerId: string,
+  projectId: string,
+  project: Project,
+) {
+  assertSyncProjectGraph(projectId, project);
+
+  const existingProject = (await getProjectsRepository().readProjects()).find(
+    (item) => item.id === projectId,
+  );
+  if (existingProject && existingProject.ownerSessionId !== ownerId) {
+    throw new HttpError("Project belongs to another owner.", {
+      code: "PROJECT_OWNER_MISMATCH",
+      expose: true,
+      status: 403,
+    });
+  }
+
+  const ownedProject = withProjectOwner(
+    {
+      ...project,
+      ownerSessionId: undefined,
+    },
+    ownerId,
+  );
+
+  await getProjectsRepository().saveProject(ownedProject);
+  return toProjectDto(ownedProject);
+}
+
 export async function deleteProjectForOwner(ownerId: string, projectId: string) {
   const project = await readOwnedProject(ownerId, projectId);
-  if (!project) notFound();
 
-  await getProjectsRepository().deleteProject(projectId);
+  if (project) {
+    await getProjectsRepository().deleteProject(projectId);
+  }
+
   return listProjects(ownerId);
 }
 

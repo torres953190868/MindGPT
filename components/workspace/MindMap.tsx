@@ -55,7 +55,6 @@ export function MindMap({
           onSelect: onSelectNode,
           onCreate: onCreateNode,
           onToggle: onToggleNode,
-          isCreating: creatingNodeId === node.id,
           isStreaming: streamingNodeId === node.id,
           creationDisabled: Boolean(creatingNodeId),
         },
@@ -102,9 +101,15 @@ export function MindMap({
   }, [graphNodes]);
 
   const handleNodesChange = useCallback(
-    (changes: NodeChange[]) =>
-      setNodes((current) => applyNodeChanges(changes, current) as Node<BranchNodeData>[]),
-    [],
+    (changes: NodeChange[]) => {
+      setNodes((current) => applyNodeChanges(changes, current) as Node<BranchNodeData>[]);
+
+      changes.forEach((change) => {
+        if (change.type !== "position" || change.dragging || !change.position) return;
+        void onMoveNode(change.id, change.position);
+      });
+    },
+    [onMoveNode],
   );
 
   if (graphNodes.length === 0) {
@@ -136,7 +141,6 @@ export function MindMap({
         edges={graphEdges}
         nodeTypes={nodeTypes}
         onNodesChange={handleNodesChange}
-        onNodeDragStop={(_, node) => onMoveNode(node.id, node.position)}
         fitView
         minZoom={0.25}
         maxZoom={1.7}

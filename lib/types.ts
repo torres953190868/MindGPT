@@ -16,6 +16,7 @@ export type ChatAttachment = {
   documentId?: string;
   documentStatus?: "uploaded" | "parsing" | "parsed" | "indexing" | "indexed" | "failed";
   errorMessage?: string | null;
+  errorRequestId?: string | null;
 };
 
 export type ChatDocumentContext = {
