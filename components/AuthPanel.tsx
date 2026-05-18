@@ -13,6 +13,7 @@ type AuthSession = {
 type AuthPanelProps = {
   className?: string;
   placement?: "bottom" | "top";
+  variant?: "default" | "sidebar";
 };
 
 function readError(data: unknown) {
@@ -37,7 +38,11 @@ function getInitial(email: string | null | undefined) {
   return email?.trim().charAt(0).toUpperCase() || "B";
 }
 
-export function AuthPanel({ className = "", placement = "bottom" }: AuthPanelProps) {
+export function AuthPanel({
+  className = "",
+  placement = "bottom",
+  variant = "default",
+}: AuthPanelProps) {
   const menuRef = useRef<HTMLElement | null>(null);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -45,6 +50,7 @@ export function AuthPanel({ className = "", placement = "bottom" }: AuthPanelPro
   const [submittingAction, setSubmittingAction] = useState<"logout" | null>(null);
   const [signInHref, setSignInHref] = useState("/auth/sign-in");
   const popoverPosition = placement === "top" ? "bottom-full mb-2" : "top-full mt-2";
+  const isSidebar = variant === "sidebar";
 
   async function refreshSession() {
     const response = await fetch("/api/auth/session");
@@ -98,11 +104,18 @@ export function AuthPanel({ className = "", placement = "bottom" }: AuthPanelPro
 
   if (session && !session.configured) {
     return (
-      <section aria-label="Local authentication mode" className={`inline-flex ${className}`}>
+      <section
+        aria-label="Local authentication mode"
+        className={`${isSidebar ? "flex w-full" : "inline-flex"} ${className}`}
+      >
         <div
           role="status"
           data-testid="auth-local-mode-status"
-          className="inline-flex min-h-11 items-center gap-2 rounded-[18px] bg-white/75 px-4 py-2.5 text-sm font-black text-[#5d5168] shadow-sm"
+          className={
+            isSidebar
+              ? "inline-flex min-h-11 w-full items-center gap-2 rounded-md border border-[#ebe7f1] bg-white px-2.5 py-2 text-sm font-bold text-[#5d5168] shadow-sm"
+              : "inline-flex min-h-11 items-center gap-2 rounded-[18px] bg-white/75 px-4 py-2.5 text-sm font-black text-[#5d5168] shadow-sm"
+          }
         >
           <CheckCircle2 size={16} />
           Local dev mode
@@ -117,7 +130,7 @@ export function AuthPanel({ className = "", placement = "bottom" }: AuthPanelPro
         ref={menuRef}
         aria-label="User profile"
         data-testid="user-profile"
-        className={`relative inline-flex justify-end text-sm ${className}`}
+        className={`relative ${isSidebar ? "flex w-full" : "inline-flex justify-end"} text-sm ${className}`}
       >
         <button
           type="button"
@@ -125,12 +138,18 @@ export function AuthPanel({ className = "", placement = "bottom" }: AuthPanelPro
           aria-haspopup="dialog"
           aria-expanded={isMenuOpen}
           data-testid="account-menu-button"
-          className="inline-flex min-h-11 max-w-full items-center gap-2 rounded-[18px] bg-white/78 px-3 py-2.5 font-black text-[#554665] shadow-sm transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+          className={
+            isSidebar
+              ? "inline-flex min-h-12 w-full max-w-full items-center gap-2 rounded-md border border-[#ebe7f1] bg-white px-2.5 py-2 text-left font-bold text-[#554665] shadow-sm transition hover:bg-[#fbfafc] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40"
+              : "inline-flex min-h-11 max-w-full items-center gap-2 rounded-[18px] bg-white/78 px-3 py-2.5 font-black text-[#554665] shadow-sm transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+          }
         >
           <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#e5f6ee] text-xs text-[#3d7558]">
             {getInitial(session.user.email)}
           </span>
-          <span className="max-w-36 truncate">{session.user.email ?? "Signed in"}</span>
+          <span className={`${isSidebar ? "flex-1" : "max-w-36"} truncate`}>
+            {session.user.email ?? "Signed in"}
+          </span>
           <ChevronDown size={15} />
         </button>
 
@@ -176,12 +195,16 @@ export function AuthPanel({ className = "", placement = "bottom" }: AuthPanelPro
       ref={menuRef}
       aria-label="User sign in"
       data-testid="user-sign-in"
-      className={`relative inline-flex justify-end text-sm ${className}`}
+      className={`relative ${isSidebar ? "flex w-full" : "inline-flex justify-end"} text-sm ${className}`}
     >
       <Link
         href={signInHref}
         data-testid="account-sign-in-button"
-        className="inline-flex min-h-11 items-center gap-2 rounded-[18px] bg-[#f1e8fb] px-4 py-2.5 font-black text-[#5d427d] shadow-sm transition hover:bg-[#e4d5f6] focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+        className={
+          isSidebar
+            ? "inline-flex min-h-11 w-full items-center gap-2 rounded-md border border-[#ebe7f1] bg-white px-3 py-2.5 font-bold text-[#5d427d] shadow-sm transition hover:bg-[#f7f3fb] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40"
+            : "inline-flex min-h-11 items-center gap-2 rounded-[18px] bg-[#f1e8fb] px-4 py-2.5 font-black text-[#5d427d] shadow-sm transition hover:bg-[#e4d5f6] focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+        }
       >
         <LogIn size={17} />
         Sign in

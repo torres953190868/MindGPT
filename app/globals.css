@@ -39,6 +39,14 @@ textarea {
   background-size: 28px 28px;
 }
 
+.branchmind-projects-surface {
+  background-color: #fbfafc;
+  background-image:
+    linear-gradient(rgba(110, 91, 139, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(110, 91, 139, 0.055) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
 .home-research-canvas {
   background:
     radial-gradient(circle at 16% 22%, rgba(255, 194, 209, 0.25), transparent 28%),
