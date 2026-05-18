@@ -1,7 +1,16 @@
 "use client";
 
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ChangeEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Brain,
   ChevronDown,
@@ -51,6 +60,7 @@ function formatNodeCount(count: number) {
 }
 
 export function ProjectCardList() {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
   const [importStatus, setImportStatus] = useState<string | null>(null);
@@ -115,6 +125,39 @@ export function ProjectCardList() {
     if (confirmed) {
       void deleteProject(projectId);
     }
+  }
+
+  function openProject(projectId: string) {
+    router.push(`/workspace/${projectId}`);
+  }
+
+  function handleProjectRowClick(
+    event: ReactMouseEvent<HTMLTableRowElement>,
+    projectId: string,
+  ) {
+    if (
+      event.target instanceof HTMLElement &&
+      event.target.closest("[data-project-row-action='true']")
+    ) {
+      return;
+    }
+
+    openProject(projectId);
+  }
+
+  function handleProjectRowKeyDown(
+    event: ReactKeyboardEvent<HTMLTableRowElement>,
+    projectId: string,
+  ) {
+    if (event.key !== "Enter") return;
+    if (
+      event.target instanceof HTMLElement &&
+      event.target.closest("[data-project-row-action='true']")
+    ) {
+      return;
+    }
+
+    openProject(projectId);
   }
 
   async function handleImportProject(event: ChangeEvent<HTMLInputElement>) {
@@ -443,9 +486,14 @@ export function ProjectCardList() {
                       return (
                         <tr
                           key={project.id}
+                          role="link"
+                          tabIndex={0}
+                          aria-label={`Open ${project.title}`}
+                          onClick={(event) => handleProjectRowClick(event, project.id)}
+                          onKeyDown={(event) => handleProjectRowKeyDown(event, project.id)}
                           data-project-id={project.id}
                           data-testid="project-card"
-                          className="transition hover:bg-[#fbfafc]"
+                          className="cursor-pointer transition hover:bg-[#fbfafc] focus:bg-[#fbfafc] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#b9a5db]/45"
                         >
                           <td className="px-4 py-3">
                             <div className="flex min-w-0 items-center gap-3">
@@ -453,6 +501,7 @@ export function ProjectCardList() {
                                 type="button"
                                 disabled
                                 aria-label={`Star ${project.title}`}
+                                data-project-row-action="true"
                                 className="grid h-8 w-8 shrink-0 cursor-not-allowed place-items-center rounded-md text-[#756b80] opacity-70"
                               >
                                 <Star size={15} />
@@ -482,6 +531,7 @@ export function ProjectCardList() {
                               <Link
                                 href={`/workspace/${project.id}`}
                                 aria-label={`Open ${project.title}`}
+                                data-project-row-action="true"
                                 data-project-id={project.id}
                                 data-testid="open-project-link"
                                 className="grid h-8 w-8 place-items-center rounded-md text-[#51475d] transition hover:bg-[#f1fbf7] hover:text-[#1f7f64] focus:outline-none focus:ring-2 focus:ring-[#9bd8c6]"
@@ -492,6 +542,7 @@ export function ProjectCardList() {
                                 type="button"
                                 onClick={() => downloadProjectJson(project)}
                                 aria-label={`Export ${project.title} as JSON`}
+                                data-project-row-action="true"
                                 data-project-id={project.id}
                                 data-testid="export-project-json-button"
                                 className="grid h-8 w-8 place-items-center rounded-md text-[#51475d] transition hover:bg-[#f7f3fb] hover:text-[#6b4ea0] focus:outline-none focus:ring-2 focus:ring-[#d9caef]"
@@ -502,6 +553,7 @@ export function ProjectCardList() {
                                 type="button"
                                 onClick={() => handleDeleteProject(project.id, project.title)}
                                 aria-label={`Delete ${project.title}`}
+                                data-project-row-action="true"
                                 data-project-id={project.id}
                                 data-testid="delete-project-button"
                                 className="grid h-8 w-8 place-items-center rounded-md text-[#51475d] transition hover:bg-[#fff0ef] hover:text-[#9a413d] focus:outline-none focus:ring-2 focus:ring-[#ffd1cf]"
@@ -512,6 +564,7 @@ export function ProjectCardList() {
                                 type="button"
                                 disabled
                                 aria-label={`More actions for ${project.title}`}
+                                data-project-row-action="true"
                                 className="grid h-8 w-8 cursor-not-allowed place-items-center rounded-md text-[#756b80] opacity-70"
                               >
                                 <MoreHorizontal size={16} />
