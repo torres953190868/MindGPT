@@ -9,6 +9,7 @@ import {
   PanelLeftClose,
   Search,
   Sprout,
+  Tags,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { MindNode, Project } from "@/lib/types";
@@ -124,7 +125,6 @@ export function WorkspaceSidebar({
   const previousProjectId = useRef(project.id);
   const previousSelectedNodeId = useRef(selectedNodeId);
   const normalized = query.trim().toLowerCase();
-  const nodes = useMemo(() => Object.values(project.nodes), [project.nodes]);
   const effectiveExpandedNodeIds = useMemo(() => {
     if (!normalized) return expandedNodeIds;
     return new Set([...expandedNodeIds, ...getSearchExpandedNodeIds(project, normalized)]);
@@ -178,18 +178,21 @@ export function WorkspaceSidebar({
     <aside
       aria-label="Workspace sidebar"
       data-testid="workspace-sidebar"
-      className="flex min-h-[220px] w-full flex-col gap-4 rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:min-h-0"
+      className="flex min-h-[220px] w-full flex-col gap-3 rounded-lg border border-[#e5e1ec] bg-white p-3 shadow-sm lg:min-h-0 lg:rounded-none lg:border-0 lg:border-r lg:shadow-none"
     >
       <div className="flex items-center justify-between gap-3">
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <Link
             href="/projects"
-            className="grid h-11 w-11 place-items-center rounded-full bg-[#f1e8fb] text-[#6c538d] transition hover:bg-[#e4d5f6] focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
-            aria-label="Project list"
+            className="inline-flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs font-bold text-[#5f556b] transition hover:bg-[#f5f2f8] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40"
+            aria-label="Back to projects"
             data-testid="project-list-link"
           >
-            <ArrowLeft size={18} />
+            <ArrowLeft size={15} />
+            <span className="truncate">Back to projects</span>
           </Link>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
             onClick={onCollapse}
@@ -197,27 +200,50 @@ export function WorkspaceSidebar({
             aria-controls="conversation-outline"
             aria-expanded="true"
             data-testid="collapse-workspace-sidebar-button"
-            className="grid h-11 w-11 place-items-center rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+            className="grid h-8 w-8 place-items-center rounded-md text-[#6b6077] transition hover:bg-[#f5f2f8] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40"
           >
-            <PanelLeftClose size={18} />
+            <PanelLeftClose size={16} />
           </button>
-        </div>
-        <div className="min-w-0 text-right">
-          <p className="truncate text-sm font-black text-[#382d41]">{project.title}</p>
-          <p className="text-xs font-bold text-[#665a70]">{nodes.length} nodes</p>
         </div>
       </div>
 
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8f8299]" size={17} />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b8294]" size={15} />
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           aria-label="Search project nodes"
           data-testid="node-search-input"
           placeholder="Search nodes"
-          className="h-11 w-full rounded-[18px] border border-white bg-white/82 pl-10 pr-3 text-sm outline-none focus:border-[#b696d4] focus:ring-4 focus:ring-[#eadcf7]"
+          className="h-9 w-full rounded-md border border-[#e7e3ee] bg-white pl-9 pr-11 text-xs font-medium text-[#292234] outline-none placeholder:text-[#9b94a5] focus:border-[#a78ad1] focus:ring-2 focus:ring-[#d9caef]"
         />
+        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded bg-[#f3f0f7] px-1.5 py-0.5 text-[10px] font-bold text-[#8a7e99]">
+          ⌘K
+        </span>
+      </div>
+
+      <div
+        role="tablist"
+        aria-label="Workspace sidebar views"
+        className="grid grid-cols-2 border-b border-[#ebe7f1] text-xs font-bold"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected="true"
+          className="relative h-9 text-[#209673] after:absolute after:bottom-[-1px] after:left-1/2 after:h-0.5 after:w-10 after:-translate-x-1/2 after:rounded-full after:bg-[#48b596] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#b9a5db]/40"
+        >
+          Outline
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected="false"
+          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md text-[#746a80] transition hover:bg-[#f7f4fb] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#b9a5db]/40"
+        >
+          <Tags size={13} />
+          Tags
+        </button>
       </div>
 
       <nav
@@ -230,7 +256,7 @@ export function WorkspaceSidebar({
           <p
             role="status"
             data-testid="conversation-outline-empty-state"
-            className="rounded-[18px] bg-white/65 p-3 text-sm font-bold text-[#665a70]"
+            className="rounded-md bg-[#f7f4fb] p-3 text-sm font-bold text-[#665a70]"
           >
             No matching nodes
           </p>
@@ -251,7 +277,7 @@ export function WorkspaceSidebar({
       {footer && (
         <div
           data-testid="workspace-sidebar-footer"
-          className="mt-auto border-t border-white/80 pt-3"
+          className="mt-auto border-t border-[#ebe7f1] pt-3"
         >
           {footer}
         </div>

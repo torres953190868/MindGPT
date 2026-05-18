@@ -59,6 +59,7 @@ SUPABASE_SERVICE_ROLE_KEY=
 Apply Supabase migrations in `supabase/migrations`, including:
 
 - `20260514010000_pdf_rag_foundation.sql`
+- `20260516010000_pdf_rag_diagnostics.sql`
 
 The RAG migration creates:
 

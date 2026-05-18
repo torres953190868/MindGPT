@@ -2,12 +2,17 @@
 
 import Link from "next/link";
 import {
+  Brain,
+  Folder,
+  Grid2X2,
   Map as MapIcon,
   MessageSquare,
+  MoreHorizontal,
   NotebookPen,
   PanelLeftOpen,
   PanelRightOpen,
   RefreshCcw,
+  Star,
 } from "lucide-react";
 import {
   type CSSProperties,
@@ -43,7 +48,7 @@ const PROJECT_NOTES_PANEL_MAX_WIDTH = 720;
 const DESKTOP_MAP_MIN_WIDTH = 220;
 const WORKSPACE_SIDEBAR_DEFAULT_WIDTH = SIDE_PANEL_PREFERRED_MIN_WIDTH;
 const DESKTOP_RESIZE_HANDLE_WIDTH = 18;
-const WORKSPACE_GRID_GAP = 16;
+const WORKSPACE_GRID_GAP = 0;
 const MOBILE_MAP_DEFAULT_HEIGHT = 520;
 const MOBILE_MAP_MIN_HEIGHT = 320;
 
@@ -230,7 +235,7 @@ function WorkspaceResizeHandle({
       }`}
     >
       <div
-        className={`absolute rounded-full bg-white/70 shadow-sm ${
+        className={`absolute bg-[#e9e5f0] ${
           isVertical
             ? "left-1/2 top-0 h-full w-px -translate-x-1/2"
             : "left-0 top-1/2 h-px w-full -translate-y-1/2"
@@ -244,15 +249,15 @@ function WorkspaceResizeHandle({
         data-testid={testId}
         onPointerDown={handlePointerDown}
         onMouseDown={handleMouseDown}
-        className={`group absolute grid place-items-center rounded-full border border-white/90 bg-white/85 shadow-lg shadow-[#d8c9e4]/45 transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7] ${
+        className={`group absolute grid place-items-center border border-transparent bg-transparent transition hover:bg-[#f6f3fb] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40 ${
           isVertical
-            ? "left-1/2 top-1/2 h-16 w-5 -translate-x-1/2 -translate-y-1/2 cursor-col-resize"
-            : "left-1/2 top-1/2 h-11 w-24 -translate-x-1/2 -translate-y-1/2 cursor-row-resize"
+            ? "left-0 top-0 h-full w-full cursor-col-resize"
+            : "left-1/2 top-1/2 h-8 w-24 -translate-x-1/2 -translate-y-1/2 cursor-row-resize rounded-md"
         }`}
       >
         <span
-          className={`rounded-full bg-[#9b83c2] opacity-70 transition group-hover:opacity-100 ${
-            isVertical ? "h-8 w-1" : "h-1 w-8"
+          className={`rounded-full bg-[#9a83bf] opacity-0 transition group-hover:opacity-80 ${
+            isVertical ? "h-10 w-1" : "h-1 w-8"
           }`}
         />
       </button>
@@ -282,7 +287,7 @@ function CanvasCornerToggleButton({
       aria-label={ariaLabel}
       aria-expanded="false"
       data-testid={testId}
-      className={`absolute top-4 z-20 grid h-11 w-11 place-items-center rounded-full border border-white/80 bg-[#f1e8fb]/95 text-[#6c538d] shadow-lg shadow-[#d8c9e4]/45 backdrop-blur transition hover:bg-[#e4d5f6] focus:outline-none focus:ring-4 focus:ring-[#eadcf7] ${
+      className={`absolute top-4 z-20 grid h-9 w-9 place-items-center rounded-md border border-[#e6e1ef] bg-white/95 text-[#625073] shadow-sm backdrop-blur transition hover:bg-[#f7f3fb] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40 ${
         side === "left" ? "left-4" : "right-4"
       }`}
     >
@@ -402,7 +407,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
     "--mobile-map-height": `${mobileMapHeight}px`,
   } as CSSProperties;
   const workspaceGridClassName =
-    "grid min-h-0 flex-1 grid-cols-1 gap-4 lg:h-full lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:overflow-hidden xl:grid-cols-[var(--workspace-wide-grid-columns)]";
+    "grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden rounded-b-xl border border-t-0 border-[#e5e1ec] bg-white shadow-[0_18px_60px_rgba(44,35,62,0.08)] lg:h-full lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 xl:grid-cols-[var(--workspace-wide-grid-columns)]";
 
   const getWorkspaceGridWidth = useCallback(() => {
     return workspaceGridRef.current?.clientWidth ?? 0;
@@ -885,34 +890,64 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
     <main
       aria-labelledby="workspace-title"
       data-testid="workspace-shell"
-      className="flex min-h-screen flex-col gap-4 p-4 lg:h-screen lg:min-h-[720px] lg:overflow-hidden"
+      className="branchmind-workspace-surface flex min-h-screen flex-col p-3 text-[#272033] lg:h-screen lg:min-h-[720px] lg:overflow-hidden lg:p-4"
     >
       <header
         aria-label="Workspace header"
         data-testid="workspace-header"
-        className="flex flex-wrap items-center justify-between gap-3 rounded-[26px] border border-white/80 bg-white/70 px-5 py-3 shadow-sm"
+        className="flex min-h-14 flex-wrap items-center justify-between gap-3 rounded-t-xl border border-[#e5e1ec] bg-white/92 px-4 py-2 shadow-[0_10px_35px_rgba(44,35,62,0.06)] backdrop-blur lg:flex-nowrap lg:px-5"
       >
-        <div className="min-w-0">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#74687c]">
-            BranchMind
-          </p>
-          <h1 id="workspace-title" className="line-clamp-1 text-xl font-black text-[#342b3a]">
-            {project.title}
-          </h1>
+        <div className="flex min-w-0 items-center gap-4">
+          <div className="flex shrink-0 items-center gap-2 border-r border-[#e7e3ed] pr-4">
+            <span className="grid h-8 w-8 place-items-center rounded-md border border-[#dcd5eb] bg-[#f5f1fb] text-[#7658b3]">
+              <Brain size={18} />
+            </span>
+            <span className="text-base font-extrabold text-[#201a2d]">BranchMind</span>
+          </div>
+          <div className="flex min-w-0 items-center gap-2">
+            <h1
+              id="workspace-title"
+              className="line-clamp-1 text-sm font-extrabold text-[#241d30] sm:text-base"
+            >
+              {project.title}
+            </h1>
+            <button
+              type="button"
+              aria-label="Star project"
+              className="hidden h-8 w-8 shrink-0 place-items-center rounded-md text-[#6f647b] transition hover:bg-[#f7f4fb] hover:text-[#6d4ead] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40 sm:grid"
+            >
+              <Star size={16} />
+            </button>
+          </div>
         </div>
         <nav
           aria-label="Workspace navigation"
           data-testid="workspace-navigation"
-          className="flex w-full min-w-0 flex-wrap items-center justify-end gap-3 sm:w-auto"
+          className="flex w-full min-w-0 flex-wrap items-center justify-end gap-1.5 sm:w-auto"
         >
           <Link
             href="/projects"
             aria-label="Project list"
             data-testid="workspace-projects-link"
-            className="inline-flex rounded-[18px] bg-[#f1e8fb] px-4 py-3 text-sm font-black text-[#5d427d] transition hover:bg-[#e4d5f6]"
+            className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-bold text-[#3f3650] transition hover:bg-[#f4f1f8] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40"
           >
+            <Folder size={16} />
             Projects
           </Link>
+          <button
+            type="button"
+            aria-label="Workspace grid"
+            className="grid h-9 w-9 place-items-center rounded-md text-[#665b73] transition hover:bg-[#f4f1f8] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40"
+          >
+            <Grid2X2 size={16} />
+          </button>
+          <button
+            type="button"
+            aria-label="More workspace actions"
+            className="grid h-9 w-9 place-items-center rounded-md text-[#665b73] transition hover:bg-[#f4f1f8] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40"
+          >
+            <MoreHorizontal size={17} />
+          </button>
         </nav>
       </header>
 
@@ -1006,7 +1041,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
         <section
           aria-labelledby="mind-map-section-title"
           data-testid="mind-map-canvas"
-          className={`relative h-[var(--mobile-map-height)] overflow-hidden rounded-[30px] border border-white/80 bg-white/40 p-2 shadow-xl shadow-[#e4d6ef]/45 lg:h-full lg:min-h-0 ${
+          className={`relative h-[var(--mobile-map-height)] overflow-hidden rounded-lg border border-[#e5e1ec] bg-[#fcfbfd] shadow-sm lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none ${
             mobileWorkspaceView === "map" ? "" : "hidden lg:block"
           }`}
         >

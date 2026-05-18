@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildAuthCallbackUrl,
   sanitizeAuthNext,
@@ -15,6 +15,17 @@ const updateUserMock = vi.hoisted(() => vi.fn());
 const getUserMock = vi.hoisted(() => vi.fn());
 const exchangeCodeForSessionMock = vi.hoisted(() => vi.fn());
 const tryMigrateAnonymousDataToUserMock = vi.hoisted(() => vi.fn());
+const authOriginEnvKeys = [
+  "APP_ORIGIN",
+  "NEXT_PUBLIC_APP_ORIGIN",
+  "SITE_URL",
+  "NEXT_PUBLIC_SITE_URL",
+  "VERCEL_URL",
+  "VERCEL_BRANCH_URL",
+];
+const originalAuthOriginEnv = new Map(
+  authOriginEnvKeys.map((key) => [key, process.env[key]]),
+);
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseCookieClient: createSupabaseCookieClientMock,
@@ -40,6 +51,21 @@ function createJsonRequest(
   });
 }
 
+beforeEach(() => {
+  for (const key of authOriginEnvKeys) delete process.env[key];
+});
+
+afterEach(() => {
+  for (const key of authOriginEnvKeys) {
+    const value = originalAuthOriginEnv.get(key);
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+});
+
 describe("auth redirects", () => {
   it("accepts relative app paths and rejects external URLs", () => {
     expect(sanitizeAuthNext("/projects")).toBe("/projects");
@@ -60,6 +86,29 @@ describe("auth redirects", () => {
     expect(callbackUrl.origin).toBe("https://branchmind.example");
     expect(callbackUrl.pathname).toBe("/auth/callback");
     expect(callbackUrl.searchParams.get("next")).toBe("/reader");
+  });
+
+  it("prefers the configured app origin for callback URLs", () => {
+    process.env.APP_ORIGIN = "https://app.branchmind.example";
+
+    const callbackUrl = new URL(
+      buildAuthCallbackUrl("http://127.0.0.1:3002/api/auth/google", "/projects"),
+    );
+
+    expect(callbackUrl.origin).toBe("https://app.branchmind.example");
+    expect(callbackUrl.pathname).toBe("/auth/callback");
+    expect(callbackUrl.searchParams.get("next")).toBe("/projects");
+  });
+
+  it("accepts Vercel host env vars without a protocol", () => {
+    process.env.VERCEL_URL = "branchmind-preview.vercel.app";
+
+    const callbackUrl = new URL(
+      buildAuthCallbackUrl("http://127.0.0.1:3002/api/auth/google", "/projects"),
+    );
+
+    expect(callbackUrl.origin).toBe("https://branchmind-preview.vercel.app");
+    expect(callbackUrl.pathname).toBe("/auth/callback");
   });
 });
 

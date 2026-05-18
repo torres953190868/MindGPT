@@ -93,10 +93,28 @@ function now() {
   return new Date().toISOString();
 }
 
-function assertNoError(error: { message: string } | null, operation: string) {
+function isSupabaseSchemaError(error: { code?: string; message: string }) {
+  return (
+    error.code === "42P01" ||
+    error.code === "42703" ||
+    error.code === "PGRST204" ||
+    error.code === "PGRST205" ||
+    /could not find|does not exist|schema cache/i.test(error.message)
+  );
+}
+
+function assertNoError(
+  error: { code?: string; message: string } | null,
+  operation: string,
+) {
   if (!error) return;
-  throw new RagError(`Supabase ${operation} failed: ${error.message}`, {
-    code: "RAG_SUPABASE_ERROR",
+  const schemaError = isSupabaseSchemaError(error);
+  const hint = schemaError
+    ? " Apply the SQL files in supabase/migrations, including 20260516010000_pdf_rag_diagnostics.sql, then retry."
+    : "";
+
+  throw new RagError(`Supabase ${operation} failed: ${error.message}.${hint}`, {
+    code: schemaError ? "RAG_SUPABASE_SCHEMA_ERROR" : "RAG_SUPABASE_ERROR",
     expose: true,
     status: 500,
   });
