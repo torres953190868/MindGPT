@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type CSSProperties,
   FormEvent,
   KeyboardEvent,
   useCallback,
@@ -12,17 +13,27 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
+  Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
   FileText,
   Loader2,
   Minus,
+  Pencil,
   Plus,
   RefreshCcw,
   Send,
+  Trash2,
   Upload,
+  X,
 } from "lucide-react";
+import {
+  getResizeInputMode,
+  type ResizeStartEvent,
+  WorkspaceResizeHandle,
+} from "@/components/workspace/WorkspaceResizeHandle";
 import { formatRequestReference, readJsonApi } from "@/lib/client/api";
 
 type DocumentStatus =
@@ -101,6 +112,11 @@ type DocumentDetails = {
   chunkCount: number;
 };
 
+type TocNode = {
+  section: RagSection;
+  children: TocNode[];
+};
+
 type PdfViewport = {
   width: number;
   height: number;
@@ -148,6 +164,20 @@ type PdfJsModule = {
 const MIN_SCALE = 0.65;
 const MAX_SCALE = 2.25;
 const SCALE_STEP = 0.15;
+const PDF_DOCUMENTS_SIDEBAR_DEFAULT_WIDTH = 280;
+const PDF_TOOLS_SIDEBAR_DEFAULT_WIDTH = 260;
+const PDF_SIDEBAR_MIN_WIDTH = 210;
+const PDF_VIEWER_MIN_WIDTH = 360;
+const PDF_RESIZE_HANDLE_WIDTH = 8;
+
+type PdfSidebarSide = "documents" | "tools";
+
+type PdfSidebarResizeBoundsOptions = {
+  side: PdfSidebarSide;
+  gridWidth: number;
+  documentsSidebarWidth: number;
+  toolsSidebarWidth: number;
+};
 
 let pdfJsModulePromise: Promise<PdfJsModule> | null = null;
 
@@ -177,6 +207,27 @@ function clampPageNumber(pageNumber: number, pageCount: number) {
   return Math.min(Math.max(pageNumber, 1), pageCount);
 }
 
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getPdfSidebarResizeBounds({
+  side,
+  gridWidth,
+  documentsSidebarWidth,
+  toolsSidebarWidth,
+}: PdfSidebarResizeBoundsOptions) {
+  const otherSidebarWidth =
+    side === "documents" ? toolsSidebarWidth : documentsSidebarWidth;
+  const maxWidthForViewport =
+    gridWidth - otherSidebarWidth - PDF_RESIZE_HANDLE_WIDTH * 2 - PDF_VIEWER_MIN_WIDTH;
+
+  return {
+    minWidth: PDF_SIDEBAR_MIN_WIDTH,
+    maxWidth: Math.max(PDF_SIDEBAR_MIN_WIDTH, Math.floor(maxWidthForViewport)),
+  };
+}
+
 function isRenderCancellation(error: unknown) {
   return (
     error instanceof Error &&
@@ -191,6 +242,54 @@ function hasExtractedPages(details: DocumentDetails | null) {
       details.document.pageCount > 0 &&
       (details.sections.length > 0 || details.document.status === "indexed"),
   );
+}
+
+function sortSectionsForToc(sections: RagSection[]) {
+  return sections
+    .map((section, index) => ({ index, section }))
+    .sort(
+      (left, right) =>
+        left.section.pageStart - right.section.pageStart ||
+        left.section.level - right.section.level ||
+        left.index - right.index,
+    )
+    .map(({ section }) => section);
+}
+
+function buildTocTree(sections: RagSection[]) {
+  const roots: TocNode[] = [];
+  const stack: TocNode[] = [];
+
+  for (const section of sections) {
+    const node: TocNode = { section, children: [] };
+
+    while (
+      stack.length > 0 &&
+      stack[stack.length - 1].section.level >= section.level
+    ) {
+      stack.pop();
+    }
+
+    const parent = stack[stack.length - 1];
+    if (parent) parent.children.push(node);
+    else roots.push(node);
+
+    stack.push(node);
+  }
+
+  return roots;
+}
+
+function tocNodeContainsSection(node: TocNode, sectionId: string): boolean {
+  return (
+    node.section.id === sectionId ||
+    node.children.some((child) => tocNodeContainsSection(child, sectionId))
+  );
+}
+
+function findTocRootId(tocTree: TocNode[], sectionId: string | null) {
+  if (!sectionId) return null;
+  return tocTree.find((node) => tocNodeContainsSection(node, sectionId))?.section.id ?? null;
 }
 
 async function loadPdfJs() {
@@ -217,6 +316,8 @@ export function PdfReader() {
   const chunkParam = searchParams.get("chunk");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+  const readerGridRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const renderTaskRef = useRef<PdfRenderTask | null>(null);
   const pdfDocumentRef = useRef<PdfDocumentProxy | null>(null);
@@ -232,6 +333,10 @@ export function PdfReader() {
   const [documents, setDocuments] = useState<RagDocument[]>([]);
   const [documentsReady, setDocumentsReady] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [renamingDocumentId, setRenamingDocumentId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [details, setDetails] = useState<DocumentDetails | null>(null);
   const [page, setPage] = useState<RagPage | null>(null);
   const [sourceChunk, setSourceChunk] = useState<RagChunk | null>(null);
@@ -249,12 +354,23 @@ export function PdfReader() {
   const [pageNumber, setPageNumber] = useState<number | null>(null);
   const [pageInput, setPageInput] = useState("");
   const [scale, setScale] = useState(1.05);
+  const [documentsSidebarWidth, setDocumentsSidebarWidth] = useState(
+    PDF_DOCUMENTS_SIDEBAR_DEFAULT_WIDTH,
+  );
+  const [toolsSidebarWidth, setToolsSidebarWidth] = useState(
+    PDF_TOOLS_SIDEBAR_DEFAULT_WIDTH,
+  );
   const [askQuestion, setAskQuestion] = useState("");
   const [askResult, setAskResult] = useState<RagQueryResponse | null>(null);
   const [askLoading, setAskLoading] = useState(false);
   const [askError, setAskError] = useState<string | null>(null);
+  const [expandedTocRootIds, setExpandedTocRootIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const selectedDocument = details?.document ?? null;
+  const selectedListDocument =
+    documents.find((document) => document.id === selectedId) ?? null;
   const selectedDocumentErrorReference = formatRequestReference(
     selectedDocument?.errorRequestId,
   );
@@ -265,6 +381,9 @@ export function PdfReader() {
   const indexButtonLabel =
     selectedDocument?.status === "indexed" ? "Re-index PDF" : "Enable Ask PDF";
   const canAskPdf = selectedDocument?.status === "indexed";
+  const pdfReaderGridStyle = {
+    "--pdf-reader-grid-columns": `${documentsSidebarWidth}px ${PDF_RESIZE_HANDLE_WIDTH}px minmax(${PDF_VIEWER_MIN_WIDTH}px,1fr) ${PDF_RESIZE_HANDLE_WIDTH}px ${toolsSidebarWidth}px`,
+  } as CSSProperties;
 
   const updateReaderUrl = useCallback(
     (documentId: string, nextPage: number | null, chunkId?: string | null) => {
@@ -287,6 +406,120 @@ export function PdfReader() {
       readerActionIdRef.current === actionId &&
       selectedIdRef.current === documentId,
     [],
+  );
+
+  const getReaderGridWidth = useCallback(() => {
+    return readerGridRef.current?.clientWidth ?? 0;
+  }, []);
+
+  const clampPdfSidebars = useCallback(
+    (gridWidth = getReaderGridWidth()) => {
+      if (!gridWidth || window.matchMedia("(max-width: 1023px)").matches) return;
+
+      let nextDocumentsSidebarWidth = documentsSidebarWidth;
+      let nextToolsSidebarWidth = toolsSidebarWidth;
+
+      const documentsBounds = getPdfSidebarResizeBounds({
+        side: "documents",
+        gridWidth,
+        documentsSidebarWidth: nextDocumentsSidebarWidth,
+        toolsSidebarWidth: nextToolsSidebarWidth,
+      });
+      nextDocumentsSidebarWidth = clampNumber(
+        nextDocumentsSidebarWidth,
+        documentsBounds.minWidth,
+        documentsBounds.maxWidth,
+      );
+
+      const toolsBounds = getPdfSidebarResizeBounds({
+        side: "tools",
+        gridWidth,
+        documentsSidebarWidth: nextDocumentsSidebarWidth,
+        toolsSidebarWidth: nextToolsSidebarWidth,
+      });
+      nextToolsSidebarWidth = clampNumber(
+        nextToolsSidebarWidth,
+        toolsBounds.minWidth,
+        toolsBounds.maxWidth,
+      );
+
+      if (nextDocumentsSidebarWidth !== documentsSidebarWidth) {
+        setDocumentsSidebarWidth(nextDocumentsSidebarWidth);
+      }
+      if (nextToolsSidebarWidth !== toolsSidebarWidth) {
+        setToolsSidebarWidth(nextToolsSidebarWidth);
+      }
+    },
+    [documentsSidebarWidth, getReaderGridWidth, toolsSidebarWidth],
+  );
+
+  const handlePdfSidebarResizeStart = useCallback(
+    (side: PdfSidebarSide, event: ResizeStartEvent) => {
+      event.preventDefault();
+      const isPointerResize = getResizeInputMode(event) === "pointer";
+
+      const startX = event.clientX;
+      const startWidth =
+        side === "documents" ? documentsSidebarWidth : toolsSidebarWidth;
+      const gridWidth =
+        event.currentTarget.parentElement?.parentElement?.clientWidth ??
+        getReaderGridWidth();
+      const bounds = getPdfSidebarResizeBounds({
+        side,
+        gridWidth,
+        documentsSidebarWidth,
+        toolsSidebarWidth,
+      });
+
+      function resizeTo(clientX: number) {
+        const deltaX = side === "documents" ? clientX - startX : startX - clientX;
+        const nextWidth = clampNumber(
+          startWidth + deltaX,
+          bounds.minWidth,
+          bounds.maxWidth,
+        );
+
+        if (side === "documents") setDocumentsSidebarWidth(nextWidth);
+        else setToolsSidebarWidth(nextWidth);
+      }
+
+      function handlePointerMove(moveEvent: globalThis.PointerEvent) {
+        resizeTo(moveEvent.clientX);
+      }
+
+      function handleMouseMove(moveEvent: globalThis.MouseEvent) {
+        resizeTo(moveEvent.clientX);
+      }
+
+      function handlePointerUp() {
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerUp);
+      }
+
+      function handleMouseUp() {
+        window.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("mouseup", handleMouseUp);
+      }
+
+      if (isPointerResize) {
+        window.addEventListener("pointermove", handlePointerMove);
+        window.addEventListener("pointerup", handlePointerUp, { once: true });
+      } else {
+        window.addEventListener("mousemove", handleMouseMove);
+        window.addEventListener("mouseup", handleMouseUp, { once: true });
+      }
+    },
+    [documentsSidebarWidth, getReaderGridWidth, toolsSidebarWidth],
+  );
+
+  const handleDocumentsSidebarResizeStart = useCallback(
+    (event: ResizeStartEvent) => handlePdfSidebarResizeStart("documents", event),
+    [handlePdfSidebarResizeStart],
+  );
+
+  const handleToolsSidebarResizeStart = useCallback(
+    (event: ResizeStartEvent) => handlePdfSidebarResizeStart("tools", event),
+    [handlePdfSidebarResizeStart],
   );
 
   const loadDocuments = useCallback(async () => {
@@ -482,6 +715,37 @@ export function PdfReader() {
       cancelled = true;
     };
   }, [loadDocuments]);
+
+  useEffect(() => {
+    if (!renamingDocumentId) return;
+    renameInputRef.current?.focus();
+    renameInputRef.current?.select();
+  }, [renamingDocumentId]);
+
+  useEffect(() => {
+    const grid = readerGridRef.current;
+    if (!grid) return undefined;
+
+    let animationFrame = 0;
+    const scheduleClamp = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(() => {
+        clampPdfSidebars(grid.clientWidth);
+      });
+    };
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleClamp);
+
+    scheduleClamp();
+    observer?.observe(grid);
+    window.addEventListener("resize", scheduleClamp);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      observer?.disconnect();
+      window.removeEventListener("resize", scheduleClamp);
+    };
+  }, [clampPdfSidebars]);
 
   useEffect(() => {
     pageParamRef.current = pageParam;
@@ -770,6 +1034,100 @@ export function PdfReader() {
     }
   }
 
+  function clearSelectedDocument() {
+    nextReaderActionId();
+    selectedIdRef.current = null;
+    setSelectedId(null);
+    setDetails(null);
+    setPage(null);
+    setPageNumber(null);
+    setPageInput("");
+    setSourceChunk(null);
+    setAskResult(null);
+    setAskError(null);
+    router.replace(pathname, { scroll: false });
+  }
+
+  function startRenameSelectedDocument() {
+    if (!selectedListDocument || busy || renameSaving) return;
+    setError(null);
+    setRenamingDocumentId(selectedListDocument.id);
+    setRenameValue(selectedListDocument.title || selectedListDocument.fileName);
+  }
+
+  function cancelRenameDocument() {
+    setRenamingDocumentId(null);
+    setRenameValue("");
+  }
+
+  async function handleRenameDocument(
+    event: FormEvent<HTMLFormElement>,
+    document: RagDocument,
+  ) {
+    event.preventDefault();
+    const name = renameValue.trim();
+    if (!name || renameSaving) return;
+
+    try {
+      setError(null);
+      setRenameSaving(true);
+      const data = await readJsonApi<{ document: RagDocument }>(
+        `/api/documents/${document.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        },
+      );
+      await loadDocuments();
+      if (selectedIdRef.current === document.id) {
+        setDetails((current) =>
+          current && current.document.id === document.id
+            ? { ...current, document: data.document }
+            : current,
+        );
+      }
+      setRenamingDocumentId(null);
+      setRenameValue("");
+    } catch (renameError) {
+      setError(renameError instanceof Error ? renameError.message : "Rename failed.");
+    } finally {
+      setRenameSaving(false);
+    }
+  }
+
+  async function handleDeleteSelectedDocument() {
+    const document = selectedListDocument;
+    if (!document || busy || deletingDocumentId) return;
+    const label = document.title || document.fileName;
+    if (!window.confirm(`Delete "${label}"? This cannot be undone.`)) return;
+
+    try {
+      setError(null);
+      setDeletingDocumentId(document.id);
+      const data = await readJsonApi<{ documents: RagDocument[] }>(
+        `/api/documents/${document.id}`,
+        { method: "DELETE" },
+      );
+      setDocuments(data.documents);
+      setRenamingDocumentId(null);
+      setRenameValue("");
+
+      if (selectedIdRef.current === document.id) {
+        const nextDocument = data.documents[0] ?? null;
+        if (nextDocument) {
+          await selectDocument(nextDocument.id, { updateUrl: true });
+        } else {
+          clearSelectedDocument();
+        }
+      }
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Delete failed.");
+    } finally {
+      setDeletingDocumentId(null);
+    }
+  }
+
   async function handleReindex() {
     if (!selectedId || indexing || parsing) return;
 
@@ -875,13 +1233,20 @@ export function PdfReader() {
     if (nextPage) goToPage(nextPage).catch(() => undefined);
   }
 
+  const toggleTocRoot = useCallback((sectionId: string) => {
+    setExpandedTocRootIds((current) => {
+      const next = new Set(current);
+      if (next.has(sectionId)) next.delete(sectionId);
+      else next.add(sectionId);
+      return next;
+    });
+  }, []);
+
   const sortedSections = useMemo(
-    () =>
-      [...(details?.sections ?? [])].sort(
-        (left, right) => left.pageStart - right.pageStart || left.level - right.level,
-      ),
-    [details],
+    () => sortSectionsForToc(details?.sections ?? []),
+    [details?.sections],
   );
+  const tocTree = useMemo(() => buildTocTree(sortedSections), [sortedSections]);
 
   const activeSectionId = useMemo(() => {
     if (!pageNumber) return null;
@@ -891,20 +1256,101 @@ export function PdfReader() {
     return activeSections.sort((left, right) => right.level - left.level)[0]?.id ?? null;
   }, [pageNumber, sortedSections]);
 
+  const activeChapterId = useMemo(
+    () => findTocRootId(tocTree, activeSectionId),
+    [activeSectionId, tocTree],
+  );
+  const tocRootIdsKey = useMemo(
+    () => tocTree.map((node) => node.section.id).join("|"),
+    [tocTree],
+  );
+  const defaultExpandedTocRootId = activeChapterId ?? tocTree[0]?.section.id ?? null;
+
+  useEffect(() => {
+    setExpandedTocRootIds(
+      defaultExpandedTocRootId ? new Set([defaultExpandedTocRootId]) : new Set(),
+    );
+  }, [defaultExpandedTocRootId, tocRootIdsKey]);
+
   const askDisabled =
     !selectedDocument ||
     !canAskPdf ||
     !askQuestion.trim() ||
     askLoading;
 
+  function renderTocChildNode(node: TocNode, depth = 0) {
+    const section = node.section;
+    const isActive = activeSectionId === section.id;
+
+    return (
+      <div key={section.id} className="space-y-1">
+        <button
+          type="button"
+          data-testid="toc-section-button"
+          data-section-id={section.id}
+          aria-current={isActive ? "location" : undefined}
+          onClick={() => goToPage(section.pageStart).catch(() => undefined)}
+          className={`w-full min-w-0 rounded-md py-1.5 pr-2 text-left text-xs font-bold leading-5 transition ${
+            isActive
+              ? "bg-[#e9f7f0] text-[#285d45]"
+              : "text-[#4f4659] hover:bg-white"
+          }`}
+          style={{ paddingLeft: `${Math.min(depth, 4) * 10 + 8}px` }}
+        >
+          <span className="block truncate">{section.title}</span>
+          <span className="text-[10px] font-black text-[#82758b]">
+            {pagesLabel(section.pageStart, section.pageEnd)}
+          </span>
+        </button>
+
+        {node.children.length > 0 && (
+          <div className="ml-3 border-l border-[#d7e5dc] pl-2">
+            {node.children.map((child) => renderTocChildNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <section
+      ref={readerGridRef}
       data-testid="pdf-reader"
-      className="grid min-h-[calc(100vh-92px)] w-full min-w-0 overflow-hidden rounded-lg border border-[#e2ddea] bg-white shadow-[0_18px_50px_rgba(55,47,68,0.12)] lg:grid-cols-[280px_minmax(0,1fr)_260px]"
+      style={pdfReaderGridStyle}
+      className="grid min-h-[calc(100vh-92px)] w-full min-w-0 overflow-hidden rounded-lg border border-[#e2ddea] bg-white shadow-[0_18px_50px_rgba(55,47,68,0.12)] lg:grid-cols-[var(--pdf-reader-grid-columns)] lg:items-start"
     >
-      <aside className="min-w-0 border-b border-[#e7e2ee] bg-[#fcfbfe] p-4 lg:border-b-0 lg:border-r">
+      <aside
+        data-testid="pdf-documents-sidebar"
+        className="min-w-0 border-b border-[#e7e2ee] bg-[#fcfbfe] p-4 lg:max-h-[calc(100vh-92px)] lg:overflow-hidden lg:border-b-0 lg:border-r"
+      >
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-sm font-black text-[#211a2e]">Documents</h2>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={startRenameSelectedDocument}
+              disabled={!selectedListDocument || busy || renameSaving}
+              aria-label="Rename selected PDF"
+              title="Rename selected PDF"
+              className="grid h-8 w-8 place-items-center rounded-md border border-[#e5dfec] bg-white text-[#5d4d72] transition hover:bg-[#f8f5fc] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDeleteSelectedDocument().catch(() => undefined)}
+              disabled={!selectedListDocument || busy || Boolean(deletingDocumentId)}
+              aria-label="Delete selected PDF"
+              title="Delete selected PDF"
+              className="grid h-8 w-8 place-items-center rounded-md border border-[#f1d8d6] bg-white text-[#9b4a43] transition hover:bg-[#fff4f2] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {deletingDocumentId ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Trash2 size={14} />
+              )}
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleUpload} className="space-y-3">
@@ -937,48 +1383,101 @@ export function PdfReader() {
           </button>
         </form>
 
-        <div className="mt-5 space-y-2">
+        <div className="mt-5 max-h-80 space-y-2 overflow-auto pr-1 lg:max-h-[calc(100vh-370px)]">
           {documents.map((document) => {
             const isSelected = selectedId === document.id;
+            const isRenaming = renamingDocumentId === document.id;
             return (
-              <button
+              <div
                 key={document.id}
-                type="button"
-                onClick={() =>
-                  selectDocument(document.id, { updateUrl: true }).catch(
-                    (loadError: unknown) => {
-                      setError(
-                        loadError instanceof Error
-                          ? loadError.message
-                          : "Load failed.",
-                      );
-                    },
-                  )
-                }
                 className={`group w-full min-w-0 rounded-md border px-3 py-3 text-left transition ${
                   isSelected
                     ? "border-[#d8f0e4] bg-[#effaf4]"
                     : "border-transparent bg-transparent hover:bg-white"
                 }`}
               >
-                <span className="flex items-start gap-2">
-                  <FileText
-                    size={16}
-                    className={`mt-0.5 shrink-0 ${isSelected ? "text-[#338962]" : "text-[#8a8293]"}`}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-black text-[#272131]">
-                      {document.title || document.fileName}
+                {isRenaming ? (
+                  <form
+                    onSubmit={(event) =>
+                      handleRenameDocument(event, document).catch(() => undefined)
+                    }
+                    className="flex min-w-0 items-start gap-2"
+                  >
+                    <FileText
+                      size={16}
+                      className="mt-2 shrink-0 text-[#338962]"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <input
+                        ref={renameInputRef}
+                        value={renameValue}
+                        onChange={(event) => setRenameValue(event.target.value)}
+                        disabled={renameSaving}
+                        aria-label="PDF name"
+                        className="h-8 w-full rounded-md border border-[#bba7dd] bg-white px-2 text-xs font-black text-[#272131] outline-none focus:ring-2 focus:ring-[#e4d9f5] disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                      <span className="mt-1 block text-[11px] font-bold text-[#7a7183]">
+                        {document.pageCount || "-"} pages
+                      </span>
                     </span>
-                    <span className="mt-1 block text-[11px] font-bold text-[#7a7183]">
-                      {document.pageCount || "-"} pages
+                    <span className="mt-0.5 flex shrink-0 items-center gap-1">
+                      <button
+                        type="submit"
+                        disabled={!renameValue.trim() || renameSaving}
+                        aria-label="Save PDF name"
+                        className="grid h-7 w-7 place-items-center rounded-md bg-[#2f8b63] text-white transition hover:bg-[#277854] disabled:cursor-not-allowed disabled:opacity-45"
+                      >
+                        {renameSaving ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : (
+                          <Check size={13} />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelRenameDocument}
+                        disabled={renameSaving}
+                        aria-label="Cancel rename"
+                        className="grid h-7 w-7 place-items-center rounded-md border border-[#e2dbea] bg-white text-[#6f627a] transition hover:bg-[#f8f5fc] disabled:cursor-not-allowed disabled:opacity-45"
+                      >
+                        <X size={13} />
+                      </button>
                     </span>
-                  </span>
-                  {isSelected && (
-                    <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[#30a66d]" />
-                  )}
-                </span>
-              </button>
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      selectDocument(document.id, { updateUrl: true }).catch(
+                        (loadError: unknown) => {
+                          setError(
+                            loadError instanceof Error
+                              ? loadError.message
+                              : "Load failed.",
+                          );
+                        },
+                      )
+                    }
+                    className="flex w-full min-w-0 items-start gap-2 text-left"
+                  >
+                    <FileText
+                      size={16}
+                      className={`mt-0.5 shrink-0 ${isSelected ? "text-[#338962]" : "text-[#8a8293]"}`}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-black text-[#272131]">
+                        {document.title || document.fileName}
+                      </span>
+                      <span className="mt-1 block text-[11px] font-bold text-[#7a7183]">
+                        {document.pageCount || "-"} pages
+                      </span>
+                    </span>
+                    {isSelected && (
+                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[#30a66d]" />
+                    )}
+                  </button>
+                )}
+              </div>
             );
           })}
           {documents.length === 0 && (
@@ -989,7 +1488,15 @@ export function PdfReader() {
         </div>
       </aside>
 
-      <main className="flex min-w-0 flex-col bg-white">
+      <WorkspaceResizeHandle
+        orientation="vertical"
+        variant="compact"
+        ariaLabel="Resize documents sidebar"
+        testId="resize-pdf-documents-sidebar"
+        onResizeStart={handleDocumentsSidebarResizeStart}
+      />
+
+      <main className="flex min-w-0 flex-col bg-white lg:min-h-[calc(100vh-92px)]">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-[#ebe6f2] px-4 py-3">
           <div className="min-w-[180px] flex-1">
             <h2 className="truncate text-sm font-black text-[#211a2e]">
@@ -1170,34 +1677,93 @@ export function PdfReader() {
         </div>
       </main>
 
-      <aside className="flex min-w-0 flex-col border-t border-[#e7e2ee] bg-[#fcfbfe] lg:border-l lg:border-t-0">
-        <div className="min-h-0 border-b border-[#e7e2ee] p-4 lg:flex-[0_1_48%]">
+      <WorkspaceResizeHandle
+        orientation="vertical"
+        variant="compact"
+        ariaLabel="Resize PDF tools sidebar"
+        testId="resize-pdf-tools-sidebar"
+        onResizeStart={handleToolsSidebarResizeStart}
+      />
+
+      <aside
+        data-testid="pdf-tools-sidebar"
+        className="flex min-w-0 flex-col border-t border-[#e7e2ee] bg-[#fcfbfe] lg:max-h-[calc(100vh-92px)] lg:overflow-hidden lg:border-l lg:border-t-0"
+      >
+        <div
+          data-testid="pdf-toc-section"
+          className="min-h-0 border-b border-[#e7e2ee] p-4"
+        >
           <h2 className="text-xs font-black text-[#211a2e]">TOC (Extracted)</h2>
-          <div className="mt-3 max-h-72 space-y-1 overflow-auto pr-1 lg:max-h-full">
-            {sortedSections.map((section) => {
+          <div
+            data-testid="pdf-toc-list"
+            className="mt-3 max-h-72 space-y-2 overflow-auto pr-1 lg:max-h-[360px]"
+          >
+            {tocTree.map((node) => {
+              const section = node.section;
               const isActive = activeSectionId === section.id;
+              const isActiveChapter = activeChapterId === section.id;
+              const isExpanded = expandedTocRootIds.has(section.id);
+              const hasChildren = node.children.length > 0;
+
               return (
-                <button
-                  key={section.id}
-                  type="button"
-                  data-testid="toc-section-button"
-                  aria-current={isActive ? "location" : undefined}
-                  onClick={() => goToPage(section.pageStart).catch(() => undefined)}
-                  className={`w-full min-w-0 rounded-md py-2 pr-2 text-left text-xs font-bold leading-5 transition ${
-                    isActive
-                      ? "bg-[#e9f7f0] text-[#285d45]"
-                      : "text-[#4f4659] hover:bg-white"
-                  }`}
-                  style={{ paddingLeft: `${Math.min(section.level, 4) * 10 + 8}px` }}
-                >
-                  <span className="block truncate">{section.title}</span>
-                  <span className="text-[10px] font-black text-[#82758b]">
-                    {pagesLabel(section.pageStart, section.pageEnd)}
-                  </span>
-                </button>
+                <div key={section.id} className="min-w-0">
+                  <div className="flex min-w-0 items-start gap-1">
+                    {hasChildren ? (
+                      <button
+                        type="button"
+                        data-testid="toc-section-toggle"
+                        data-section-id={section.id}
+                        aria-label={`${isExpanded ? "Collapse" : "Expand"} ${
+                          section.title
+                        }`}
+                        aria-expanded={isExpanded}
+                        aria-controls={`toc-children-${section.id}`}
+                        onClick={() => toggleTocRoot(section.id)}
+                        className="mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-md text-[#2f7654] transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[#d7f0e2]"
+                      >
+                        {isExpanded ? (
+                          <ChevronDown size={14} />
+                        ) : (
+                          <ChevronRight size={14} />
+                        )}
+                      </button>
+                    ) : (
+                      <span className="mt-1 h-6 w-6 shrink-0" />
+                    )}
+
+                    <button
+                      type="button"
+                      data-testid="toc-section-button"
+                      data-section-id={section.id}
+                      aria-current={isActive ? "location" : undefined}
+                      onClick={() => goToPage(section.pageStart).catch(() => undefined)}
+                      className={`min-h-9 min-w-0 flex-1 rounded-md px-2 py-2 text-left text-xs font-black leading-5 transition ${
+                        isActive
+                          ? "bg-[#e9f7f0] text-[#285d45]"
+                          : isActiveChapter
+                            ? "bg-[#f2fbf6] text-[#315f48]"
+                            : "text-[#211a2e] hover:bg-white"
+                      }`}
+                    >
+                      <span className="block truncate">{section.title}</span>
+                      <span className="text-[10px] font-black text-[#82758b]">
+                        {pagesLabel(section.pageStart, section.pageEnd)}
+                      </span>
+                    </button>
+                  </div>
+
+                  {hasChildren && isExpanded && (
+                    <div
+                      id={`toc-children-${section.id}`}
+                      className="ml-9 mt-1 space-y-1 border-l border-[#cfe0d6] pl-3"
+                    >
+                      {node.children.map((child) => renderTocChildNode(child))}
+                    </div>
+                  )}
+                </div>
               );
             })}
-            {sortedSections.length === 0 && (
+            {tocTree.length === 0 && (
               <p className="rounded-md bg-white px-3 py-4 text-sm font-bold text-[#76667f]">
                 No sections detected yet.
               </p>
@@ -1205,7 +1771,10 @@ export function PdfReader() {
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col p-4">
+        <div
+          data-testid="pdf-ask-section"
+          className="flex min-h-0 flex-col p-4"
+        >
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-xs font-black text-[#211a2e]">Ask PDF</h2>
             {sourceLoading && (
@@ -1262,7 +1831,7 @@ export function PdfReader() {
             </p>
           )}
 
-          <div className="mt-3 min-h-0 flex-1 overflow-auto pr-1">
+          <div className="mt-3 max-h-80 min-h-0 overflow-auto pr-1">
             {askResult && (
               <div data-testid="ask-pdf-answer" className="space-y-3">
                 <p className="whitespace-pre-wrap rounded-md bg-white p-3 text-xs font-bold leading-6 text-[#342d3d]">

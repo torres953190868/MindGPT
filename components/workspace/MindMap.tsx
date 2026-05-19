@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Background,
   Controls,
   ReactFlow,
   applyNodeChanges,
@@ -119,7 +118,7 @@ export function MindMap({
         aria-live="polite"
         aria-label="Mind map has no visible nodes"
         data-testid="mind-map-empty-state"
-        className="branchmind-grid grid h-full min-h-[360px] place-items-center rounded-[28px] text-sm font-black text-[#5c5065]"
+        className="branchmind-grid grid h-full min-h-[360px] place-items-center rounded-[28px] text-sm font-black text-[#5c5065] lg:rounded-none"
       >
         No visible nodes
       </div>
@@ -145,9 +144,8 @@ export function MindMap({
         fitView
         minZoom={0.25}
         maxZoom={1.7}
-        className="branchmind-grid h-full rounded-[28px]"
+        className="branchmind-grid h-full rounded-[28px] lg:rounded-none"
       >
-        <Background color="#d9cceb" gap={28} size={1} />
         <Controls className="!rounded-[18px] !border-white/80 !bg-white/80 !shadow-lg" />
       </ReactFlow>
     </div>

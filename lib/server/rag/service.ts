@@ -9,6 +9,27 @@ import { compactText } from "./text";
 const MAX_WORKSPACE_CONTEXT_DOCUMENTS = 3;
 const MAX_WORKSPACE_CONTEXT_SNIPPETS = 6;
 const MAX_WORKSPACE_SNIPPET_LENGTH = 1400;
+const PDF_EXTENSION_PATTERN = /\.pdf$/i;
+
+function normalizePdfName(name: string) {
+  const cleaned = name
+    .replace(/[\u0000-\u001f<>:"/\\|?*]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const title = cleaned.replace(PDF_EXTENSION_PATTERN, "").trim();
+
+  if (!title) {
+    throw new RagError("PDF name is required.", {
+      code: "DOCUMENT_NAME_REQUIRED",
+      status: 400,
+    });
+  }
+
+  return {
+    title,
+    fileName: `${title}.pdf`,
+  };
+}
 
 function isPdf(fileName: string, mimeType: string) {
   return (
@@ -74,6 +95,23 @@ export async function getDocumentDetailsForOwner(userId: string, documentId: str
     sections,
     chunkCount: chunks.length,
   };
+}
+
+export async function renameDocumentForOwner(
+  userId: string,
+  documentId: string,
+  name: string,
+) {
+  const repository = getRagRepository();
+  await requireOwnedDocument(userId, documentId);
+  return repository.renameDocument(documentId, normalizePdfName(name));
+}
+
+export async function deleteDocumentForOwner(userId: string, documentId: string) {
+  const repository = getRagRepository();
+  const document = await requireOwnedDocument(userId, documentId);
+  await repository.deleteDocument(document);
+  return repository.listDocuments(userId);
 }
 
 export async function getDocumentPageForOwner(

@@ -16,8 +16,6 @@ import {
 } from "lucide-react";
 import {
   type CSSProperties,
-  type MouseEvent,
-  type PointerEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -34,6 +32,11 @@ import type {
 import { MindMap } from "./MindMap";
 import { NodeDetailPanel } from "./NodeDetailPanel";
 import { ProjectNotesPanel } from "./ProjectNotesPanel";
+import {
+  getResizeInputMode,
+  type ResizeStartEvent,
+  WorkspaceResizeHandle,
+} from "./WorkspaceResizeHandle";
 import { WorkspaceSidebar } from "./WorkspaceSidebar";
 
 const SIDE_PANEL_MIN_WIDTH = 170;
@@ -120,16 +123,6 @@ type WorkspaceCanvasShellProps = {
   nodeDetailOptions?: NodeDetailOptions;
   projectNotesConfig?: ProjectNotesConfig;
 };
-
-type WorkspaceResizeHandleProps = {
-  orientation: "vertical" | "horizontal";
-  desktopBreakpoint?: "lg" | "xl";
-  ariaLabel: string;
-  testId: string;
-  onResizeStart: (event: ResizeStartEvent) => void;
-};
-
-type ResizeStartEvent = PointerEvent<HTMLButtonElement> | MouseEvent<HTMLButtonElement>;
 
 type SidePanelResizeBoundsOptions = {
   side: ResizableSide;
@@ -258,75 +251,6 @@ function getProjectNotesPanelResizeBounds({
   };
 }
 
-function getResizeInputMode(event: ResizeStartEvent) {
-  if (!("pointerId" in event)) return "mouse";
-
-  try {
-    event.currentTarget.setPointerCapture(event.pointerId);
-  } catch {
-    // Programmatic pointer events can be non-captureable.
-  }
-
-  return "pointer";
-}
-
-function WorkspaceResizeHandle({
-  orientation,
-  desktopBreakpoint = "lg",
-  ariaLabel,
-  testId,
-  onResizeStart,
-}: WorkspaceResizeHandleProps) {
-  const isVertical = orientation === "vertical";
-  const lastPointerStartAtRef = useRef(-Infinity);
-  const verticalClassName =
-    desktopBreakpoint === "xl"
-      ? "hidden cursor-col-resize xl:block"
-      : "hidden cursor-col-resize lg:block";
-
-  const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
-    lastPointerStartAtRef.current = event.timeStamp;
-    onResizeStart(event);
-  };
-
-  const handleMouseDown = (event: MouseEvent<HTMLButtonElement>) => {
-    if (event.timeStamp - lastPointerStartAtRef.current < 100) return;
-    onResizeStart(event);
-  };
-
-  return (
-    <div
-      className={`relative ${
-        isVertical ? `${verticalClassName} bg-[#fcfbfd]` : "h-6 cursor-row-resize lg:hidden"
-      }`}
-    >
-      {!isVertical && (
-        <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-[#e9e5f0]" />
-      )}
-      <button
-        type="button"
-        role="separator"
-        aria-label={ariaLabel}
-        aria-orientation={isVertical ? "vertical" : "horizontal"}
-        data-testid={testId}
-        onPointerDown={handlePointerDown}
-        onMouseDown={handleMouseDown}
-        className={`group absolute grid place-items-center border border-transparent bg-transparent transition hover:bg-[#f6f3fb] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40 ${
-          isVertical
-            ? "left-0 top-0 h-full w-full cursor-col-resize"
-            : "left-1/2 top-1/2 h-8 w-24 -translate-x-1/2 -translate-y-1/2 cursor-row-resize rounded-md"
-        }`}
-      >
-        <span
-          className={`rounded-full bg-[#9a83bf] opacity-0 transition group-hover:opacity-80 ${
-            isVertical ? "h-10 w-0.5" : "h-0.5 w-8"
-          }`}
-        />
-      </button>
-    </div>
-  );
-}
-
 type CanvasCornerToggleButtonProps = {
   side: "left" | "right";
   ariaLabel: string;
@@ -442,7 +366,7 @@ export function WorkspaceCanvasShell({
     "--mobile-map-height": `${mobileMapHeight}px`,
   } as CSSProperties;
   const workspaceGridClassName =
-    "grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden rounded-b-xl border border-t-0 border-[#e5e1ec] bg-white shadow-[0_18px_60px_rgba(44,35,62,0.08)] lg:h-full lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 xl:grid-cols-[var(--workspace-wide-grid-columns)]";
+    "grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden rounded-b-xl border border-t-0 border-[#e5e1ec] bg-white shadow-[0_18px_60px_rgba(44,35,62,0.08)] lg:h-full lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:shadow-none xl:grid-cols-[var(--workspace-wide-grid-columns)]";
   const mobileTabsClassName = hasProjectNotes
     ? "grid grid-cols-4 gap-2 rounded-[24px] border border-white/80 bg-white/68 p-2 shadow-sm lg:hidden"
     : "grid grid-cols-3 gap-2 rounded-[24px] border border-white/80 bg-white/68 p-2 shadow-sm lg:hidden";
@@ -850,12 +774,12 @@ export function WorkspaceCanvasShell({
       aria-labelledby="workspace-title"
       data-testid="workspace-shell"
       data-draft-workspace={dataDraftWorkspace ? "true" : undefined}
-      className="branchmind-workspace-surface flex min-h-screen flex-col p-3 text-[#272033] lg:h-screen lg:min-h-[720px] lg:overflow-hidden lg:p-4"
+      className="branchmind-workspace-surface flex min-h-screen flex-col bg-[#fbfafc] p-3 text-[#272033] lg:h-screen lg:min-h-[720px] lg:overflow-hidden lg:p-0"
     >
       <header
         aria-label="Workspace header"
         data-testid="workspace-header"
-        className="flex min-h-14 flex-wrap items-center justify-between gap-3 rounded-t-xl border border-[#e5e1ec] bg-white/92 px-4 py-2 shadow-[0_10px_35px_rgba(44,35,62,0.06)] backdrop-blur lg:flex-nowrap lg:px-5"
+        className="flex min-h-14 flex-wrap items-center justify-between gap-3 rounded-t-xl border border-[#e5e1ec] bg-white/92 px-4 py-2 shadow-[0_10px_35px_rgba(44,35,62,0.06)] backdrop-blur lg:flex-nowrap lg:rounded-none lg:border-x-0 lg:border-t-0 lg:px-5 lg:shadow-none"
       >
         <div className="flex min-w-0 items-center gap-4">
           <div className="flex shrink-0 items-center gap-2 border-r border-[#e7e3ed] pr-4">

@@ -219,6 +219,12 @@ async function getElementWidth(locator: Locator) {
   return locator.evaluate((element) => element.getBoundingClientRect().width);
 }
 
+async function getElementBox(locator: Locator, label: string) {
+  const box = await locator.boundingBox();
+  if (!box) throw new Error(`Expected ${label} to be measurable.`);
+  return box;
+}
+
 async function dragResizeHandle(page: Page, handle: Locator, deltaX: number) {
   const handleBox = await handle.boundingBox();
   if (!handleBox) throw new Error("Expected resize handle to be measurable.");
@@ -905,6 +911,24 @@ test("reader opens an owned PDF at a source chunk URL", async ({ page }, testInf
             pageEnd: 2,
             source: "regex",
           },
+          {
+            id: "section-reader-e2e-2-evidence",
+            title: "Evidence",
+            headingPath: ["Chapter 2", "Evidence"],
+            level: 2,
+            pageStart: 2,
+            pageEnd: 2,
+            source: "regex",
+          },
+          ...Array.from({ length: 18 }, (_, index) => ({
+            id: `section-reader-e2e-extra-${index + 1}`,
+            title: `Appendix ${index + 1}`,
+            headingPath: [`Appendix ${index + 1}`],
+            level: 1,
+            pageStart: 3,
+            pageEnd: 3,
+            source: "regex",
+          })),
         ],
         chunkCount: chunks.length,
       }),
@@ -980,6 +1004,7 @@ test("reader opens an owned PDF at a source chunk URL", async ({ page }, testInf
     });
   });
 
+  await page.setViewportSize({ width: 1210, height: 768 });
   await page.goto("/reader?document=doc-reader-e2e&page=2&chunk=chunk-reader-e2e");
 
   const canvas = page.getByTestId("pdf-page-canvas");
@@ -992,9 +1017,69 @@ test("reader opens an owned PDF at a source chunk URL", async ({ page }, testInf
   );
   await expect(page.getByLabel("Page number")).toHaveValue("2");
   expect(documentDetailsRequests).toBe(1);
-  await expect(
-    page.getByTestId("toc-section-button").filter({ hasText: "Chapter 2" }),
-  ).toHaveAttribute("aria-current", "location");
+
+  const readerBox = await getElementBox(page.getByTestId("pdf-reader"), "PDF reader");
+  const documentsSidebarBox = await getElementBox(
+    page.getByTestId("pdf-documents-sidebar"),
+    "PDF documents sidebar",
+  );
+  const toolsSidebarBox = await getElementBox(
+    page.getByTestId("pdf-tools-sidebar"),
+    "PDF tools sidebar",
+  );
+  const documentsHandleBox = await getElementBox(
+    page.getByTestId("resize-pdf-documents-sidebar"),
+    "PDF documents resize handle",
+  );
+  const toolsHandleBox = await getElementBox(
+    page.getByTestId("resize-pdf-tools-sidebar"),
+    "PDF tools resize handle",
+  );
+  const tocSectionBox = await getElementBox(
+    page.getByTestId("pdf-toc-section"),
+    "PDF TOC section",
+  );
+  const askSectionBox = await getElementBox(
+    page.getByTestId("pdf-ask-section"),
+    "Ask PDF section",
+  );
+
+  expect(documentsSidebarBox.height).toBeLessThan(readerBox.height * 0.65);
+  expect(toolsSidebarBox.height).toBeLessThan(readerBox.height * 0.95);
+  expect(documentsHandleBox.height).toBeGreaterThan(96);
+  expect(documentsHandleBox.height).toBeLessThan(readerBox.height * 0.35);
+  expect(toolsHandleBox.height).toBeGreaterThan(96);
+  expect(toolsHandleBox.height).toBeLessThan(readerBox.height * 0.35);
+  expect(Math.abs(tocSectionBox.y + tocSectionBox.height - askSectionBox.y)).toBeLessThanOrEqual(
+    1,
+  );
+  await expect
+    .poll(() =>
+      page
+        .getByTestId("pdf-toc-list")
+        .evaluate((element) => element.scrollHeight > element.clientHeight),
+    )
+    .toBe(true);
+
+  const chapter2Toggle = page.locator(
+    '[data-testid="toc-section-toggle"][data-section-id="section-reader-e2e-2"]',
+  );
+  const evidenceButton = page.locator(
+    '[data-testid="toc-section-button"][data-section-id="section-reader-e2e-2-evidence"]',
+  );
+  await expect(chapter2Toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(evidenceButton).toBeVisible();
+  await expect(evidenceButton).toHaveAttribute("aria-current", "location");
+
+  await chapter2Toggle.click();
+  await expect(chapter2Toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(evidenceButton).toHaveCount(0);
+  await chapter2Toggle.click();
+  await expect(evidenceButton).toBeVisible();
+  await evidenceButton.click();
+  await expect(page).toHaveURL(/document=doc-reader-e2e.*page=2/);
+  await expect(page).not.toHaveURL(/chunk=chunk-reader-e2e/);
+  await expect(page.getByLabel("Page number")).toHaveValue("2");
 
   await page.getByTestId("toc-section-button").filter({ hasText: "Chapter 1" }).click();
   await expect(page).toHaveURL(/document=doc-reader-e2e.*page=1/);

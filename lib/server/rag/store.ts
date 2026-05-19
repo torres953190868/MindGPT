@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createId } from "@/lib/ids";
 import {
@@ -49,6 +49,11 @@ export type RagRepository = {
   createUploadedDocument: (upload: RagUpload) => Promise<RagDocument>;
   listDocuments: (userId: string) => Promise<RagDocument[]>;
   getDocument: (userId: string, documentId: string) => Promise<RagDocument | null>;
+  renameDocument: (
+    documentId: string,
+    update: Pick<RagDocument, "fileName" | "title">,
+  ) => Promise<RagDocument>;
+  deleteDocument: (document: RagDocument) => Promise<void>;
   readDocumentFile: (document: RagDocument) => Promise<Uint8Array | null>;
   setDocumentStatus: (
     documentId: string,
@@ -364,6 +369,18 @@ function requireFilePath(document: RagDocument) {
   return document.storagePath;
 }
 
+async function deleteDocumentFile(document: RagDocument) {
+  const filePath = requireFilePath(document);
+  if (!filePath) return;
+
+  try {
+    await unlink(filePath);
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") return;
+    throw error;
+  }
+}
+
 class FileRagRepository implements RagRepository {
   backend: RagBackend = "file";
 
@@ -417,6 +434,39 @@ class FileRagRepository implements RagRepository {
         (document) => document.id === documentId && document.userId === userId,
       ) ?? null;
     return document ? normalizeDocument(document) : null;
+  }
+
+  async renameDocument(
+    documentId: string,
+    update: Pick<RagDocument, "fileName" | "title">,
+  ) {
+    return enqueueWrite(async () => {
+      const data = await readDataFile();
+      const index = data.documents.findIndex((document) => document.id === documentId);
+      if (index < 0) notFound();
+
+      const document = normalizeDocument({
+        ...data.documents[index],
+        fileName: update.fileName,
+        title: update.title,
+        updatedAt: now(),
+      });
+      data.documents[index] = document;
+      await writeDataFile(data);
+      return document;
+    });
+  }
+
+  async deleteDocument(document: RagDocument) {
+    await enqueueWrite(async () => {
+      const data = await readDataFile();
+      data.documents = data.documents.filter((item) => item.id !== document.id);
+      data.pages = data.pages.filter((page) => page.documentId !== document.id);
+      data.sections = data.sections.filter((section) => section.documentId !== document.id);
+      data.chunks = data.chunks.filter((chunk) => chunk.documentId !== document.id);
+      await writeDataFile(data);
+    });
+    await deleteDocumentFile(document);
   }
 
   async readDocumentFile(document: RagDocument) {
@@ -622,6 +672,33 @@ class SupabaseRagRepository implements RagRepository {
       .maybeSingle();
     assertNoError(error, "read document");
     return data ? toDocument(data) : null;
+  }
+
+  async renameDocument(
+    documentId: string,
+    update: Pick<RagDocument, "fileName" | "title">,
+  ) {
+    const { data, error } = await getSupabaseAdminClient()
+      .from("documents")
+      .update({
+        file_name: update.fileName,
+        title: update.title,
+        updated_at: now(),
+      })
+      .eq("id", documentId)
+      .select("*")
+      .single();
+    assertNoError(error, "rename document");
+    return toDocument(requireRow(data, "rename document"));
+  }
+
+  async deleteDocument(document: RagDocument) {
+    const { error } = await getSupabaseAdminClient()
+      .from("documents")
+      .delete()
+      .eq("id", document.id);
+    assertNoError(error, "delete document");
+    await deleteDocumentFile(document);
   }
 
   async readDocumentFile(document: RagDocument) {
