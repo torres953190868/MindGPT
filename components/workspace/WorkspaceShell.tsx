@@ -1022,7 +1022,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
         {!isWorkspaceSidebarCollapsed && (
           <div className={mobileWorkspaceView === "outline" ? "contents" : "hidden lg:contents"}>
             <WorkspaceSidebar
-              footer={<AuthPanel placement="top" className="w-full" />}
+              footer={<AuthPanel placement="top" variant="sidebar" className="w-full" />}
               project={project}
               selectedNodeId={selectedNodeId}
               onSelectNode={handleSelectNodeFromOutline}
