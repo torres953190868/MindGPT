@@ -44,6 +44,7 @@ export function createRootProject(
     projectId,
     parentId: null,
     title: reply.title,
+    titleManuallyEdited: false,
     summary: reply.summary,
     messages: [
       makeMessage("user", topic, attachments),
@@ -81,6 +82,7 @@ export function createPendingRootProject(
     projectId,
     parentId: null,
     title: PENDING_ROOT_TITLE,
+    titleManuallyEdited: false,
     summary: PENDING_ROOT_SUMMARY,
     messages: [makeMessage("user", topic, attachments), assistantMessage],
     children: [],
@@ -124,6 +126,7 @@ export function addChildNode(
     projectId: project.id,
     parentId,
     title: reply.title,
+    titleManuallyEdited: false,
     summary: reply.summary,
     messages: [
       makeMessage("user", instruction, attachments),
@@ -209,23 +212,53 @@ export function regenerateNode(
   });
   const nextNode = {
     ...node,
-    title: update.reply.title,
+    title: node.titleManuallyEdited ? node.title : update.reply.title,
     summary: update.reply.summary,
     messages: nextMessages,
     updatedAt: timestamp,
   };
+  const nextProjectTitle =
+    nodeId === project.rootNodeId && nextNode.titleManuallyEdited
+      ? nextNode.title
+      : instruction && nodeId === project.rootNodeId
+        ? instruction
+        : project.title;
 
   return {
     node: nextNode,
     project: {
       ...project,
-      title: instruction && nodeId === project.rootNodeId ? instruction : project.title,
+      title: nextProjectTitle,
       nodes: {
         ...project.nodes,
         [nodeId]: nextNode,
       },
       updatedAt: timestamp,
     },
+  };
+}
+
+export function updateNodeTitle(project: Project, nodeId: string, title: string) {
+  const node = project.nodes[nodeId];
+  const nextTitle = title.trim();
+  if (!node || !nextTitle) return null;
+
+  const timestamp = now();
+  const nextNode: MindNode = {
+    ...node,
+    title: nextTitle,
+    titleManuallyEdited: true,
+    updatedAt: timestamp,
+  };
+
+  return {
+    ...project,
+    title: nodeId === project.rootNodeId ? nextTitle : project.title,
+    nodes: {
+      ...project.nodes,
+      [nodeId]: nextNode,
+    },
+    updatedAt: timestamp,
   };
 }
 

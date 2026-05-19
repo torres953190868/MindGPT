@@ -41,6 +41,7 @@ const mindNodeSchema = z.object({
   projectId: z.string().trim().min(1).max(160),
   parentId: z.string().trim().min(1).max(160).nullable(),
   title: z.string().trim().min(1).max(600),
+  titleManuallyEdited: z.boolean().optional().default(false),
   summary: z.string().max(2_000),
   messages: z.array(chatMessageSchema).max(80),
   children: z.array(z.string().trim().min(1).max(160)).max(200),

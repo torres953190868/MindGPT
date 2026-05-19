@@ -63,6 +63,24 @@ function isProject(value: unknown): value is Project {
   );
 }
 
+function normalizeProject(project: Project): Project {
+  return {
+    ...project,
+    nodes: Object.fromEntries(
+      Object.entries(project.nodes).map(([nodeId, node]) => [
+        nodeId,
+        {
+          ...node,
+          titleManuallyEdited:
+            typeof (node as { titleManuallyEdited?: unknown }).titleManuallyEdited === "boolean"
+              ? node.titleManuallyEdited
+              : false,
+        },
+      ]),
+    ),
+  };
+}
+
 function isPendingProjectSyncRecord(value: unknown): value is PendingProjectSyncRecord {
   return (
     isRecord(value) &&
@@ -99,6 +117,7 @@ export function createPendingProjectSyncRecord(
     projectId,
     parentId: null,
     title: PENDING_ROOT_TITLE,
+    titleManuallyEdited: false,
     summary: PENDING_ROOT_SUMMARY,
     messages: [makeMessage("user", topic, attachments), assistantMessage],
     children: [],
@@ -137,7 +156,10 @@ export function readPendingProjectSyncRecords() {
   try {
     const parsed = JSON.parse(raw) as StoredPendingProjectSync;
     return Array.isArray(parsed.records)
-      ? parsed.records.filter(isPendingProjectSyncRecord)
+      ? parsed.records.filter(isPendingProjectSyncRecord).map((record) => ({
+          ...record,
+          project: normalizeProject(record.project),
+        }))
       : [];
   } catch {
     return [];

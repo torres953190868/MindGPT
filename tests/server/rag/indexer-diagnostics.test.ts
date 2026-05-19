@@ -107,6 +107,8 @@ describe("indexDocumentForOwner diagnostics", () => {
     mocks.parsePdf.mockReset();
     Object.values(mocks.repository).forEach((mock) => mock.mockReset());
 
+    mocks.repository.getPages.mockResolvedValue([]);
+    mocks.repository.getSections.mockResolvedValue([]);
     mocks.repository.readDocumentFile.mockResolvedValue(new Uint8Array([1, 2, 3]));
     mocks.repository.saveParsedDocument.mockResolvedValue({
       document: { ...document, pageCount: 1, status: "parsed" },
@@ -121,6 +123,25 @@ describe("indexDocumentForOwner diagnostics", () => {
         status,
       }),
     );
+  });
+
+  it("parses uploaded PDFs without requesting embeddings", async () => {
+    mocks.parsePdf.mockResolvedValue(parsed);
+    const { parseDocumentForOwner } = await import("@/lib/server/rag/indexer");
+
+    await expect(
+      parseDocumentForOwner("user_diagnostics", document.id, {
+        requestId: "req_parse_success",
+      }),
+    ).resolves.toMatchObject({
+      document: { status: "parsed" },
+      pageCount: 1,
+      sectionCount: 1,
+    });
+
+    expect(mocks.parsePdf).toHaveBeenCalledTimes(1);
+    expect(mocks.getEmbeddingProvider).not.toHaveBeenCalled();
+    expect(mocks.repository.replaceChunks).not.toHaveBeenCalled();
   });
 
   it("writes parsing diagnostics for text-empty PDFs", async () => {
@@ -183,6 +204,29 @@ describe("indexDocumentForOwner diagnostics", () => {
         upstreamStatus: 429,
       },
     });
+  });
+
+  it("reuses parsed pages and sections when indexing an already parsed PDF", async () => {
+    mocks.repository.getPages.mockResolvedValue([page]);
+    mocks.repository.getSections.mockResolvedValue([section]);
+    mocks.getEmbeddingProvider.mockReturnValue({
+      model: "mock-embedding-v1",
+      embedTexts: vi.fn(async (texts: string[]) => texts.map(() => [0.1])),
+    });
+    const { indexDocumentForOwner } = await import("@/lib/server/rag/indexer");
+
+    await expect(
+      indexDocumentForOwner("user_diagnostics", document.id, {
+        requestId: "req_reuse_parsed",
+      }),
+    ).resolves.toMatchObject({
+      document: { status: "indexed" },
+      embeddingModel: "mock-embedding-v1",
+    });
+
+    expect(mocks.parsePdf).not.toHaveBeenCalled();
+    expect(mocks.repository.saveParsedDocument).not.toHaveBeenCalled();
+    expect(mocks.repository.replaceChunks).toHaveBeenCalled();
   });
 
   it("clears diagnostics on successful indexing", async () => {

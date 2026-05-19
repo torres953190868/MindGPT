@@ -31,10 +31,8 @@ import {
   Star,
   Trash2,
   Upload,
-  X,
 } from "lucide-react";
 import { AuthPanel } from "@/components/AuthPanel";
-import { ProjectLauncher } from "@/components/ProjectLauncher";
 import { downloadProjectJson, importProjectJsonFile } from "@/lib/project-export";
 import { useBranchMindStore } from "@/store/useBranchMindStore";
 
@@ -65,8 +63,13 @@ export function ProjectCardList() {
   const [importError, setImportError] = useState<string | null>(null);
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [projectPendingDeletion, setProjectPendingDeletion] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const deleteCancelButtonRef = useRef<HTMLButtonElement>(null);
   const hydrate = useBranchMindStore((state) => state.hydrate);
   const hydrated = useBranchMindStore((state) => state.hydrated);
   const projects = useBranchMindStore((state) => state.projects);
@@ -97,15 +100,18 @@ export function ProjectCardList() {
   }, [hydrate]);
 
   useEffect(() => {
-    if (!isCreateOpen) return;
+    if (!projectPendingDeletion) return;
 
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setIsCreateOpen(false);
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !isDeletingProject) {
+        setProjectPendingDeletion(null);
+      }
     }
 
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
-  }, [isCreateOpen]);
+    deleteCancelButtonRef.current?.focus();
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isDeletingProject, projectPendingDeletion]);
 
   const visibleProjects = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -117,13 +123,29 @@ export function ProjectCardList() {
     importInputRef.current?.click();
   }
 
-  function handleDeleteProject(projectId: string, projectTitle: string) {
-    const confirmed = window.confirm(
-      `Delete "${projectTitle}"?\n\nThis permanently removes the project from BranchMind. Export JSON first if you need a copy.`,
-    );
+  function closeDeleteDialog() {
+    if (isDeletingProject) return;
+    setProjectPendingDeletion(null);
+  }
 
-    if (confirmed) {
-      void deleteProject(projectId);
+  function handleDeleteProject(
+    event: ReactMouseEvent<HTMLButtonElement>,
+    projectId: string,
+    projectTitle: string,
+  ) {
+    event.stopPropagation();
+    setProjectPendingDeletion({ id: projectId, title: projectTitle });
+  }
+
+  async function confirmDeleteProject() {
+    if (!projectPendingDeletion || isDeletingProject) return;
+
+    setIsDeletingProject(true);
+    try {
+      await deleteProject(projectPendingDeletion.id);
+      setProjectPendingDeletion(null);
+    } finally {
+      setIsDeletingProject(false);
     }
   }
 
@@ -131,12 +153,16 @@ export function ProjectCardList() {
     router.push(`/workspace/${projectId}`);
   }
 
+  function openNewProjectDraft() {
+    router.push("/");
+  }
+
   function handleProjectRowClick(
     event: ReactMouseEvent<HTMLTableRowElement>,
     projectId: string,
   ) {
     if (
-      event.target instanceof HTMLElement &&
+      event.target instanceof Element &&
       event.target.closest("[data-project-row-action='true']")
     ) {
       return;
@@ -151,7 +177,7 @@ export function ProjectCardList() {
   ) {
     if (event.key !== "Enter") return;
     if (
-      event.target instanceof HTMLElement &&
+      event.target instanceof Element &&
       event.target.closest("[data-project-row-action='true']")
     ) {
       return;
@@ -209,6 +235,68 @@ export function ProjectCardList() {
       aria-labelledby="projects-title"
       data-testid="project-card-list"
     >
+      {projectPendingDeletion && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-[#241d30]/45 px-4 py-6 backdrop-blur-sm"
+          data-testid="delete-project-dialog-backdrop"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) closeDeleteDialog();
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-project-dialog-title"
+            aria-describedby="delete-project-dialog-description"
+            data-testid="delete-project-dialog"
+            className="w-full max-w-md rounded-xl border border-[#f0d3d1] bg-white p-5 text-left shadow-[0_24px_80px_rgba(47,39,67,0.24)]"
+          >
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-[#fff0ef] text-[#9a413d]">
+                <Trash2 size={19} />
+              </span>
+              <div className="min-w-0">
+                <h2
+                  id="delete-project-dialog-title"
+                  className="text-lg font-extrabold text-[#251e2f]"
+                >
+                  Delete project?
+                </h2>
+                <p
+                  id="delete-project-dialog-description"
+                  className="mt-2 text-sm font-semibold leading-6 text-[#645a70]"
+                >
+                  This permanently removes &quot;{projectPendingDeletion.title}&quot;
+                  from BranchMind. Export JSON first if you need a copy.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                ref={deleteCancelButtonRef}
+                type="button"
+                onClick={closeDeleteDialog}
+                disabled={isDeletingProject}
+                data-testid="cancel-delete-project-button"
+                className="inline-flex min-h-10 items-center justify-center rounded-md border border-[#e2dde9] bg-white px-4 text-sm font-extrabold text-[#544a60] transition hover:bg-[#f7f5fa] focus:outline-none focus:ring-2 focus:ring-[#d9caef] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteProject}
+                disabled={isDeletingProject}
+                data-testid="confirm-delete-project-button"
+                className="inline-flex min-h-10 items-center justify-center rounded-md bg-[#9a413d] px-4 text-sm font-extrabold text-white transition hover:bg-[#833531] focus:outline-none focus:ring-2 focus:ring-[#ffd1cf] disabled:cursor-not-allowed disabled:opacity-65"
+              >
+                {isDeletingProject ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       <input
         ref={importInputRef}
         type="file"
@@ -347,7 +435,7 @@ export function ProjectCardList() {
 
           <button
             type="button"
-            onClick={() => setIsCreateOpen(true)}
+            onClick={openNewProjectDraft}
             data-testid="open-create-project-dialog-button"
             className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-[#8a6bc4] px-4 text-sm font-extrabold text-white shadow-sm shadow-[#d5c5f0]/70 transition hover:bg-[#795bb4] focus:outline-none focus:ring-4 focus:ring-[#e5d8f8]"
           >
@@ -551,7 +639,9 @@ export function ProjectCardList() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleDeleteProject(project.id, project.title)}
+                                onClick={(event) =>
+                                  handleDeleteProject(event, project.id, project.title)
+                                }
                                 aria-label={`Delete ${project.title}`}
                                 data-project-row-action="true"
                                 data-project-id={project.id}
@@ -584,51 +674,6 @@ export function ProjectCardList() {
           )}
         </div>
       </div>
-
-      {isCreateOpen && (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-[#201a2d]/20 p-4 backdrop-blur-sm"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setIsCreateOpen(false);
-          }}
-        >
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="new-project-dialog-title"
-            className="w-full max-w-xl overflow-hidden rounded-xl border border-[#e5e1ec] bg-white shadow-[0_24px_80px_rgba(47,39,67,0.2)]"
-          >
-            <header className="flex items-center justify-between gap-3 border-b border-[#ebe7f1] px-4 py-3">
-              <div>
-                <h2
-                  id="new-project-dialog-title"
-                  className="text-base font-extrabold text-[#201a2d]"
-                >
-                  New Project
-                </h2>
-                <p className="mt-0.5 text-xs font-semibold text-[#756b80]">
-                  Start with a research question.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCreateOpen(false)}
-                aria-label="Close new project dialog"
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-[#5f556b] transition hover:bg-[#f5f2f8] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40"
-              >
-                <X size={17} />
-              </button>
-            </header>
-            <div
-              aria-label="Create project"
-              data-testid="create-project-section"
-              className="p-4"
-            >
-              <ProjectLauncher compact />
-            </div>
-          </section>
-        </div>
-      )}
     </section>
   );
 }

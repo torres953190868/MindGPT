@@ -178,7 +178,7 @@ export function WorkspaceSidebar({
     <aside
       aria-label="Workspace sidebar"
       data-testid="workspace-sidebar"
-      className="flex min-h-[220px] w-full flex-col gap-3 rounded-lg border border-[#e5e1ec] bg-white p-3 shadow-sm lg:min-h-0 lg:rounded-none lg:border-0 lg:border-r lg:shadow-none"
+      className="flex min-h-[220px] w-full flex-col gap-3 rounded-lg border border-[#e5e1ec] bg-white p-3 shadow-sm lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none"
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">

@@ -4,6 +4,7 @@ import type { ChatAttachment, Project } from "@/lib/types";
 const readProjectsMock = vi.hoisted(() => vi.fn());
 const readProjectsForSessionMock = vi.hoisted(() => vi.fn());
 const deleteProjectMock = vi.hoisted(() => vi.fn());
+const saveProjectMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/server/projects-repository", async (importOriginal) => {
   const actual =
@@ -15,6 +16,7 @@ vi.mock("@/lib/server/projects-repository", async (importOriginal) => {
       readProjects: readProjectsMock,
       readProjectsForSession: readProjectsForSessionMock,
       deleteProject: deleteProjectMock,
+      saveProject: saveProjectMock,
     })),
   };
 });
@@ -22,6 +24,8 @@ vi.mock("@/lib/server/projects-repository", async (importOriginal) => {
 import {
   deleteProjectForOwner,
   prepareRegenerateNodeContext,
+  syncProjectForOwner,
+  updateNodeForOwner,
 } from "@/lib/server/projects-service";
 
 const attachmentA: ChatAttachment = {
@@ -59,6 +63,7 @@ function makeProject(): Project {
         projectId: "project_regenerate",
         parentId: null,
         title: "Regenerate node",
+        titleManuallyEdited: false,
         summary: "Regenerate summary",
         messages: [
           {
@@ -103,14 +108,61 @@ function makeProject(): Project {
   };
 }
 
+function makeSyncProject(): Project {
+  const timestamp = "2026-01-01T00:00:00.000Z";
+
+  return {
+    id: "project_sync",
+    title: "Sync project",
+    notes: "",
+    rootNodeId: "node_sync_root",
+    nodes: {
+      node_sync_root: {
+        id: "node_sync_root",
+        projectId: "project_sync",
+        parentId: null,
+        title: "Sync root",
+        titleManuallyEdited: false,
+        summary: "Sync summary",
+        messages: [
+          {
+            id: "user_sync",
+            role: "user",
+            content: "Sync prompt",
+            attachments: [],
+            createdAt: timestamp,
+          },
+          {
+            id: "assistant_sync",
+            role: "assistant",
+            content: "",
+            attachments: [],
+            createdAt: timestamp,
+          },
+        ],
+        children: [],
+        position: { x: 0, y: 0 },
+        branchType: "root",
+        collapsed: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
 describe("prepareRegenerateNodeContext", () => {
   beforeEach(() => {
     readProjectsMock.mockReset();
     readProjectsForSessionMock.mockReset();
     deleteProjectMock.mockReset();
+    saveProjectMock.mockReset();
     readProjectsMock.mockResolvedValue([makeProject()]);
     readProjectsForSessionMock.mockResolvedValue([]);
     deleteProjectMock.mockResolvedValue(undefined);
+    saveProjectMock.mockResolvedValue(undefined);
   });
 
   it("keeps the edited user message attachments for regenerate RAG", async () => {
@@ -148,8 +200,10 @@ describe("deleteProjectForOwner", () => {
     readProjectsMock.mockReset();
     readProjectsForSessionMock.mockReset();
     deleteProjectMock.mockReset();
+    saveProjectMock.mockReset();
     readProjectsForSessionMock.mockResolvedValue([]);
     deleteProjectMock.mockResolvedValue(undefined);
+    saveProjectMock.mockResolvedValue(undefined);
   });
 
   it("deletes owned projects and returns the refreshed owner list", async () => {
@@ -172,5 +226,62 @@ describe("deleteProjectForOwner", () => {
 
     expect(deleteProjectMock).not.toHaveBeenCalled();
     expect(readProjectsForSessionMock).toHaveBeenCalledWith("owner_regenerate");
+  });
+});
+
+describe("updateNodeForOwner", () => {
+  beforeEach(() => {
+    readProjectsMock.mockReset();
+    readProjectsForSessionMock.mockReset();
+    deleteProjectMock.mockReset();
+    saveProjectMock.mockReset();
+    readProjectsMock.mockResolvedValue([makeProject()]);
+    saveProjectMock.mockResolvedValue(undefined);
+  });
+
+  it("manually updates root node titles and syncs the project title", async () => {
+    const result = await updateNodeForOwner(
+      "owner_regenerate",
+      "project_regenerate",
+      "node_regenerate",
+      { title: "  Manual root title  " },
+    );
+
+    expect(result.title).toBe("Manual root title");
+    expect(result.nodes.node_regenerate).toMatchObject({
+      title: "Manual root title",
+      titleManuallyEdited: true,
+    });
+    expect(saveProjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerSessionId: "owner_regenerate",
+        title: "Manual root title",
+      }),
+    );
+  });
+});
+
+describe("syncProjectForOwner", () => {
+  beforeEach(() => {
+    readProjectsMock.mockReset();
+    readProjectsForSessionMock.mockReset();
+    deleteProjectMock.mockReset();
+    saveProjectMock.mockReset();
+    readProjectsMock.mockResolvedValue([]);
+    saveProjectMock.mockResolvedValue(undefined);
+  });
+
+  it("rejects synced projects when node messages are missing", async () => {
+    const project = makeSyncProject();
+    project.nodes[project.rootNodeId].messages = [];
+
+    await expect(
+      syncProjectForOwner("owner_sync", project.id, project),
+    ).rejects.toMatchObject({
+      code: "PROJECT_NODE_MESSAGES_MISSING",
+      status: 400,
+    });
+
+    expect(saveProjectMock).not.toHaveBeenCalled();
   });
 });

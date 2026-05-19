@@ -10,6 +10,7 @@ import {
   removeNode,
   setNodeCollapsed,
   setProjectNotes,
+  updateNodeTitle,
   updateNodePosition,
 } from "@/lib/server/project-model";
 import type { MockReply } from "@/lib/types";
@@ -55,6 +56,7 @@ describe("project model helpers", () => {
       projectId: project.id,
       parentId: null,
       title: "Root concept",
+      titleManuallyEdited: false,
       position: { x: 120, y: 120 },
       branchType: "root",
       collapsed: false,
@@ -109,6 +111,7 @@ describe("project model helpers", () => {
       projectId: result.project.id,
       parentId: null,
       title: PENDING_ROOT_TITLE,
+      titleManuallyEdited: false,
       summary: PENDING_ROOT_SUMMARY,
       branchType: "root",
       collapsed: false,
@@ -132,6 +135,7 @@ describe("project model helpers", () => {
     const continued = addChildNode(project, rootId, "continue", "Next", childReply);
     expect(continued?.node).toMatchObject({
       parentId: rootId,
+      titleManuallyEdited: false,
       position: { x: 120, y: 410 },
       branchType: "continue",
     });
@@ -145,6 +149,7 @@ describe("project model helpers", () => {
     );
     expect(branched?.node).toMatchObject({
       parentId: rootId,
+      titleManuallyEdited: false,
       position: { x: 510, y: 120 },
       branchType: "branch",
     });
@@ -193,6 +198,20 @@ describe("project model helpers", () => {
     });
   });
 
+  it("manually updates node titles and syncs the root project title", () => {
+    const project = createRootProject("Graph search", rootReply);
+    const rootId = project.rootNodeId;
+    const updated = updateNodeTitle(project, rootId, "Manual root title");
+
+    expect(updated?.title).toBe("Manual root title");
+    expect(updated?.nodes[rootId]).toMatchObject({
+      title: "Manual root title",
+      titleManuallyEdited: true,
+    });
+    expect(project.title).toBe("Graph search");
+    expect(project.nodes[rootId].titleManuallyEdited).toBe(false);
+  });
+
   it("updates project notes without mutating the original project", () => {
     vi.useFakeTimers();
 
@@ -205,6 +224,43 @@ describe("project model helpers", () => {
       expect(updated.notes).toBe("## Notes\n\nSaved note");
       expect(updated.updatedAt).toBe("2026-01-01T00:00:01.000Z");
       expect(project.notes).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("preserves manually edited titles when regenerating", () => {
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      const project = createRootProject("Original prompt", rootReply);
+      const rootId = project.rootNodeId;
+      const [userMessage, assistantMessage] = project.nodes[rootId].messages;
+      const titled = updateNodeTitle(project, rootId, "Manual root title")!;
+
+      vi.setSystemTime(new Date("2026-01-01T00:00:01.000Z"));
+      const regenerated = regenerateNode(titled, rootId, {
+        instruction: "Edited prompt",
+        userMessageId: userMessage.id,
+        assistantMessageId: assistantMessage.id,
+        reply: {
+          title: "AI replacement title",
+          summary: "Regenerated summary",
+          content: "Regenerated content",
+        },
+      });
+
+      expect(regenerated?.project.title).toBe("Manual root title");
+      expect(regenerated?.node).toMatchObject({
+        title: "Manual root title",
+        titleManuallyEdited: true,
+        summary: "Regenerated summary",
+      });
+      expect(regenerated?.node.messages.map((message) => message.content)).toEqual([
+        "Edited prompt",
+        "Regenerated content",
+      ]);
     } finally {
       vi.useRealTimers();
     }

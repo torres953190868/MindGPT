@@ -93,6 +93,21 @@ export async function getDocumentPageForOwner(
   return page;
 }
 
+export async function getDocumentFileForOwner(userId: string, documentId: string) {
+  const repository = getRagRepository();
+  const document = await requireOwnedDocument(userId, documentId);
+  const bytes = await repository.readDocumentFile(document);
+
+  if (!bytes) {
+    throw new RagError("PDF file was not found.", {
+      code: "PDF_FILE_NOT_FOUND",
+      status: 404,
+    });
+  }
+
+  return { document, bytes };
+}
+
 export async function getDocumentChunksForOwner(userId: string, documentId: string) {
   const repository = getRagRepository();
   await requireOwnedDocument(userId, documentId);

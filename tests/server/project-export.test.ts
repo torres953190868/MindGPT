@@ -15,6 +15,7 @@ function makeProject(): Project {
         projectId: "project-export-test",
         parentId: null,
         title: "Root",
+        titleManuallyEdited: false,
         summary: "Root summary",
         messages: [],
         children: [],

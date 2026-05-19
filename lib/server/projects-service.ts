@@ -7,6 +7,7 @@ import {
   removeNode,
   setNodeCollapsed,
   setProjectNotes,
+  updateNodeTitle,
   updateNodePosition,
 } from "@/lib/server/project-model";
 import { prepareProjectImport } from "@/lib/server/project-import";
@@ -29,6 +30,7 @@ import type {
 import { HttpError } from "./http";
 
 type NodeUpdate = {
+  title?: string;
   position?: NodePosition;
   collapsed?: boolean;
 };
@@ -238,6 +240,14 @@ function assertSyncProjectGraph(projectId: string, project: Project) {
         });
       }
     }
+
+    if (node.messages.length === 0) {
+      throw new HttpError("Project node messages are missing.", {
+        code: "PROJECT_NODE_MESSAGES_MISSING",
+        expose: true,
+        status: 400,
+      });
+    }
   }
 }
 
@@ -366,6 +376,11 @@ export async function updateNodeForOwner(
   if (!project) notFound();
 
   let nextProject: Project | null = project;
+  if (typeof update.title === "string") {
+    nextProject = updateNodeTitle(nextProject, nodeId, update.title);
+    if (!nextProject) notFound();
+  }
+
   if (update.position) {
     nextProject = updateNodePosition(nextProject, nodeId, update.position);
     if (!nextProject) notFound();

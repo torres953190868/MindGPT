@@ -17,6 +17,13 @@ const messageAttachmentsMigration = readFileSync(
   ),
   "utf8",
 );
+const nodeManualTitlesMigration = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/20260519010000_branchmind_node_manual_titles.sql",
+  ),
+  "utf8",
+);
 
 describe("Supabase foundation migration", () => {
   it("creates the beta persistence and distributed rate-limit tables", () => {
@@ -45,6 +52,12 @@ describe("Supabase foundation migration", () => {
   it("adds message attachment metadata persistence", () => {
     expect(messageAttachmentsMigration).toContain(
       "add column if not exists attachments jsonb not null default '[]'::jsonb",
+    );
+  });
+
+  it("adds node manual title persistence", () => {
+    expect(nodeManualTitlesMigration).toContain(
+      "add column if not exists title_manually_edited boolean not null default false",
     );
   });
 });

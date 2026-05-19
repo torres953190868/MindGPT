@@ -33,6 +33,14 @@ EMBEDDING_DIMENSIONS=1024
 GEMINI_API_KEY=
 ```
 
+Optional retry tuning for transient provider 429s:
+
+```bash
+EMBEDDING_RETRY_ATTEMPTS=5
+EMBEDDING_RETRY_DELAY_MS=250
+EMBEDDING_RETRY_MAX_DELAY_MS=8000
+```
+
 Required for grounded answer generation, unless `AI_MOCK_MODE=true`:
 
 ```bash

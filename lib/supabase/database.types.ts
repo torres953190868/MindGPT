@@ -47,6 +47,7 @@ export type Database = {
           project_id: string;
           parent_id: string | null;
           title: string;
+          title_manually_edited: boolean;
           summary: string;
           position_x: number;
           position_y: number;
@@ -61,6 +62,7 @@ export type Database = {
           project_id: string;
           parent_id?: string | null;
           title: string;
+          title_manually_edited?: boolean;
           summary?: string;
           position_x?: number;
           position_y?: number;
@@ -75,6 +77,7 @@ export type Database = {
           project_id?: string;
           parent_id?: string | null;
           title?: string;
+          title_manually_edited?: boolean;
           summary?: string;
           position_x?: number;
           position_y?: number;

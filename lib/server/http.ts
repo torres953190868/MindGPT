@@ -110,6 +110,23 @@ function isExposableError(error: unknown, status: number) {
   return status < 500 && getObject(error)?.expose === true;
 }
 
+function getProviderRateLimitMessage(error: unknown, status: number) {
+  if (status !== 429) return null;
+
+  const code = getObject(error)?.code;
+  if (typeof code !== "string") return null;
+
+  if (code.includes("EMBEDDING")) {
+    return "Embedding provider quota or rate limit was reached. Please retry in a bit.";
+  }
+
+  if (code === "LLM_REQUEST_FAILED") {
+    return "AI provider quota or rate limit was reached. Please retry in a bit.";
+  }
+
+  return null;
+}
+
 export function getSafeErrorCode(error: unknown, status = getSafeErrorStatus(error)) {
   return getErrorCode(error, status);
 }
@@ -224,6 +241,9 @@ export function getSafeErrorStatus(error: unknown) {
 }
 
 export function getSafeErrorMessage(status: number, error?: unknown) {
+  const providerRateLimitMessage = getProviderRateLimitMessage(error, status);
+  if (providerRateLimitMessage) return providerRateLimitMessage;
+
   const message = getObject(error)?.message;
   if (typeof message === "string" && isExposableError(error, status)) {
     return message;

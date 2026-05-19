@@ -20,6 +20,7 @@ function makeProject(): Project {
         projectId: "project-repository-test",
         parentId: null,
         title: "Root",
+        titleManuallyEdited: true,
         summary: "Root summary",
         messages: [
           {
@@ -63,12 +64,14 @@ describe("projects repository row mapping", () => {
     };
 
     expect(projectRow.notes).toBe("## Saved notes");
+    expect(nodeRows[0].title_manually_edited).toBe(true);
 
     const [composed] = composeProjectsFromRows(
       [persistedProjectRow],
       nodeRows.map((nodeRow) => ({
         ...nodeRow,
         parent_id: nodeRow.parent_id ?? null,
+        title_manually_edited: nodeRow.title_manually_edited ?? false,
         summary: nodeRow.summary ?? "",
         position_x: nodeRow.position_x ?? 0,
         position_y: nodeRow.position_y ?? 0,
@@ -87,6 +90,7 @@ describe("projects repository row mapping", () => {
 
     expect(composed.notes).toBe("## Saved notes");
     const rootNode = composed.nodes[composed.rootNodeId];
+    expect(rootNode.titleManuallyEdited).toBe(true);
     expect(rootNode.messages[0].attachments).toEqual(
       project.nodes[project.rootNodeId].messages[0].attachments,
     );

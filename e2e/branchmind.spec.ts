@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { ChatMessage, Project } from "@/lib/types";
+import { createSyntheticPdf } from "../tests/server/rag/pdf-fixtures";
 
 test.describe.configure({ mode: "serial" });
 
@@ -29,6 +30,7 @@ function makeWorkspaceProject(seed: string): Project {
         projectId,
         parentId: null,
         title: "Seeded root node",
+        titleManuallyEdited: false,
         summary: "A deterministic project imported by Playwright.",
         messages: [
           {
@@ -131,6 +133,7 @@ function makeWorkspaceTreeProject(seed: string): WorkspaceProject {
         projectId: project.id,
         parentId: project.rootNodeId,
         title: "Machine Learning Basics",
+        titleManuallyEdited: false,
         summary: "Parent outline item with a nested child.",
         messages: [],
         children: [gradientNodeId],
@@ -145,6 +148,7 @@ function makeWorkspaceTreeProject(seed: string): WorkspaceProject {
         projectId: project.id,
         parentId: basicsNodeId,
         title: "Gradient Descent Details",
+        titleManuallyEdited: false,
         summary: "Nested child found through outline search.",
         messages: [],
         children: [],
@@ -159,6 +163,7 @@ function makeWorkspaceTreeProject(seed: string): WorkspaceProject {
         projectId: project.id,
         parentId: project.rootNodeId,
         title: "Programming Tools",
+        titleManuallyEdited: false,
         summary: "Sibling outline item without children.",
         messages: [],
         children: [],
@@ -293,37 +298,103 @@ async function mockHomeModelCatalog(page: Page) {
   });
 }
 
-test("navigates the project shell with stable test ids", async ({ page }) => {
+test("home opens directly into a draft workspace", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
-  const isMobile = (page.viewportSize()?.width ?? 1280) < 768;
 
-  if (isMobile) {
-    await page.locator("summary").filter({ hasText: "Menu" }).click();
-    await expect(page.getByRole("link", { name: "Projects" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Privacy" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Terms" })).toBeVisible();
-  } else {
-    await expect(page.getByTestId("home-primary-navigation")).toBeVisible();
-    await expect(page.getByTestId("home-projects-link")).toBeVisible();
-    await expect(page.getByTestId("home-privacy-link")).toBeVisible();
-    await expect(page.getByTestId("home-terms-link")).toBeVisible();
-  }
+  await expect(page.getByTestId("workspace-shell")).toBeVisible();
+  await expect(page.getByTestId("home-hero")).toHaveCount(0);
+  await expect(page.getByTestId("workspace-header")).toContainText("New workspace");
+  await expect(page.getByTestId("branch-node-card")).toHaveCount(1);
+  await expect(page.getByTestId("branch-node-card")).toContainText("New node");
+  await expect(page.getByTestId("message-composer")).toBeVisible();
+  await expect(page.getByTestId("message-branch-mode")).toHaveCount(0);
+  await expect(page.getByTestId("node-detail-notes-button")).toHaveCount(0);
+  await expect(page.getByTestId("message-instruction-input")).toHaveAttribute(
+    "placeholder",
+    "Start with a research question...",
+  );
+  await expect(page.getByTestId("send-message-button")).toContainText("Start");
+  const mindMapCanvas = page.getByTestId("mind-map-canvas");
+  const mapWidthBeforeSidebarCollapse = await getElementWidth(mindMapCanvas);
 
-  if (isMobile) {
-    await page.getByRole("link", { name: "Projects" }).click();
-  } else {
-    await page.getByTestId("home-projects-link").click();
-  }
+  await page.getByTestId("collapse-workspace-sidebar-button").click();
+  await expect(page.getByTestId("workspace-sidebar")).toHaveCount(0);
+  await expect(mindMapCanvas.getByTestId("expand-workspace-sidebar-button")).toBeVisible();
+  await expect
+    .poll(() => getElementWidth(mindMapCanvas))
+    .toBeGreaterThan(mapWidthBeforeSidebarCollapse + 120);
+
+  await mindMapCanvas.getByTestId("expand-workspace-sidebar-button").click();
+  await expect(page.getByTestId("workspace-sidebar")).toBeVisible();
+
+  await page.getByTestId("collapse-node-detail-panel-button").click();
+  await expect(page.getByTestId("node-detail-panel")).toHaveCount(0);
+  await expect(mindMapCanvas.getByTestId("expand-node-detail-panel-button")).toBeVisible();
+
+  await mindMapCanvas.getByTestId("expand-node-detail-panel-button").click();
+  await expect(page.getByTestId("node-detail-panel")).toBeVisible();
+
+  await page.getByTestId("workspace-projects-link").click();
 
   await expect(page).toHaveURL(/\/projects$/);
-  if (!isMobile) {
-    await expect(page.getByTestId("projects-navigation")).toBeVisible();
-  }
+  await expect(page.getByTestId("projects-navigation")).toBeVisible();
   await expect(page.getByTestId("project-card-list")).toBeVisible();
   await expect(page.getByTestId("project-search-input")).toBeVisible();
   await expect(
     page.getByTestId("project-grid").or(page.getByTestId("project-empty-state")),
   ).toBeVisible();
+});
+
+test("home draft workspace sidebars resize and snap like workspace", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Desktop draft resizing is covered once.");
+
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto("/");
+
+  const mindMapCanvas = page.getByTestId("mind-map-canvas");
+  const workspaceSidebar = page.getByTestId("workspace-sidebar");
+  const nodeDetailPanel = page.getByTestId("node-detail-panel");
+
+  await expect(workspaceSidebar).toBeVisible();
+  await expect(nodeDetailPanel).toBeVisible();
+  await expect(page.getByTestId("resize-workspace-sidebar")).toBeVisible();
+  await expect(page.getByTestId("resize-node-details-panel")).toBeVisible();
+
+  await dragResizeHandle(page, page.getByTestId("resize-workspace-sidebar"), 430);
+  await expect.poll(() => getElementWidth(workspaceSidebar)).toBeGreaterThan(560);
+  await expect.poll(() => getElementWidth(mindMapCanvas)).toBeGreaterThan(219);
+  await expectNoHorizontalOverflow(page);
+
+  const wideSidebarWidth = await getElementWidth(workspaceSidebar);
+  await dragResizeHandle(
+    page,
+    page.getByTestId("resize-workspace-sidebar"),
+    -(wideSidebarWidth + 120),
+  );
+  await expect(workspaceSidebar).toHaveCount(0);
+  await expect(mindMapCanvas.getByTestId("expand-workspace-sidebar-button")).toBeVisible();
+
+  await mindMapCanvas.getByTestId("expand-workspace-sidebar-button").click();
+  await expect(workspaceSidebar).toBeVisible();
+  await expect.poll(() => getElementWidth(workspaceSidebar)).toBeGreaterThan(560);
+
+  const detailWidthBeforeSnap = await getElementWidth(nodeDetailPanel);
+  await dragResizeHandle(
+    page,
+    page.getByTestId("resize-node-details-panel"),
+    detailWidthBeforeSnap + 120,
+  );
+  await expect(nodeDetailPanel).toHaveCount(0);
+  await expect(mindMapCanvas.getByTestId("expand-node-detail-panel-button")).toBeVisible();
+
+  await mindMapCanvas.getByTestId("expand-node-detail-panel-button").click();
+  await expect(nodeDetailPanel).toBeVisible();
+  await expect.poll(() => getElementWidth(nodeDetailPanel)).toBeGreaterThanOrEqual(300);
+  await expect(page.getByTestId("node-detail-notes-button")).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
 });
 
 test("home launcher restores a stored model after hydration", async ({
@@ -359,6 +430,7 @@ test("home launcher sends the selected model without model-named loading copy", 
   const seed = makeSeed();
   const instruction = `Create a model-selected project ${seed}.`;
   let syncPayload: unknown = null;
+  let projectPostRequests = 0;
   let releaseSync!: () => void;
   const releaseSyncPromise = new Promise<void>((resolve) => {
     releaseSync = resolve;
@@ -382,6 +454,7 @@ test("home launcher sends the selected model without model-named loading copy", 
       return;
     }
 
+    projectPostRequests += 1;
     await route.fallback();
   });
   await page.route("**/api/projects/**/sync", async (route) => {
@@ -396,14 +469,16 @@ test("home launcher sends the selected model without model-named loading copy", 
   });
 
   await page.goto("/");
+  await expect.poll(() => projectPostRequests).toBe(0);
+  await expect.poll(() => syncPayload).toBeNull();
   await page.getByTestId("chat-model-selector-button").click();
   await expect(page.getByTestId("chat-model-menu")).toBeVisible();
   await page
     .getByTestId("chat-model-option")
     .filter({ hasText: "Kimi K2.6" })
     .click();
-  await page.getByTestId("project-topic-input").fill(instruction);
-  await page.getByTestId("create-project-button").click();
+  await page.getByTestId("message-instruction-input").fill(instruction);
+  await page.getByTestId("send-message-button").click();
 
   await expect(page).toHaveURL(/\/workspace\/project_/);
   await expect(page.getByTestId("workspace-shell")).toBeVisible();
@@ -452,8 +527,8 @@ test("home launcher keeps a failed local project sync across reload", async ({
   });
 
   await page.goto("/");
-  await page.getByTestId("project-topic-input").fill(instruction);
-  await page.getByTestId("create-project-button").click();
+  await page.getByTestId("message-instruction-input").fill(instruction);
+  await page.getByTestId("send-message-button").click();
 
   await expect(page).toHaveURL(/\/workspace\/project_/);
   await expect.poll(() => syncRequests).toBe(1);
@@ -489,8 +564,8 @@ test("home launcher opens the workspace while the initial root answer streams", 
 
   try {
     await page.goto("/");
-    await page.getByTestId("project-topic-input").fill(instruction);
-    await page.getByTestId("create-project-button").click();
+    await page.getByTestId("message-instruction-input").fill(instruction);
+    await page.getByTestId("send-message-button").click();
 
     await expect(page).toHaveURL(/\/workspace\/project_/);
     projectIdToDelete = new URL(page.url()).pathname.split("/").filter(Boolean).pop() ?? null;
@@ -607,8 +682,8 @@ test("home launcher uploads and indexes PDF attachments before creating a projec
   await expect(page.getByTestId("pending-attachment-chip")).toContainText(
     "home-source.pdf",
   );
-  await page.getByTestId("project-topic-input").fill(instruction);
-  await page.getByTestId("create-project-button").click();
+  await page.getByTestId("message-instruction-input").fill(instruction);
+  await page.getByTestId("send-message-button").click();
 
   await expect.poll(() => syncPayload).not.toBeNull();
   const payload = syncPayload as { project: Project };
@@ -720,8 +795,8 @@ test("home launcher selects an indexed knowledge PDF without re-uploading", asyn
     "home-memory.pdf",
   );
 
-  await page.getByTestId("project-topic-input").fill(instruction);
-  await page.getByTestId("create-project-button").click();
+  await page.getByTestId("message-instruction-input").fill(instruction);
+  await page.getByTestId("send-message-button").click();
 
   await expect.poll(() => syncPayload).not.toBeNull();
   const payload = syncPayload as { project: Project };
@@ -740,7 +815,7 @@ test("home launcher selects an indexed knowledge PDF without re-uploading", asyn
   expect(indexRequests).toBe(0);
 });
 
-test("shows compact account entry in desktop and mobile headers", async ({ page }) => {
+test("shows compact account entry on desktop and responsive mobile navigation", async ({ page }) => {
   await mockAuthSession(page, { configured: true, user: null });
 
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -756,11 +831,345 @@ test("shows compact account entry in desktop and mobile headers", async ({ page 
   await expect(page.locator('[data-testid="google-sign-in-button"]:visible')).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 780 });
-  await page.goto("/reader");
-  await expect(page.locator('[data-testid="account-sign-in-button"]:visible')).toHaveCount(0);
+  await page.goto("/privacy");
   await page.locator("summary").filter({ hasText: "Menu" }).click();
-  await expect(page.getByTestId("responsive-header-mobile-actions")).toBeVisible();
-  await expect(page.locator('[data-testid="account-sign-in-button"]:visible')).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Compliance navigation mobile" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Projects/ })).toBeVisible();
+});
+
+test("reader opens an owned PDF at a source chunk URL", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "PDF reader rendering is covered once.");
+
+  const document = {
+    id: "doc-reader-e2e",
+    fileName: "reader-source.pdf",
+    mimeType: "application/pdf",
+    pageCount: 2,
+    title: "Reader Source",
+    status: "indexed",
+    errorMessage: null,
+    errorCode: null,
+    errorStage: null,
+    errorRequestId: null,
+    updatedAt: new Date().toISOString(),
+  };
+  const chunks = [
+    {
+      id: "chunk-reader-e2e",
+      chunkIndex: 0,
+      pageStart: 2,
+      pageEnd: 2,
+      headingPath: ["Chapter 2", "Evidence"],
+      tokenCount: 12,
+      content: "Evidence chunk from page two for source verification.",
+      metadata: {},
+    },
+  ];
+  const pdfBytes = createSyntheticPdf([
+    ["Reader Source", "Page one"],
+    ["Reader Source", "Page two"],
+  ]);
+  let queryPayload: unknown = null;
+  let documentDetailsRequests = 0;
+
+  await page.route("**/api/documents", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ documents: [document] }),
+    });
+  });
+  await page.route("**/api/documents/doc-reader-e2e", async (route) => {
+    documentDetailsRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        document,
+        sections: [
+          {
+            id: "section-reader-e2e-1",
+            title: "Chapter 1",
+            headingPath: ["Chapter 1"],
+            level: 1,
+            pageStart: 1,
+            pageEnd: 1,
+            source: "regex",
+          },
+          {
+            id: "section-reader-e2e-2",
+            title: "Chapter 2",
+            headingPath: ["Chapter 2"],
+            level: 1,
+            pageStart: 2,
+            pageEnd: 2,
+            source: "regex",
+          },
+        ],
+        chunkCount: chunks.length,
+      }),
+    });
+  });
+  await page.route("**/api/documents/doc-reader-e2e/chunks", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ chunks }),
+    });
+  });
+  await page.route("**/api/documents/doc-reader-e2e/pages/1", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        page: {
+          pageNumber: 1,
+          cleanText: "Page one extracted text.",
+          tokenCount: 4,
+        },
+      }),
+    });
+  });
+  await page.route("**/api/documents/doc-reader-e2e/pages/2", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        page: {
+          pageNumber: 2,
+          cleanText: "Page two extracted text.",
+          tokenCount: 4,
+        },
+      }),
+    });
+  });
+  await page.route("**/api/documents/doc-reader-e2e/file", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/pdf",
+      body: Buffer.from(pdfBytes),
+    });
+  });
+  await page.route("**/api/documents/doc-reader-e2e/query", async (route) => {
+    queryPayload = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        answer: "The evidence is on page two.",
+        citations: [
+          {
+            pageStart: 2,
+            pageEnd: 2,
+            chunkId: "chunk-reader-e2e",
+            headingPath: ["Chapter 2", "Evidence"],
+            quote: "Evidence chunk from page two for source verification.",
+          },
+        ],
+        retrievedChunks: [
+          {
+            chunkId: "chunk-reader-e2e",
+            score: 0.91,
+            pageStart: 2,
+            pageEnd: 2,
+            headingPath: ["Chapter 2", "Evidence"],
+            preview: "Evidence chunk from page two for source verification.",
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.goto("/reader?document=doc-reader-e2e&page=2&chunk=chunk-reader-e2e");
+
+  const canvas = page.getByTestId("pdf-page-canvas");
+  await expect(canvas).toBeVisible();
+  await expect
+    .poll(() => canvas.evaluate((element) => (element as HTMLCanvasElement).width))
+    .toBeGreaterThan(0);
+  await expect(page.getByTestId("source-evidence")).toContainText(
+    "Evidence chunk from page two",
+  );
+  await expect(page.getByLabel("Page number")).toHaveValue("2");
+  expect(documentDetailsRequests).toBe(1);
+  await expect(
+    page.getByTestId("toc-section-button").filter({ hasText: "Chapter 2" }),
+  ).toHaveAttribute("aria-current", "location");
+
+  await page.getByTestId("toc-section-button").filter({ hasText: "Chapter 1" }).click();
+  await expect(page).toHaveURL(/document=doc-reader-e2e.*page=1/);
+  await expect(page).not.toHaveURL(/chunk=chunk-reader-e2e/);
+  await expect(page.getByLabel("Page number")).toHaveValue("1");
+  expect(documentDetailsRequests).toBe(1);
+
+  await page.getByTestId("ask-pdf-input").fill("Where is the evidence?");
+  await page.getByTestId("ask-pdf-button").click();
+  await expect.poll(() => queryPayload).not.toBeNull();
+  expect(queryPayload).toMatchObject({ question: "Where is the evidence?" });
+  await expect(page.getByTestId("ask-pdf-answer")).toContainText(
+    "The evidence is on page two.",
+  );
+  await page.getByTestId("ask-pdf-citation").click();
+  await expect(page).toHaveURL(/document=doc-reader-e2e.*page=2.*chunk=chunk-reader-e2e/);
+  await expect(page.getByTestId("source-evidence")).toContainText(
+    "Evidence chunk from page two",
+  );
+  expect(documentDetailsRequests).toBe(1);
+});
+
+test("reader upload parses for reading before explicit Ask PDF indexing", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Reader upload flow is covered once.");
+
+  const documentId = "doc-reader-upload-e2e";
+  let document: {
+    id: string;
+    fileName: string;
+    mimeType: string;
+    pageCount: number;
+    title: string | null;
+    status: string;
+    errorMessage: string | null;
+    errorCode: string | null;
+    errorStage: string | null;
+    errorRequestId: string | null;
+    updatedAt: string;
+  } = {
+    id: documentId,
+    fileName: "reader-upload.pdf",
+    mimeType: "application/pdf",
+    pageCount: 0,
+    title: null,
+    status: "uploaded",
+    errorMessage: null,
+    errorCode: null,
+    errorStage: null,
+    errorRequestId: null,
+    updatedAt: new Date().toISOString(),
+  };
+  let sections: unknown[] = [];
+  let uploadRequests = 0;
+  let parseRequests = 0;
+  let indexRequests = 0;
+  const pdfBytes = createSyntheticPdf([
+    ["Reader Upload", "Page one has selectable text."],
+    ["Reader Upload", "Page two has more selectable text."],
+  ]);
+
+  await page.route("**/api/documents", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        documents: uploadRequests > 0 ? [document] : [],
+      }),
+    });
+  });
+  await page.route("**/api/documents/upload", async (route) => {
+    uploadRequests += 1;
+    document = { ...document, status: "uploaded" };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ document }),
+    });
+  });
+  await page.route("**/api/documents/doc-reader-upload-e2e", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ document, sections, chunkCount: 0 }),
+    });
+  });
+  await page.route("**/api/documents/doc-reader-upload-e2e/parse", async (route) => {
+    parseRequests += 1;
+    document = {
+      ...document,
+      pageCount: 2,
+      title: "Reader Upload",
+      status: "parsed",
+    };
+    sections = [
+      {
+        id: "section-reader-upload-e2e",
+        title: "Reader Upload",
+        headingPath: ["Reader Upload"],
+        level: 1,
+        pageStart: 1,
+        pageEnd: 2,
+        source: "regex",
+      },
+    ];
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ document, pageCount: 2, sectionCount: 1 }),
+    });
+  });
+  await page.route("**/api/documents/doc-reader-upload-e2e/index", async (route) => {
+    indexRequests += 1;
+    document = { ...document, status: "indexed" };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        document,
+        pageCount: 2,
+        sectionCount: 1,
+        chunkCount: 1,
+        embeddingModel: "mock-embedding-v1",
+      }),
+    });
+  });
+  await page.route("**/api/documents/doc-reader-upload-e2e/pages/1", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        page: {
+          pageNumber: 1,
+          cleanText: "Reader Upload page one extracted text.",
+          tokenCount: 6,
+        },
+      }),
+    });
+  });
+  await page.route("**/api/documents/doc-reader-upload-e2e/file", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/pdf",
+      body: Buffer.from(pdfBytes),
+    });
+  });
+
+  await page.goto("/reader");
+  await page.locator("#pdf-upload").setInputFiles({
+    name: "reader-upload.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from(pdfBytes),
+  });
+  await page.getByRole("button", { name: "Upload PDF", exact: true }).click();
+
+  await expect.poll(() => parseRequests).toBe(1);
+  expect(indexRequests).toBe(0);
+  const canvas = page.getByTestId("pdf-page-canvas");
+  await expect(canvas).toBeVisible();
+  await expect
+    .poll(() => canvas.evaluate((element) => (element as HTMLCanvasElement).width))
+    .toBeGreaterThan(0);
+  await expect(page.getByTestId("toc-section-button")).toContainText("Reader Upload");
+  await expect(page.getByTestId("ask-pdf-input")).toBeDisabled();
+  await expect(page.getByTestId("ask-pdf-button")).toBeDisabled();
+
+  await page.getByTestId("enable-ask-pdf-button").click();
+  await expect.poll(() => indexRequests).toBe(1);
+  await expect(page.getByTestId("ask-pdf-input")).toBeEnabled();
 });
 
 test("shows signed-in account menu state", async ({ page }) => {
@@ -778,6 +1187,51 @@ test("shows signed-in account menu state", async ({ page }) => {
     "learner@example.com",
   );
   await expect(page.locator('[data-testid="sign-out-button"]:visible')).toBeVisible();
+});
+
+test("confirms project deletion without opening the workspace", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const sourceProject = makeWorkspaceProject(`delete-confirm-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.goto("/projects");
+    const projectCard = page
+      .getByTestId("project-card")
+      .filter({ hasText: project.title });
+    const deleteButton = projectCard.getByTestId("delete-project-button");
+
+    await expect(projectCard).toBeVisible();
+    await deleteButton.locator("svg").click();
+    await expect(page).toHaveURL(/\/projects$/);
+    await expect(page.getByTestId("delete-project-dialog")).toBeVisible();
+    await expect(page.getByTestId("delete-project-dialog")).toContainText(
+      project.title,
+    );
+
+    await page.getByTestId("cancel-delete-project-button").click();
+    await expect(page.getByTestId("delete-project-dialog")).toHaveCount(0);
+    await expect(page).toHaveURL(/\/projects$/);
+    await expect(projectCard).toBeVisible();
+
+    await deleteButton.locator("svg").click();
+    await expect(page.getByTestId("delete-project-dialog")).toBeVisible();
+    await page.getByTestId("confirm-delete-project-button").click();
+
+    await expect(page).toHaveURL(/\/projects$/);
+    await expect(page.getByTestId("delete-project-dialog")).toHaveCount(0);
+    await expect(projectCard).toHaveCount(0);
+    projectIdToDelete = null;
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
 });
 
 test("places the workspace account entry in the sidebar footer", async ({ page }) => {
@@ -869,6 +1323,46 @@ test("loads a seeded workspace with stable test ids", async ({ page }) => {
     await mindMapCanvas.getByTestId("expand-node-detail-panel-button").click();
     await expect(page.getByTestId("node-detail-panel")).toBeVisible();
     await expect(page.getByTestId("conversation-history")).toBeVisible();
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("edits a root node title from the node detail header", async ({ page }) => {
+  const sourceProject = makeWorkspaceProject(`title-edit-${makeSeed()}`);
+  const editedTitle = "Manual root title from detail";
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.goto(`/workspace/${project.id}`);
+    await page.getByTestId("edit-node-title-button").click();
+    await expect(page.getByTestId("node-title-edit-input")).toHaveValue("Seeded root node");
+    await page.getByTestId("node-title-edit-input").fill(editedTitle);
+    await page.getByTestId("save-node-title-edit-button").click();
+
+    await expect(page.getByTestId("node-title-edit-input")).toHaveCount(0);
+    await expect(page.getByTestId("workspace-header")).toContainText(editedTitle);
+    await expect(page.getByTestId("node-detail-panel")).toContainText(editedTitle);
+    await expect(page.getByTestId("branch-node-card")).toContainText(editedTitle);
+    await expect(page.getByTestId("conversation-outline")).toContainText(editedTitle);
+
+    const response = await page.request.get("/api/projects");
+    expect(response.status(), await response.text()).toBe(200);
+    const data = await response.json();
+    const projects = Array.isArray(data.projects) ? (data.projects as WorkspaceProject[]) : [];
+    const persisted = projects.find((item) => item.id === project.id);
+    expect(persisted?.title).toBe(editedTitle);
+    expect(persisted?.nodes[persisted.rootNodeId]).toMatchObject({
+      title: editedTitle,
+      titleManuallyEdited: true,
+    });
   } finally {
     if (projectIdToDelete) {
       await page.request

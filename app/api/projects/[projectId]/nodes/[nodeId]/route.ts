@@ -16,6 +16,7 @@ type NodeRouteContext = {
 };
 
 const updateNodeSchema = z.object({
+  title: z.string().trim().min(1).max(120).optional(),
   position: z
     .object({
       x: z.number().finite().min(-100_000).max(100_000),

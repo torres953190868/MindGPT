@@ -50,6 +50,7 @@ export type MindNode = {
   projectId: string;
   parentId: string | null;
   title: string;
+  titleManuallyEdited: boolean;
   summary: string;
   messages: ChatMessage[];
   children: string[];

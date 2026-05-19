@@ -1,4 +1,5 @@
 import { normalizeChatAttachments } from "@/lib/chat-attachments";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   getSupabaseAdminClient,
   hasSupabaseServerConfig,
@@ -21,6 +22,7 @@ export type ProjectsBackend = "file" | "supabase";
 
 type SupabaseProjectSchemaCapabilities = {
   messageAttachments: boolean;
+  nodeManualTitles: boolean;
   projectNotes: boolean;
 };
 
@@ -61,9 +63,13 @@ async function getSchemaCapabilities(
     client
       .from("branchmind_messages")
       .select("id,attachments", { count: "exact", head: true }),
-  ]).then(([projectsResult, messagesResult]) => ({
+    client
+      .from("branchmind_nodes")
+      .select("id,title_manually_edited", { count: "exact", head: true }),
+  ]).then(([projectsResult, messagesResult, nodesResult]) => ({
     projectNotes: !isMissingColumnError(projectsResult.error),
     messageAttachments: !isMissingColumnError(messagesResult.error),
+    nodeManualTitles: !isMissingColumnError(nodesResult.error),
   }));
 
   return schemaCapabilitiesPromise;
@@ -126,6 +132,7 @@ export function projectToRows(project: Project) {
     project_id: project.id,
     parent_id: node.parentId,
     title: node.title,
+    title_manually_edited: node.titleManuallyEdited,
     summary: node.summary,
     position_x: node.position.x,
     position_y: node.position.y,
@@ -227,6 +234,10 @@ export function composeProjectsFromRows(
         projectId: nodeRow.project_id,
         parentId: nodeRow.parent_id,
         title: nodeRow.title,
+        titleManuallyEdited:
+          typeof (nodeRow as { title_manually_edited?: unknown }).title_manually_edited === "boolean"
+            ? nodeRow.title_manually_edited
+            : false,
         summary: nodeRow.summary,
         messages: messagesByNode.get(nodeRow.id) ?? [],
         children: [],
@@ -314,8 +325,20 @@ class SupabaseProjectsRepository implements ProjectsRepository {
     const client = getSupabaseAdminClient();
     const capabilities = await getSchemaCapabilities(client);
     const { projectRow, nodeRows, messageRows } = projectToRows(project);
+    const existingProject = await client
+      .from("branchmind_projects")
+      .select("id")
+      .eq("id", project.id)
+      .limit(1);
+    assertNoError(existingProject.error, "read existing project");
+    const projectAlreadyExisted = (existingProject.data?.length ?? 0) > 0;
     const supportedProjectRow = { ...projectRow } as ProjectInsert & Record<string, unknown>;
     if (!capabilities.projectNotes) delete supportedProjectRow.notes;
+    const supportedNodeRows = nodeRows.map((nodeRow) => {
+      const supportedNodeRow = { ...nodeRow } as NodeInsert & Record<string, unknown>;
+      if (!capabilities.nodeManualTitles) delete supportedNodeRow.title_manually_edited;
+      return supportedNodeRow as NodeInsert;
+    });
     const supportedMessageRows = messageRows.map((messageRow) => {
       const supportedMessageRow = {
         ...messageRow,
@@ -324,33 +347,44 @@ class SupabaseProjectsRepository implements ProjectsRepository {
       return supportedMessageRow as MessageInsert;
     });
 
-    const upsertProject = await client
-      .from("branchmind_projects")
-      .upsert(supportedProjectRow as ProjectInsert);
-    assertNoError(upsertProject.error, "upsert project");
+    try {
+      const upsertProject = await client
+        .from("branchmind_projects")
+        .upsert(supportedProjectRow as ProjectInsert);
+      assertNoError(upsertProject.error, "upsert project");
 
-    const deleteMessages = await client
-      .from("branchmind_messages")
-      .delete()
-      .eq("project_id", project.id);
-    assertNoError(deleteMessages.error, "delete project messages");
+      if (supportedNodeRows.length > 0) {
+        const upsertNodes = await client.from("branchmind_nodes").upsert(supportedNodeRows);
+        assertNoError(upsertNodes.error, "upsert project nodes");
+      }
 
-    const deleteNodes = await client
-      .from("branchmind_nodes")
-      .delete()
-      .eq("project_id", project.id);
-    assertNoError(deleteNodes.error, "delete project nodes");
+      if (supportedMessageRows.length > 0) {
+        const upsertMessages = await client
+          .from("branchmind_messages")
+          .upsert(supportedMessageRows);
+        assertNoError(upsertMessages.error, "upsert project messages");
+      }
 
-    if (nodeRows.length > 0) {
-      const insertNodes = await client.from("branchmind_nodes").insert(nodeRows);
-      assertNoError(insertNodes.error, "insert project nodes");
-    }
+      await this.deleteStaleNodes(
+        client,
+        project.id,
+        nodeRows.map((row) => row.id),
+      );
+    } catch (error) {
+      if (!projectAlreadyExisted) {
+        const cleanup = await client
+          .from("branchmind_projects")
+          .delete()
+          .eq("id", project.id);
+        if (cleanup.error) {
+          console.error("BranchMind Supabase project cleanup failed", {
+            projectId: project.id,
+            message: cleanup.error.message,
+          });
+        }
+      }
 
-    if (supportedMessageRows.length > 0) {
-      const insertMessages = await client
-        .from("branchmind_messages")
-        .insert(supportedMessageRows);
-      assertNoError(insertMessages.error, "insert project messages");
+      throw error;
     }
   }
 
@@ -379,6 +413,32 @@ class SupabaseProjectsRepository implements ProjectsRepository {
       .delete()
       .in("id", projectIds);
     assertNoError(error, "delete projects");
+  }
+
+  private async deleteStaleNodes(
+    client: SupabaseClient<Database>,
+    projectId: string,
+    nextNodeIds: string[],
+  ) {
+    const { data: currentRows, error } = await client
+      .from("branchmind_nodes")
+      .select("id")
+      .eq("project_id", projectId);
+    assertNoError(error, "read project node ids");
+
+    const nextNodeIdSet = new Set(nextNodeIds);
+    const staleNodeIds = (currentRows ?? [])
+      .map((row) => row.id)
+      .filter((id) => !nextNodeIdSet.has(id));
+
+    if (staleNodeIds.length === 0) return;
+
+    const deleteNodes = await client
+      .from("branchmind_nodes")
+      .delete()
+      .eq("project_id", projectId)
+      .in("id", staleNodeIds);
+    assertNoError(deleteNodes.error, "delete stale project nodes");
   }
 
   private async compose(projectRows: ProjectRow[]) {

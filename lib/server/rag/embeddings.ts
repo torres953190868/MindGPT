@@ -83,12 +83,62 @@ function sleep(ms: number) {
   });
 }
 
-function getRetryDelayMs(attempt: number, status?: number) {
+function configuredPositiveInteger(
+  name: string,
+  fallback: number,
+  options: { min?: number; max?: number } = {},
+) {
+  const configured = Number(process.env[name]);
+  const min = options.min ?? 1;
+  const max = options.max ?? Number.MAX_SAFE_INTEGER;
+  if (!Number.isFinite(configured)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(configured)));
+}
+
+function getRetryAttempts() {
+  return configuredPositiveInteger("EMBEDDING_RETRY_ATTEMPTS", 5, {
+    min: 1,
+    max: 10,
+  });
+}
+
+function getRetryMaxDelayMs() {
+  return configuredPositiveInteger("EMBEDDING_RETRY_MAX_DELAY_MS", 8000, {
+    min: 0,
+  });
+}
+
+function parseRetryAfterMs(value: string | null) {
+  if (!value) return null;
+
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.floor(seconds * 1000);
+  }
+
+  const dateMs = Date.parse(value);
+  if (!Number.isFinite(dateMs)) return null;
+
+  return Math.max(0, dateMs - Date.now());
+}
+
+function getRetryDelayMs(
+  attempt: number,
+  status?: number,
+  retryAfterHeader?: string | null,
+) {
   const configured = Number(process.env.EMBEDDING_RETRY_DELAY_MS);
   const baseDelayMs =
     Number.isFinite(configured) && configured >= 0 ? configured : 250;
   const multiplier = status === 429 ? 4 : 1;
-  return baseDelayMs * multiplier * 2 ** (attempt - 1);
+  const retryAfterMs = parseRetryAfterMs(retryAfterHeader ?? null);
+  const exponentialDelayMs = baseDelayMs * multiplier * 2 ** (attempt - 1);
+  const cappedDelayMs = Math.min(
+    getRetryMaxDelayMs(),
+    retryAfterMs ?? exponentialDelayMs,
+  );
+  const jitterMs = cappedDelayMs > 0 ? Math.floor(Math.random() * 100) : 0;
+  return cappedDelayMs + jitterMs;
 }
 
 function isRetryableEmbeddingError(error: unknown) {
@@ -243,8 +293,10 @@ export class DashScopeEmbeddingProvider implements EmbeddingProvider {
   private async embedBatch(texts: string[]) {
     const apiKey = assertDashScopeApiKey();
     let lastError: unknown = null;
+    const retryAttempts = getRetryAttempts();
 
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
+    for (let attempt = 1; attempt <= retryAttempts; attempt += 1) {
+      let retryAfterHeader: string | null = null;
       try {
         const response = await fetch(getDashScopeUrl(), {
           method: "POST",
@@ -259,6 +311,7 @@ export class DashScopeEmbeddingProvider implements EmbeddingProvider {
             encoding_format: "float",
           }),
         });
+        retryAfterHeader = response.headers.get("retry-after");
         const data = await response.json().catch(() => null);
 
         if (!response.ok) {
@@ -284,11 +337,12 @@ export class DashScopeEmbeddingProvider implements EmbeddingProvider {
       } catch (error) {
         lastError = error;
         if (!isRetryableEmbeddingError(error)) throw error;
-        if (attempt < 3) {
+        if (attempt < retryAttempts) {
           await sleep(
             getRetryDelayMs(
               attempt,
               error instanceof RagError ? error.status : undefined,
+              retryAfterHeader,
             ),
           );
         }
@@ -378,8 +432,10 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
   private async embedBatch(texts: string[], kind: GeminiEmbeddingKind) {
     const apiKey = assertGeminiApiKey();
     let lastError: unknown = null;
+    const retryAttempts = getRetryAttempts();
 
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
+    for (let attempt = 1; attempt <= retryAttempts; attempt += 1) {
+      let retryAfterHeader: string | null = null;
       try {
         const response = await fetch(getGeminiUrl(this.model), {
           method: "POST",
@@ -391,6 +447,7 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
             requests: texts.map((text) => this.createRequest(text, kind)),
           }),
         });
+        retryAfterHeader = response.headers.get("retry-after");
         const data = await response.json().catch(() => null);
 
         if (!response.ok) {
@@ -417,11 +474,12 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
       } catch (error) {
         lastError = error;
         if (!isRetryableEmbeddingError(error)) throw error;
-        if (attempt < 3) {
+        if (attempt < retryAttempts) {
           await sleep(
             getRetryDelayMs(
               attempt,
               error instanceof RagError ? error.status : undefined,
+              retryAfterHeader,
             ),
           );
         }

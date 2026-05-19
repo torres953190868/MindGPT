@@ -1,30 +1,32 @@
-import { ArrowLeft, Brain, FileText } from "lucide-react";
-import { AuthPanel } from "@/components/AuthPanel";
+import { Suspense } from "react";
 import { PdfReader } from "@/components/rag/PdfReader";
-import { ResponsiveHeader } from "@/components/ResponsiveHeader";
 
 export default function ReaderPage() {
   return (
     <main
       aria-labelledby="reader-title"
       data-testid="reader-page"
-      className="min-h-screen px-5 py-6"
+      className="min-h-screen bg-[#fbfafc] px-4 py-5 text-[#1f1a2a] sm:px-6"
     >
-      <div className="mx-auto max-w-7xl space-y-6">
-        <ResponsiveHeader
-          title="PDF Reader"
-          titleId="reader-title"
-          titleAs="h1"
-          icon={<FileText size={22} />}
-          navLabel="Reader navigation"
-          actions={<AuthPanel />}
-          links={[
-            { href: "/", label: "Home", icon: <ArrowLeft size={18} /> },
-            { href: "/projects", label: "Projects", icon: <Brain size={17} /> },
-          ]}
-        />
+      <div className="mx-auto max-w-[1440px] space-y-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#8463c7] text-sm font-black text-white">
+            3
+          </span>
+          <h1 id="reader-title" className="truncate text-lg font-black text-[#1f1a2a]">
+            PDF Reader desktop
+          </h1>
+        </div>
 
-        <PdfReader />
+        <Suspense
+          fallback={
+            <div className="rounded-lg border border-[#e4dfeb] bg-white p-5 text-sm font-bold text-[#76667f] shadow-sm">
+              Loading reader
+            </div>
+          }
+        >
+          <PdfReader />
+        </Suspense>
       </div>
     </main>
   );

@@ -80,6 +80,7 @@ type BranchMindState = {
     modelSelection?: ChatModelSelection,
   ) => Promise<boolean>;
   updateProjectNotes: (projectId: string, notes: string) => Promise<boolean>;
+  updateNodeTitle: (nodeId: string, title: string) => Promise<boolean>;
   updateNodePosition: (nodeId: string, position: NodePosition) => Promise<void>;
   toggleNodeCollapsed: (nodeId: string) => Promise<void>;
   deleteNode: (nodeId: string) => Promise<void>;
@@ -492,6 +493,24 @@ async function regenerateNodeInPlace(
       }
     } catch (error) {
       deltaBatch.cancel();
+      const errorMessage = getErrorMessage(error);
+      const currentPendingSync = get().pendingProjectSyncs[project.id];
+      const failedPendingSync =
+        !completed &&
+        currentPendingSync?.nodeId === nodeId &&
+        currentPendingSync.assistantMessageId === draft.assistantMessageId
+          ? {
+              ...currentPendingSync,
+              status: "failed" as const,
+              error: errorMessage,
+              updatedAt: new Date().toISOString(),
+            }
+          : null;
+
+      if (failedPendingSync) {
+        persistPendingSyncRecord(failedPendingSync);
+      }
+
       set((current) => ({
         projects: completed
           ? current.projects
@@ -499,7 +518,13 @@ async function regenerateNodeInPlace(
         selectedNodeId: nodeId,
         creatingNodeId: null,
         streamingNodeId: null,
-        aiError: getErrorMessage(error),
+        pendingProjectSyncs: failedPendingSync
+          ? {
+              ...current.pendingProjectSyncs,
+              [project.id]: failedPendingSync,
+            }
+          : current.pendingProjectSyncs,
+        aiError: errorMessage,
       }));
     }
   })();
@@ -709,6 +734,33 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
       nodeId: pending.nodeId,
       assistantMessageId: pending.assistantMessageId,
       modelSelection: pending.modelSelection,
+    }).then((started) => {
+      if (started) return;
+
+      const currentPendingSync = get().pendingProjectSyncs[projectId];
+      const errorMessage = "Project messages are missing. Retry syncing this project.";
+      if (
+        currentPendingSync?.nodeId !== pending.nodeId ||
+        currentPendingSync.assistantMessageId !== pending.assistantMessageId
+      ) {
+        set({ aiError: errorMessage });
+        return;
+      }
+
+      const failedRecord: PendingProjectSyncRecord = {
+        ...currentPendingSync,
+        status: "failed",
+        error: errorMessage,
+        updatedAt: new Date().toISOString(),
+      };
+      persistPendingSyncRecord(failedRecord);
+      set((current) => ({
+        pendingProjectSyncs: {
+          ...current.pendingProjectSyncs,
+          [projectId]: failedRecord,
+        },
+        aiError: errorMessage,
+      }));
     });
   },
 
@@ -931,6 +983,64 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
       return true;
     } catch (error) {
       set({ aiError: getErrorMessage(error) });
+      return false;
+    }
+  },
+
+  updateNodeTitle: async (nodeId, title) => {
+    const trimmed = title.trim();
+    if (!trimmed) return false;
+
+    const state = get();
+    const project = state.projects.find((item) => item.id === state.activeProjectId);
+    const node = project?.nodes[nodeId];
+    if (
+      !project ||
+      !node ||
+      state.creatingNodeId ||
+      state.streamingNodeId ||
+      isProjectWaitingForSync(state, project.id)
+    ) {
+      return false;
+    }
+
+    const timestamp = new Date().toISOString();
+    const optimisticNode = {
+      ...node,
+      title: trimmed,
+      titleManuallyEdited: true,
+      updatedAt: timestamp,
+    };
+    const optimisticProject = {
+      ...project,
+      title: nodeId === project.rootNodeId ? trimmed : project.title,
+      nodes: {
+        ...project.nodes,
+        [nodeId]: optimisticNode,
+      },
+      updatedAt: timestamp,
+    };
+
+    set({
+      projects: replaceProject(state.projects, optimisticProject),
+      aiError: null,
+    });
+
+    try {
+      const response = await fetch(`/api/projects/${project.id}/nodes/${nodeId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: trimmed }),
+      });
+      const data = await readJson<UpdateNodeResponse>(response);
+
+      set({ projects: replaceProject(get().projects, data.project) });
+      return true;
+    } catch (error) {
+      set((current) => ({
+        projects: replaceProject(current.projects, project),
+        aiError: getErrorMessage(error),
+      }));
       return false;
     }
   },

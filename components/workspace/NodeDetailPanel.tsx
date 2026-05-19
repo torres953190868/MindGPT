@@ -2,6 +2,7 @@
 
 import {
   type FormEvent,
+  type KeyboardEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -64,6 +65,7 @@ type NodeDetailPanelProps = {
     assistantMessageId: string,
     modelSelection?: ChatModelSelection,
   ) => Promise<boolean>;
+  onUpdateNodeTitle: (nodeId: string, title: string) => Promise<boolean>;
   onToggleNode: (nodeId: string) => void;
   onDeleteNode: (nodeId: string) => void;
   isCreating: boolean;
@@ -71,6 +73,16 @@ type NodeDetailPanelProps = {
   error: string | null;
   onToggleNotes: () => void;
   onCollapse: () => void;
+  initialSubmit?: boolean;
+  onStartProject?: (
+    instruction: string,
+    attachments?: ChatAttachment[],
+    modelSelection?: ChatModelSelection,
+  ) => Promise<string | null>;
+  showNotesAction?: boolean;
+  showCollapseButton?: boolean;
+  composerPlaceholder?: string;
+  submitLabel?: string;
 };
 
 const DEFAULT_SELECTION_BRANCH_INSTRUCTION = "Explain the selected text in a focused branch.";
@@ -189,6 +201,7 @@ export function NodeDetailPanel({
   onCreateNode,
   onEditUserMessage,
   onRetryAssistantMessage,
+  onUpdateNodeTitle,
   onToggleNode,
   onDeleteNode,
   isCreating,
@@ -196,6 +209,12 @@ export function NodeDetailPanel({
   error,
   onToggleNotes,
   onCollapse,
+  initialSubmit = false,
+  onStartProject,
+  showNotesAction = true,
+  showCollapseButton = true,
+  composerPlaceholder = "Ask the next question...",
+  submitLabel = "Send",
 }: NodeDetailPanelProps) {
   const panelId = useId();
   const titleId = `${panelId}-title`;
@@ -207,9 +226,12 @@ export function NodeDetailPanel({
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleEditValue, setTitleEditValue] = useState("");
   const composerControls = useChatComposerControls({ isBusy: isCreating });
   const resetComposerAttachments = composerControls.resetAttachments;
   const messagesRef = useRef<HTMLDivElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const copyTimeoutRef = useRef<number | null>(null);
   const lastMessage = node?.messages[node.messages.length - 1] ?? null;
   const streamingMessageId =
@@ -217,6 +239,11 @@ export function NodeDetailPanel({
   const streamingContent = streamingMessageId ? lastMessage?.content ?? "" : "";
   const isComposerBusy = composerControls.controlsBusy;
   const displayError = composerControls.attachmentError ?? error;
+  const isInitialSubmit = initialSubmit;
+  const isTitleEditBusy = isCreating || isComposerBusy;
+  const titleEditTrimmed = titleEditValue.trim();
+  const isTitleSaveDisabled =
+    isTitleEditBusy || !node || !titleEditTrimmed || titleEditTrimmed === node.title.trim();
 
   const clearSelectedSourceText = useCallback(() => {
     setSelectedSourceText("");
@@ -245,7 +272,15 @@ export function NodeDetailPanel({
     resetComposerAttachments();
     setEditingMessageId(null);
     setEditingValue("");
+    setIsEditingTitle(false);
+    setTitleEditValue("");
   }, [clearSelectedSourceText, node?.id, resetComposerAttachments]);
+
+  useEffect(() => {
+    if (!isEditingTitle) return;
+    titleInputRef.current?.focus();
+    titleInputRef.current?.select();
+  }, [isEditingTitle]);
 
   useEffect(() => {
     return () => {
@@ -262,14 +297,30 @@ export function NodeDetailPanel({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!node || !input.trim() || isComposerBusy) return;
-    const sourceText = mode === "branch" && selectedSourceText ? selectedSourceText : undefined;
+    const trimmed = input.trim();
+    if (!node || !trimmed || isComposerBusy) return;
     const preparedAttachments = await composerControls.prepareAttachmentsForSend();
     if (!preparedAttachments) return;
+
+    if (isInitialSubmit) {
+      const projectId = await onStartProject?.(
+        trimmed,
+        preparedAttachments,
+        composerControls.selectedModel,
+      );
+      if (projectId) {
+        setInput("");
+        composerControls.resetAttachments();
+        clearSelectedSourceText();
+      }
+      return;
+    }
+
+    const sourceText = mode === "branch" && selectedSourceText ? selectedSourceText : undefined;
     const createdNodeId = await onCreateNode(
       node.id,
       mode,
-      input.trim(),
+      trimmed,
       sourceText,
       preparedAttachments,
       composerControls.selectedModel,
@@ -282,7 +333,7 @@ export function NodeDetailPanel({
   }
 
   async function handleBranchFromSelection() {
-    if (!node || !selectedSourceText || isComposerBusy) return;
+    if (isInitialSubmit || !node || !selectedSourceText || isComposerBusy) return;
     const instruction = input.trim() || DEFAULT_SELECTION_BRANCH_INSTRUCTION;
     const preparedAttachments = await composerControls.prepareAttachmentsForSend();
     if (!preparedAttachments) return;
@@ -345,6 +396,43 @@ export function NodeDetailPanel({
     setEditingValue("");
   }
 
+  function handleStartTitleEdit() {
+    if (!node || isInitialSubmit || isTitleEditBusy) return;
+    setEditingMessageId(null);
+    setEditingValue("");
+    setTitleEditValue(node.title);
+    setIsEditingTitle(true);
+    clearSelectedSourceText();
+  }
+
+  function handleCancelTitleEdit() {
+    setIsEditingTitle(false);
+    setTitleEditValue("");
+  }
+
+  async function handleSaveTitleEdit() {
+    if (!node || isTitleSaveDisabled) return;
+
+    const saved = await onUpdateNodeTitle(node.id, titleEditTrimmed);
+    if (saved) {
+      setIsEditingTitle(false);
+      setTitleEditValue("");
+    }
+  }
+
+  function handleTitleEditKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      handleCancelTitleEdit();
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void handleSaveTitleEdit();
+    }
+  }
+
   function handleRetryMessage(message: ChatMessage) {
     if (!node || isCreating) return;
     void onRetryAssistantMessage(node.id, message.id, composerControls.selectedModel);
@@ -355,18 +443,20 @@ export function NodeDetailPanel({
       <aside
         aria-label="Node details"
         data-testid="node-detail-panel"
-        className="flex min-h-0 w-full max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:h-full lg:max-h-full"
+        className="flex min-h-0 w-full max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:h-full lg:max-h-full lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
       >
-        <button
-          type="button"
-          onClick={onCollapse}
-          aria-label="Collapse node details panel"
-          aria-expanded="true"
-          data-testid="collapse-node-detail-panel-button"
-          className="grid h-11 w-11 place-items-center self-end rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
-        >
-          <PanelRightClose size={18} />
-        </button>
+        {showCollapseButton && (
+          <button
+            type="button"
+            onClick={onCollapse}
+            aria-label="Collapse node details panel"
+            aria-expanded="true"
+            data-testid="collapse-node-detail-panel-button"
+            className="grid h-11 w-11 place-items-center self-end rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+          >
+            <PanelRightClose size={18} />
+          </button>
+        )}
         <div className="grid min-h-[128px] flex-1 place-items-center text-center text-sm font-bold text-[#665a70]">
           <span role="status" aria-live="polite" data-testid="node-detail-empty-state">
             Select a node
@@ -380,29 +470,87 @@ export function NodeDetailPanel({
     <aside
       aria-labelledby={titleId}
       data-testid="node-detail-panel"
-      className="flex min-h-0 w-full max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:h-full lg:max-h-full"
+      className="flex min-h-0 w-full max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:h-full lg:max-h-full lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
     >
       <div className="shrink-0 space-y-3 border-b border-[#eadff1] pb-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 space-y-3">
+          <div className="min-w-0 flex-1 space-y-3">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-[#74687c]">
               {node.branchType}
             </p>
-            <h2 id={titleId} className="text-xl font-black leading-snug text-[#332a39]">
-              {node.title}
-            </h2>
+            {isEditingTitle ? (
+              <div className="flex items-start gap-2">
+                <input
+                  ref={titleInputRef}
+                  id={titleId}
+                  value={titleEditValue}
+                  onChange={(event) => setTitleEditValue(event.target.value)}
+                  onKeyDown={handleTitleEditKeyDown}
+                  disabled={isTitleEditBusy}
+                  aria-label="Edit node title"
+                  data-testid="node-title-edit-input"
+                  maxLength={120}
+                  className="min-w-0 flex-1 rounded-[16px] border border-white/80 bg-white/82 px-3 py-2 text-xl font-black leading-snug text-[#332a39] outline-none focus:border-[#b696d4] focus:ring-4 focus:ring-[#eadcf7] disabled:cursor-not-allowed disabled:opacity-65"
+                />
+                <div className="flex shrink-0 gap-1">
+                  <button
+                    type="button"
+                    onClick={handleCancelTitleEdit}
+                    disabled={isTitleEditBusy}
+                    aria-label="Cancel node title edit"
+                    title="Cancel"
+                    data-testid="cancel-node-title-edit-button"
+                    className="grid h-10 w-10 place-items-center rounded-full bg-white/75 text-[#776c80] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7] disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <X size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveTitleEdit()}
+                    disabled={isTitleSaveDisabled}
+                    aria-label="Save node title"
+                    title="Save"
+                    data-testid="save-node-title-edit-button"
+                    className="grid h-10 w-10 place-items-center rounded-full bg-[#dff5ea] text-[#376f51] transition hover:bg-[#ccefdc] focus:outline-none focus:ring-4 focus:ring-[#d7f0e2] disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <Save size={16} />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <h2 id={titleId} className="text-xl font-black leading-snug text-[#332a39]">
+                {node.title}
+              </h2>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={onCollapse}
-            aria-label="Collapse node details panel"
-            aria-controls="conversation-history"
-            aria-expanded="true"
-            data-testid="collapse-node-detail-panel-button"
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
-          >
-            <PanelRightClose size={18} />
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {!isInitialSubmit && !isEditingTitle && (
+              <button
+                type="button"
+                onClick={handleStartTitleEdit}
+                disabled={isTitleEditBusy}
+                aria-label="Edit node title"
+                title="Edit title"
+                data-testid="edit-node-title-button"
+                className="grid h-11 w-11 place-items-center rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7] disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <Pencil size={17} />
+              </button>
+            )}
+            {showCollapseButton && (
+              <button
+                type="button"
+                onClick={onCollapse}
+                aria-label="Collapse node details panel"
+                aria-controls="conversation-history"
+                aria-expanded="true"
+                data-testid="collapse-node-detail-panel-button"
+                className="grid h-11 w-11 place-items-center rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+              >
+                <PanelRightClose size={18} />
+              </button>
+            )}
+          </div>
         </div>
         <p className="text-sm leading-6 text-[#5f5368]">{node.summary}</p>
         <div className="flex flex-wrap gap-2">
@@ -434,22 +582,24 @@ export function NodeDetailPanel({
               Delete
             </button>
           )}
-          <button
-            type="button"
-            onClick={onToggleNotes}
-            aria-label={isNotesOpen ? "Close project notes" : "Open project notes"}
-            aria-controls="project-notes-panel"
-            aria-expanded={isNotesOpen}
-            data-testid="node-detail-notes-button"
-            className={`inline-flex h-11 items-center gap-2 rounded-[16px] px-3 text-sm font-black transition focus:outline-none focus:ring-4 focus:ring-[#eadcf7] ${
-              isNotesOpen
-                ? "bg-[#eadcf7] text-[#6e4ca0] hover:bg-[#dfc9f3]"
-                : "bg-white/75 text-[#776c80] hover:bg-white"
-            }`}
-          >
-            <NotebookPen size={16} />
-            Notes
-          </button>
+          {showNotesAction && (
+            <button
+              type="button"
+              onClick={onToggleNotes}
+              aria-label={isNotesOpen ? "Close project notes" : "Open project notes"}
+              aria-controls="project-notes-panel"
+              aria-expanded={isNotesOpen}
+              data-testid="node-detail-notes-button"
+              className={`inline-flex h-11 items-center gap-2 rounded-[16px] px-3 text-sm font-black transition focus:outline-none focus:ring-4 focus:ring-[#eadcf7] ${
+                isNotesOpen
+                  ? "bg-[#eadcf7] text-[#6e4ca0] hover:bg-[#dfc9f3]"
+                  : "bg-white/75 text-[#776c80] hover:bg-white"
+              }`}
+            >
+              <NotebookPen size={16} />
+              Notes
+            </button>
+          )}
         </div>
       </div>
 
@@ -596,7 +746,7 @@ export function NodeDetailPanel({
         onSubmit={handleSubmit}
         className="shrink-0 space-y-3 border-t border-[#eadff1] pt-4"
       >
-        {selectedSourceText && (
+        {!isInitialSubmit && selectedSourceText && (
           <div
             aria-label="Selected source text"
             data-testid="selected-source-text"
@@ -620,45 +770,47 @@ export function NodeDetailPanel({
           </div>
         )}
 
-        <div
-          role="group"
-          aria-label="Message branch mode"
-          data-testid="message-branch-mode"
-          className="grid grid-cols-2 gap-2"
-        >
-          <button
-            type="button"
-            onClick={() => setMode("continue")}
-            disabled={isComposerBusy}
-            aria-label="Continue down"
-            aria-pressed={mode === "continue"}
-            data-testid="continue-down-button"
-            className={`inline-flex h-11 items-center justify-center gap-2 rounded-[16px] text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-65 ${
-              mode === "continue"
-                ? "bg-[#dff5ea] text-[#376b50]"
-                : "bg-white/75 text-[#776c80] hover:bg-white"
-            }`}
+        {!isInitialSubmit && (
+          <div
+            role="group"
+            aria-label="Message branch mode"
+            data-testid="message-branch-mode"
+            className="grid grid-cols-2 gap-2"
           >
-            <Sprout size={16} />
-            Continue
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("branch")}
-            disabled={isComposerBusy}
-            aria-label="Branch right"
-            aria-pressed={mode === "branch"}
-            data-testid="branch-right-button"
-            className={`inline-flex h-11 items-center justify-center gap-2 rounded-[16px] text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-65 ${
-              mode === "branch"
-                ? "bg-[#eadcf7] text-[#6e4ca0]"
-                : "bg-white/75 text-[#776c80] hover:bg-white"
-            }`}
-          >
-            <GitBranch size={16} />
-            Branch
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => setMode("continue")}
+              disabled={isComposerBusy}
+              aria-label="Continue down"
+              aria-pressed={mode === "continue"}
+              data-testid="continue-down-button"
+              className={`inline-flex h-11 items-center justify-center gap-2 rounded-[16px] text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-65 ${
+                mode === "continue"
+                  ? "bg-[#dff5ea] text-[#376b50]"
+                  : "bg-white/75 text-[#776c80] hover:bg-white"
+              }`}
+            >
+              <Sprout size={16} />
+              Continue
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("branch")}
+              disabled={isComposerBusy}
+              aria-label="Branch right"
+              aria-pressed={mode === "branch"}
+              data-testid="branch-right-button"
+              className={`inline-flex h-11 items-center justify-center gap-2 rounded-[16px] text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-65 ${
+                mode === "branch"
+                  ? "bg-[#eadcf7] text-[#6e4ca0]"
+                  : "bg-white/75 text-[#776c80] hover:bg-white"
+              }`}
+            >
+              <GitBranch size={16} />
+              Branch
+            </button>
+          </div>
+        )}
         <PendingAttachmentChips
           attachments={composerControls.pendingAttachments}
           disabled={isComposerBusy}
@@ -674,7 +826,7 @@ export function NodeDetailPanel({
             aria-label="Message instruction"
             aria-describedby={displayError ? errorId : undefined}
             data-testid="message-instruction-input"
-            placeholder="Ask the next question..."
+            placeholder={composerPlaceholder}
             rows={3}
             className="min-w-[180px] flex-1 resize-none rounded-[20px] border border-white bg-white/82 p-3 text-sm text-[#332b38] outline-none placeholder:text-[#665a70] focus:border-[#b696d4] focus:ring-4 focus:ring-[#eadcf7] disabled:cursor-not-allowed disabled:opacity-65"
           />
@@ -694,14 +846,18 @@ export function NodeDetailPanel({
           {composerControls.isPreparingAttachments
             ? "Preparing PDF..."
             : isCreating
-              ? "Streaming..."
-              : "Send"}
+              ? isInitialSubmit
+                ? "Creating..."
+                : "Streaming..."
+              : submitLabel}
         </button>
         {isComposerBusy && (
           <p id={statusId} role="status" data-testid="message-send-status" className="sr-only">
             {composerControls.isPreparingAttachments
               ? "Preparing PDF attachments for this node."
-              : "Streaming answer for this node."}
+              : isInitialSubmit
+                ? "Creating your workspace."
+                : "Streaming answer for this node."}
           </p>
         )}
         {displayError && (

@@ -199,6 +199,10 @@ export function remapProjectForImport(
       projectId,
       parentId,
       title: cleanString(sourceNode.title, "Imported node"),
+      titleManuallyEdited:
+        typeof (sourceNode as { titleManuallyEdited?: unknown }).titleManuallyEdited === "boolean"
+          ? sourceNode.titleManuallyEdited
+          : false,
       summary: typeof sourceNode.summary === "string" ? sourceNode.summary : "",
       messages: normalizeMessages(sourceNode.messages, timestamp, usedIds),
       children: [],

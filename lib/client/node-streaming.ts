@@ -60,6 +60,7 @@ export function createDraftChildProject(
     projectId: project.id,
     parentId,
     title: mode === "branch" ? "Generating branch..." : "Generating continuation...",
+    titleManuallyEdited: false,
     summary: "Streaming DeepSeek response.",
     messages: [makeMessage("user", instruction, attachments), assistantMessage],
     children: [],
@@ -185,7 +186,10 @@ export function createRegeneratingNodeProject(
     node: nextNode,
     project: {
       ...project,
-      title: instruction && nodeId === project.rootNodeId ? instruction : project.title,
+      title:
+        instruction && nodeId === project.rootNodeId && !node.titleManuallyEdited
+          ? instruction
+          : project.title,
       nodes: {
         ...project.nodes,
         [nodeId]: nextNode,

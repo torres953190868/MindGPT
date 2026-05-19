@@ -7,8 +7,13 @@ import {
 import { getEmbeddingProvider } from "./embeddings";
 import { RagError } from "./errors";
 import { parsePdf } from "./parser";
-import { getRagRepository, requireOwnedDocument, type SaveParsedResult } from "./store";
-import type { RagErrorStage } from "./types";
+import {
+  getRagRepository,
+  requireOwnedDocument,
+  type RagRepository,
+  type SaveParsedResult,
+} from "./store";
+import type { RagDocument, RagErrorStage } from "./types";
 
 const CLEAR_RAG_ERROR = {
   errorCode: null,
@@ -17,6 +22,87 @@ const CLEAR_RAG_ERROR = {
   errorRequestId: null,
   errorStage: null,
 };
+
+async function parseUploadedDocument(
+  repository: RagRepository,
+  document: RagDocument,
+) {
+  await repository.setDocumentStatus(document.id, "parsing", {
+    ...CLEAR_RAG_ERROR,
+    parserVersion: PDF_PARSER_VERSION,
+    chunkVersion: DEFAULT_CHUNK_VERSION,
+  });
+
+  const fileBytes = await repository.readDocumentFile(document);
+  if (!fileBytes) {
+    throw new RagError("The uploaded PDF file is not available for parsing.", {
+      code: "PDF_FILE_MISSING",
+      status: 409,
+    });
+  }
+
+  const parsed = await parsePdf(fileBytes);
+  return repository.saveParsedDocument(document, parsed);
+}
+
+async function getParsedDocumentForIndexing(
+  repository: RagRepository,
+  document: RagDocument,
+) {
+  const [pages, sections] = await Promise.all([
+    repository.getPages(document.id),
+    repository.getSections(document.id),
+  ]);
+
+  if (pages.length > 0 && sections.length > 0) {
+    return {
+      document: await repository.setDocumentStatus(document.id, "parsed", {
+        ...CLEAR_RAG_ERROR,
+        pageCount: document.pageCount || pages.length,
+        title: document.title,
+        parserVersion: PDF_PARSER_VERSION,
+        chunkVersion: DEFAULT_CHUNK_VERSION,
+      }),
+      pages,
+      sections,
+    };
+  }
+
+  return parseUploadedDocument(repository, document);
+}
+
+export async function parseDocumentForOwner(
+  userId: string,
+  documentId: string,
+  options: { requestId: string },
+) {
+  const repository = getRagRepository();
+  const document = await requireOwnedDocument(userId, documentId);
+  const stage: RagErrorStage = "parsing";
+
+  try {
+    const parsedResult = await parseUploadedDocument(repository, document);
+    return {
+      document: parsedResult.document,
+      pageCount: parsedResult.pages.length,
+      sectionCount: parsedResult.sections.length,
+    };
+  } catch (error) {
+    const diagnostic = createRagFailureDiagnostic(error, {
+      requestId: options.requestId,
+      stage,
+    });
+    logRagFailureDiagnostic(document, diagnostic);
+    await repository.setDocumentStatus(document.id, "failed", {
+      errorCode: diagnostic.code,
+      errorDetails: diagnostic.details,
+      errorMessage: diagnostic.message,
+      errorRequestId: diagnostic.requestId,
+      errorStage: diagnostic.stage,
+    });
+    throw error;
+  }
+}
 
 export async function indexDocumentForOwner(
   userId: string,
@@ -28,37 +114,10 @@ export async function indexDocumentForOwner(
   let stage: RagErrorStage = "parsing";
 
   try {
-    await repository.setDocumentStatus(document.id, "parsing", {
-      ...CLEAR_RAG_ERROR,
-      parserVersion: PDF_PARSER_VERSION,
-      chunkVersion: DEFAULT_CHUNK_VERSION,
-    });
-
-    const fileBytes = await repository.readDocumentFile(document);
-    let parsedResult: SaveParsedResult;
-
-    if (fileBytes) {
-      const parsed = await parsePdf(fileBytes);
-      parsedResult = await repository.saveParsedDocument(document, parsed);
-    } else {
-      const pages = await repository.getPages(document.id);
-      const sections = await repository.getSections(document.id);
-      if (pages.length === 0 || sections.length === 0) {
-        throw new RagError("The uploaded PDF file is not available for parsing.", {
-          code: "PDF_FILE_MISSING",
-          status: 409,
-        });
-      }
-      parsedResult = {
-        document: await repository.setDocumentStatus(document.id, "parsed", {
-          ...CLEAR_RAG_ERROR,
-          parserVersion: PDF_PARSER_VERSION,
-          chunkVersion: DEFAULT_CHUNK_VERSION,
-        }),
-        pages,
-        sections,
-      };
-    }
+    const parsedResult: SaveParsedResult = await getParsedDocumentForIndexing(
+      repository,
+      document,
+    );
 
     stage = "chunking";
     const indexingDocument = await repository.setDocumentStatus(document.id, "indexing", {

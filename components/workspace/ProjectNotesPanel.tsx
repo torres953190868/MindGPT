@@ -179,7 +179,7 @@ export function ProjectNotesPanel({
       id="project-notes-panel"
       aria-labelledby={titleId}
       data-testid="project-notes-panel"
-      className="flex h-full min-h-0 w-full max-h-full flex-col overflow-hidden rounded-[28px] border border-white/80 bg-white/78 p-4 shadow-lg shadow-[#e4d6ef]/40"
+      className="flex h-full min-h-0 w-full max-h-full flex-col overflow-hidden rounded-[28px] border border-white/80 bg-white/78 p-4 shadow-lg shadow-[#e4d6ef]/40 xl:rounded-none xl:border-0 xl:bg-white xl:shadow-none"
     >
       <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[#eadff1] pb-4">
         <div className="min-w-0 space-y-2">

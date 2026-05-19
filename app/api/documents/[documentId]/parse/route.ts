@@ -1,23 +1,16 @@
 import type { NextRequest } from "next/server";
-import { z } from "zod";
 import { getBranchMindAuthContext } from "@/lib/server/auth";
 import { jsonWithSession, safeErrorWithSession } from "@/lib/server/http";
 import { getOrCreateRequestId } from "@/lib/server/request";
 import { assertValidRequestOrigin } from "@/lib/server/security";
 import { getOrCreateSession } from "@/lib/server/session";
-import { parseJsonBody } from "@/lib/server/validation";
-import { queryDocumentForOwner } from "@/lib/server/rag/service";
+import { parseDocumentForOwner } from "@/lib/server/rag/indexer";
 
-type QueryRouteContext = {
+type ParseRouteContext = {
   params: Promise<{ documentId: string }>;
 };
 
-const querySchema = z.object({
-  question: z.string().trim().min(1).max(2000),
-  topK: z.number().int().min(1).max(50).optional(),
-});
-
-export async function POST(request: NextRequest, context: QueryRouteContext) {
+export async function POST(request: NextRequest, context: ParseRouteContext) {
   const fallbackSession = getOrCreateSession(request);
   const requestId = getOrCreateRequestId(request);
 
@@ -27,15 +20,9 @@ export async function POST(request: NextRequest, context: QueryRouteContext) {
     });
     const { principal, session } = await getBranchMindAuthContext(request);
     const { documentId } = await context.params;
-    const body = await parseJsonBody(request, querySchema, {
-      maxBytes: 8 * 1024,
+    const result = await parseDocumentForOwner(principal.id, documentId, {
+      requestId,
     });
-    const result = await queryDocumentForOwner(
-      principal.id,
-      documentId,
-      body.question,
-      body.topK,
-    );
     return jsonWithSession(result, session, undefined, { requestId });
   } catch (error) {
     return safeErrorWithSession(error, fallbackSession, { requestId });
