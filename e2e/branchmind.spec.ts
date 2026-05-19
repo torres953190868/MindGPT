@@ -1495,6 +1495,10 @@ test("shows the workspace sidebar as a collapsible tree outline", async ({
     await expect(page.getByTestId("node-detail-panel")).toContainText(
       "Gradient Descent Details",
     );
+    await expect(page.getByTestId("node-brief-card")).toContainText(
+      "Nested child found through outline search.",
+    );
+    await expect(page.getByTestId("conversation-empty-state")).toHaveCount(0);
 
     if (testInfo.project.name === "mobile-chrome") {
       await page.getByTestId("workspace-mobile-view-outline").click();

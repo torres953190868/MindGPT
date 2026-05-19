@@ -140,6 +140,7 @@ export function MindMap({
         nodes={nodes}
         edges={graphEdges}
         nodeTypes={nodeTypes}
+        onNodeClick={(_, node) => onSelectNode(node.id)}
         onNodesChange={handleNodesChange}
         fitView
         minZoom={0.25}

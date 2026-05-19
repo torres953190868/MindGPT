@@ -166,6 +166,24 @@ function MessageAttachmentList({ attachments }: { attachments: ChatAttachment[] 
   );
 }
 
+function NodeBriefCard({ node }: { node: MindNode }) {
+  const summary = node.summary.trim();
+
+  return (
+    <article
+      aria-label="Node brief"
+      data-testid="node-brief-card"
+      className="rounded-[20px] bg-[#f5effc] p-3 text-sm leading-6 text-[#514062]"
+    >
+      <p className="mb-1 text-xs font-black uppercase opacity-65">Node brief</p>
+      <h3 className="text-base font-black leading-snug text-[#3a3041]">
+        {node.title}
+      </h3>
+      {summary && <p className="mt-2 text-[#5f5368]">{summary}</p>}
+    </article>
+  );
+}
+
 export function NodeDetailPanel({
   node,
   onCreateNode,
@@ -388,19 +406,21 @@ export function NodeDetailPanel({
         </div>
         <p className="text-sm leading-6 text-[#5f5368]">{node.summary}</p>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={isCreating}
-            onClick={() => onToggleNode(node.id)}
-            aria-label={node.collapsed ? "Expand node" : "Fold node"}
-            aria-expanded={node.children.length > 0 ? !node.collapsed : undefined}
-            aria-controls="mind-map"
-            data-testid="toggle-node-button"
-            className="inline-flex h-11 items-center gap-2 rounded-[16px] bg-[#ffe4ec] px-3 text-sm font-black text-[#9a4c64] transition hover:bg-[#ffd3df] disabled:cursor-not-allowed disabled:opacity-65"
-          >
-            <Ribbon size={16} />
-            {node.collapsed ? "Expand" : "Fold"}
-          </button>
+          {node.children.length > 0 && (
+            <button
+              type="button"
+              disabled={isCreating}
+              onClick={() => onToggleNode(node.id)}
+              aria-label={node.collapsed ? "Expand node" : "Fold node"}
+              aria-expanded={!node.collapsed}
+              aria-controls="mind-map"
+              data-testid="toggle-node-button"
+              className="inline-flex h-11 items-center gap-2 rounded-[16px] bg-[#ffe4ec] px-3 text-sm font-black text-[#9a4c64] transition hover:bg-[#ffd3df] disabled:cursor-not-allowed disabled:opacity-65"
+            >
+              <Ribbon size={16} />
+              {node.collapsed ? "Expand" : "Fold"}
+            </button>
+          )}
           {node.parentId && (
             <button
               type="button"
@@ -445,13 +465,7 @@ export function NodeDetailPanel({
         className="min-h-0 flex-1 space-y-3 overflow-auto overscroll-contain py-4 pr-1"
       >
         {node.messages.length === 0 ? (
-          <div
-            role="status"
-            data-testid="conversation-empty-state"
-            className="rounded-[20px] bg-white/70 p-4 text-center text-sm font-bold text-[#665a70]"
-          >
-            No messages in this node yet.
-          </div>
+          <NodeBriefCard node={node} />
         ) : (
           node.messages.map((message) => {
             const isStreamingAssistant = message.id === streamingMessageId;
