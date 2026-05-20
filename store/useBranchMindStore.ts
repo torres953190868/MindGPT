@@ -968,7 +968,6 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
 
     set({
       projects: replaceProject(state.projects, optimisticProject),
-      aiError: null,
     });
 
     try {
@@ -981,8 +980,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
 
       set({ projects: replaceProject(get().projects, data.project) });
       return true;
-    } catch (error) {
-      set({ aiError: getErrorMessage(error) });
+    } catch {
       return false;
     }
   },

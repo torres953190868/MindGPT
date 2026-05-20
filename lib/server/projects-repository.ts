@@ -26,6 +26,13 @@ type SupabaseProjectSchemaCapabilities = {
   projectNotes: boolean;
 };
 
+type SupabaseErrorLike = {
+  code?: string;
+  details?: string;
+  hint?: string;
+  message?: string;
+} | null;
+
 export type ProjectsRepository = {
   backend: ProjectsBackend;
   readProjects: () => Promise<OwnedProject[]>;
@@ -42,11 +49,22 @@ function assertNoError(error: { message: string } | null, operation: string) {
   throw new Error(`Supabase ${operation} failed: ${error.message}`);
 }
 
-function isMissingColumnError(error: { message: string } | null) {
+function isMissingColumnError(error: SupabaseErrorLike) {
+  const text = [error?.message, error?.details, error?.hint]
+    .filter(Boolean)
+    .join(" ");
   return Boolean(
-    error?.message &&
-      /column .* does not exist|could not find .* column/i.test(error.message),
+    text &&
+      (error?.code === "42703" ||
+        error?.code === "PGRST204" ||
+        /column .* does not exist|could not find .* column/i.test(text)),
   );
+}
+
+function getErrorText(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return "";
 }
 
 let schemaCapabilitiesPromise:
@@ -59,13 +77,16 @@ async function getSchemaCapabilities(
   schemaCapabilitiesPromise ??= Promise.all([
     client
       .from("branchmind_projects")
-      .select("id,notes", { count: "exact", head: true }),
+      .select("id,notes")
+      .limit(1),
     client
       .from("branchmind_messages")
-      .select("id,attachments", { count: "exact", head: true }),
+      .select("id,attachments")
+      .limit(1),
     client
       .from("branchmind_nodes")
-      .select("id,title_manually_edited", { count: "exact", head: true }),
+      .select("id,title_manually_edited")
+      .limit(1),
   ]).then(([projectsResult, messagesResult, nodesResult]) => ({
     projectNotes: !isMissingColumnError(projectsResult.error),
     messageAttachments: !isMissingColumnError(messagesResult.error),
@@ -73,6 +94,39 @@ async function getSchemaCapabilities(
   }));
 
   return schemaCapabilitiesPromise;
+}
+
+function cacheSchemaCapabilities(capabilities: SupabaseProjectSchemaCapabilities) {
+  schemaCapabilitiesPromise = Promise.resolve(capabilities);
+}
+
+function getSchemaCapabilitiesAfterMissingColumnError(
+  capabilities: SupabaseProjectSchemaCapabilities,
+  error: unknown,
+) {
+  const text = getErrorText(error);
+  if (!isMissingColumnError({ message: text })) return null;
+
+  const nextCapabilities = { ...capabilities };
+  if (/branchmind_projects|notes/i.test(text)) {
+    nextCapabilities.projectNotes = false;
+  }
+  if (/branchmind_messages|attachments/i.test(text)) {
+    nextCapabilities.messageAttachments = false;
+  }
+  if (/branchmind_nodes|title_manually_edited/i.test(text)) {
+    nextCapabilities.nodeManualTitles = false;
+  }
+
+  if (
+    nextCapabilities.projectNotes === capabilities.projectNotes &&
+    nextCapabilities.messageAttachments === capabilities.messageAttachments &&
+    nextCapabilities.nodeManualTitles === capabilities.nodeManualTitles
+  ) {
+    return null;
+  }
+
+  return nextCapabilities;
 }
 
 function requireProjectOwner(project: Project) {
@@ -156,6 +210,36 @@ export function projectToRows(project: Project) {
   );
 
   return { projectRow, nodeRows, messageRows };
+}
+
+function projectRowsForSchemaCapabilities(
+  rows: ReturnType<typeof projectToRows>,
+  capabilities: SupabaseProjectSchemaCapabilities,
+) {
+  const supportedProjectRow = {
+    ...rows.projectRow,
+  } as ProjectInsert & Record<string, unknown>;
+  if (!capabilities.projectNotes) delete supportedProjectRow.notes;
+
+  const supportedNodeRows = rows.nodeRows.map((nodeRow) => {
+    const supportedNodeRow = { ...nodeRow } as NodeInsert & Record<string, unknown>;
+    if (!capabilities.nodeManualTitles) delete supportedNodeRow.title_manually_edited;
+    return supportedNodeRow as NodeInsert;
+  });
+
+  const supportedMessageRows = rows.messageRows.map((messageRow) => {
+    const supportedMessageRow = {
+      ...messageRow,
+    } as MessageInsert & Record<string, unknown>;
+    if (!capabilities.messageAttachments) delete supportedMessageRow.attachments;
+    return supportedMessageRow as MessageInsert;
+  });
+
+  return {
+    projectRow: supportedProjectRow as ProjectInsert,
+    nodeRows: supportedNodeRows,
+    messageRows: supportedMessageRows,
+  };
 }
 
 function getPersistenceNodeOrder(project: Project) {
@@ -324,7 +408,7 @@ class SupabaseProjectsRepository implements ProjectsRepository {
   async saveProject(project: Project) {
     const client = getSupabaseAdminClient();
     const capabilities = await getSchemaCapabilities(client);
-    const { projectRow, nodeRows, messageRows } = projectToRows(project);
+    const rows = projectToRows(project);
     const existingProject = await client
       .from("branchmind_projects")
       .select("id")
@@ -332,25 +416,17 @@ class SupabaseProjectsRepository implements ProjectsRepository {
       .limit(1);
     assertNoError(existingProject.error, "read existing project");
     const projectAlreadyExisted = (existingProject.data?.length ?? 0) > 0;
-    const supportedProjectRow = { ...projectRow } as ProjectInsert & Record<string, unknown>;
-    if (!capabilities.projectNotes) delete supportedProjectRow.notes;
-    const supportedNodeRows = nodeRows.map((nodeRow) => {
-      const supportedNodeRow = { ...nodeRow } as NodeInsert & Record<string, unknown>;
-      if (!capabilities.nodeManualTitles) delete supportedNodeRow.title_manually_edited;
-      return supportedNodeRow as NodeInsert;
-    });
-    const supportedMessageRows = messageRows.map((messageRow) => {
-      const supportedMessageRow = {
-        ...messageRow,
-      } as MessageInsert & Record<string, unknown>;
-      if (!capabilities.messageAttachments) delete supportedMessageRow.attachments;
-      return supportedMessageRow as MessageInsert;
-    });
 
-    try {
+    const persistRows = async (schemaCapabilities: SupabaseProjectSchemaCapabilities) => {
+      const {
+        projectRow: supportedProjectRow,
+        nodeRows: supportedNodeRows,
+        messageRows: supportedMessageRows,
+      } = projectRowsForSchemaCapabilities(rows, schemaCapabilities);
+
       const upsertProject = await client
         .from("branchmind_projects")
-        .upsert(supportedProjectRow as ProjectInsert);
+        .upsert(supportedProjectRow);
       assertNoError(upsertProject.error, "upsert project");
 
       if (supportedNodeRows.length > 0) {
@@ -364,26 +440,58 @@ class SupabaseProjectsRepository implements ProjectsRepository {
           .upsert(supportedMessageRows);
         assertNoError(upsertMessages.error, "upsert project messages");
       }
+    };
+
+    const cleanupNewProject = async () => {
+      if (projectAlreadyExisted) return;
+
+      const cleanup = await client
+        .from("branchmind_projects")
+        .delete()
+        .eq("id", project.id);
+      if (cleanup.error) {
+        console.error("BranchMind Supabase project cleanup failed", {
+          projectId: project.id,
+          message: cleanup.error.message,
+        });
+      }
+    };
+
+    try {
+      await persistRows(capabilities);
 
       await this.deleteStaleNodes(
         client,
         project.id,
-        nodeRows.map((row) => row.id),
+        rows.nodeRows.map((row) => row.id),
       );
     } catch (error) {
-      if (!projectAlreadyExisted) {
-        const cleanup = await client
-          .from("branchmind_projects")
-          .delete()
-          .eq("id", project.id);
-        if (cleanup.error) {
-          console.error("BranchMind Supabase project cleanup failed", {
-            projectId: project.id,
-            message: cleanup.error.message,
-          });
+      const retryCapabilities = getSchemaCapabilitiesAfterMissingColumnError(
+        capabilities,
+        error,
+      );
+
+      if (retryCapabilities) {
+        cacheSchemaCapabilities(retryCapabilities);
+        console.warn("BranchMind Supabase schema is missing an optional project column; retrying without it.", {
+          projectId: project.id,
+        });
+
+        try {
+          await persistRows(retryCapabilities);
+          await this.deleteStaleNodes(
+            client,
+            project.id,
+            rows.nodeRows.map((row) => row.id),
+          );
+          return;
+        } catch (retryError) {
+          await cleanupNewProject();
+          throw retryError;
         }
       }
 
+      await cleanupNewProject();
       throw error;
     }
   }

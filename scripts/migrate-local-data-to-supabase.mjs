@@ -127,7 +127,7 @@ async function ensureSelectableColumns(client, tableColumns) {
   for (const [tableName, columns] of Object.entries(tableColumns)) {
     const { error } = await client
       .from(tableName)
-      .select(columns.join(","), { count: "exact", head: true })
+      .select(columns.join(","))
       .limit(1);
     assertNoError(error, `check ${tableName} columns`);
   }

@@ -443,7 +443,7 @@ export function NodeDetailPanel({
       <aside
         aria-label="Node details"
         data-testid="node-detail-panel"
-        className="flex min-h-0 w-full max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:h-full lg:max-h-full lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
+        className="flex min-h-0 w-full max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:h-full lg:max-h-[calc(100vh-6rem)] lg:self-start lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
       >
         {showCollapseButton && (
           <button
@@ -470,7 +470,7 @@ export function NodeDetailPanel({
     <aside
       aria-labelledby={titleId}
       data-testid="node-detail-panel"
-      className="flex min-h-0 w-full max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:h-full lg:max-h-full lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
+      className="grid min-h-0 w-full max-h-[calc(100vh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:h-full lg:max-h-[calc(100vh-6rem)] lg:self-start lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
     >
       <div className="shrink-0 space-y-3 border-b border-[#eadff1] pb-4">
         <div className="flex items-start justify-between gap-3">
@@ -816,9 +816,11 @@ export function NodeDetailPanel({
           disabled={isComposerBusy}
           onRemove={composerControls.removePendingAttachment}
         />
-        <div className="flex flex-wrap items-start gap-2">
-          <AttachmentMenuButton controls={composerControls} />
-          <ModelSelectorButton controls={composerControls} />
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <AttachmentMenuButton controls={composerControls} />
+            <ModelSelectorButton controls={composerControls} />
+          </div>
           <textarea
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -828,7 +830,7 @@ export function NodeDetailPanel({
             data-testid="message-instruction-input"
             placeholder={composerPlaceholder}
             rows={3}
-            className="min-w-[180px] flex-1 resize-none rounded-[20px] border border-white bg-white/82 p-3 text-sm text-[#332b38] outline-none placeholder:text-[#665a70] focus:border-[#b696d4] focus:ring-4 focus:ring-[#eadcf7] disabled:cursor-not-allowed disabled:opacity-65"
+            className="w-full resize-none rounded-[20px] border border-white bg-white/82 p-3 text-sm text-[#332b38] outline-none placeholder:text-[#665a70] focus:border-[#b696d4] focus:ring-4 focus:ring-[#eadcf7] disabled:cursor-not-allowed disabled:opacity-65"
           />
         </div>
         <button

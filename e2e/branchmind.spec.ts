@@ -265,6 +265,18 @@ async function importProject(page: Page, project: WorkspaceProject): Promise<Wor
   return importedProject;
 }
 
+async function getPersistedProject(page: Page, projectId: string): Promise<WorkspaceProject> {
+  const response = await page.request.get("/api/projects");
+  expect(response.status(), await response.text()).toBe(200);
+
+  const data = await response.json();
+  const projects = Array.isArray(data.projects) ? (data.projects as WorkspaceProject[]) : [];
+  const project = projects.find((item) => item.id === projectId);
+  if (!project) throw new Error(`Expected project ${projectId} to be persisted.`);
+
+  return project;
+}
+
 async function mockAuthSession(page: Page, session: { configured: boolean; user: null | { id: string; email: string | null } }) {
   await page.route("**/api/auth/session", async (route) => {
     await route.fulfill({
@@ -1457,6 +1469,115 @@ test("edits a root node title from the node detail header", async ({ page }) => 
   }
 });
 
+test("splits node edge drag from inner open actions", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Node hit areas are covered once.");
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const sourceProject = makeWorkspaceTreeProject(`hit-area-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  const getCard = (nodeId: string) =>
+    page.locator(`[data-testid="branch-node-card"][data-node-id="${nodeId}"]`);
+  const dragFromPoint = async (
+    startX: number,
+    startY: number,
+    deltaX: number,
+    deltaY: number,
+  ) => {
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX + deltaX, startY + deltaY, { steps: 8 });
+    await page.mouse.up();
+  };
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+    const root = project.nodes[project.rootNodeId];
+    const tools = getNodeByTitle(project, "Programming Tools");
+
+    await page.goto(`/workspace/${project.id}`);
+    await expect(page.getByTestId("branch-node-card")).toHaveCount(4);
+
+    const rootCard = getCard(root.id);
+    const toolsCard = getCard(tools.id);
+
+    await toolsCard.getByTestId("open-node-button").click();
+    await expect(toolsCard).toHaveAttribute("data-selected", "true");
+    await expect(page.getByTestId("node-detail-panel")).toContainText("Programming Tools");
+
+    await rootCard.getByTestId("open-node-button").click();
+    await expect(rootCard).toHaveAttribute("data-selected", "true");
+    await expect(page.getByTestId("node-detail-panel")).toContainText("Machine Learning Map");
+
+    await toolsCard.getByTestId("open-node-button").click();
+    await expect(toolsCard).toHaveAttribute("data-selected", "true");
+    const positionBeforeToggle = (await getPersistedProject(page, project.id)).nodes[root.id]
+      .position;
+
+    await rootCard.getByTestId("toggle-children-button").click();
+    await expect(rootCard).toHaveAttribute("data-selected", "true");
+    await expect(page.getByTestId("node-detail-panel")).toContainText("Machine Learning Map");
+    await expect(page.getByTestId("branch-node-card")).toHaveCount(1);
+    expect((await getPersistedProject(page, project.id)).nodes[root.id].position).toEqual(
+      positionBeforeToggle,
+    );
+
+    const openButtonBoxBefore = await getElementBox(
+      rootCard.getByTestId("open-node-button"),
+      "root open node button",
+    );
+    const rootBoxBeforeInnerDrag = await getElementBox(rootCard, "root card before inner drag");
+    await dragFromPoint(
+      openButtonBoxBefore.x + openButtonBoxBefore.width / 2,
+      openButtonBoxBefore.y + openButtonBoxBefore.height / 2,
+      90,
+      50,
+    );
+    const rootBoxAfterInnerDrag = await getElementBox(rootCard, "root card after inner drag");
+    expect(Math.abs(rootBoxAfterInnerDrag.x - rootBoxBeforeInnerDrag.x)).toBeLessThan(2);
+    expect(Math.abs(rootBoxAfterInnerDrag.y - rootBoxBeforeInnerDrag.y)).toBeLessThan(2);
+    expect((await getPersistedProject(page, project.id)).nodes[root.id].position).toEqual(
+      positionBeforeToggle,
+    );
+
+    const rootBoxBeforeHandleDrag = await getElementBox(rootCard, "root card before handle drag");
+    const sourceHandleBox = await getElementBox(
+      rootCard.locator('[data-handleid="branch-source"]'),
+      "root branch source handle",
+    );
+    await dragFromPoint(
+      sourceHandleBox.x + sourceHandleBox.width / 2,
+      sourceHandleBox.y + sourceHandleBox.height / 2,
+      90,
+      0,
+    );
+    const rootBoxAfterHandleDrag = await getElementBox(rootCard, "root card after handle drag");
+    expect(Math.abs(rootBoxAfterHandleDrag.x - rootBoxBeforeHandleDrag.x)).toBeLessThan(2);
+    expect(Math.abs(rootBoxAfterHandleDrag.y - rootBoxBeforeHandleDrag.y)).toBeLessThan(2);
+
+    const positionBeforeEdgeDrag = (await getPersistedProject(page, project.id)).nodes[root.id]
+      .position;
+    const rootBoxBeforeEdgeDrag = await getElementBox(rootCard, "root card before edge drag");
+    await dragFromPoint(
+      rootBoxBeforeEdgeDrag.x + 8,
+      rootBoxBeforeEdgeDrag.y + 24,
+      90,
+      50,
+    );
+
+    await expect
+      .poll(async () => (await getPersistedProject(page, project.id)).nodes[root.id].position.x)
+      .toBeGreaterThan(positionBeforeEdgeDrag.x + 20);
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
 test("workspace sidebars resize and snap like VS Code", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Desktop sidebar resizing is covered once.");
 
@@ -1774,7 +1895,9 @@ test("toggles the project notes side window from the node detail header", async 
     await expect(notesButton).toHaveAttribute("aria-expanded", "false");
     await notesButton.click();
     await expect(notesButton).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByTestId("node-detail-panel")).toBeVisible();
     await expect(page.getByTestId("project-notes-panel")).toBeVisible();
+    await expect(page.getByTestId("project-notes-drawer-backdrop")).toHaveCount(0);
 
     const notesWindow = page.getByTestId("project-notes-window");
     const notesResizeHandle = page.getByTestId("resize-project-notes-panel");
@@ -1793,6 +1916,7 @@ test("toggles the project notes side window from the node detail header", async 
     await expect
       .poll(() => notesWindow.evaluate((element) => element.getBoundingClientRect().width))
       .toBeGreaterThan(notesWidthBefore + 80);
+    await expect(page.getByTestId("node-detail-panel")).toBeVisible();
     const overflow = await page.evaluate(() => ({
       clientWidth: document.documentElement.clientWidth,
       scrollWidth: document.documentElement.scrollWidth,
@@ -1808,6 +1932,115 @@ test("toggles the project notes side window from the node detail header", async 
     await page.getByTestId("collapse-node-detail-panel-button").click();
     await expect(page.getByTestId("node-detail-panel")).toHaveCount(0);
     await expect(page.getByTestId("project-notes-panel")).toHaveCount(0);
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("shows chat and notes side by side on compact desktop", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Compact desktop notes layout is covered once.");
+
+  const sourceProject = makeWorkspaceProject(`notes-compact-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.setViewportSize({ width: 1180, height: 800 });
+    await page.goto(`/workspace/${project.id}`);
+
+    const notesButton = page.getByTestId("node-detail-notes-button");
+    await expect(page.getByTestId("workspace-sidebar")).toBeVisible();
+    await notesButton.click();
+
+    const mindMapCanvas = page.getByTestId("mind-map-canvas");
+    const nodeDetailPanel = page.getByTestId("node-detail-panel");
+    const notesPanel = page.getByTestId("project-notes-panel");
+    const notesWindow = page.getByTestId("project-notes-window");
+
+    await expect(notesButton).toHaveAttribute("aria-expanded", "true");
+    await expect(nodeDetailPanel).toBeVisible();
+    await expect(notesPanel).toBeVisible();
+    await expect(page.getByTestId("workspace-sidebar")).toHaveCount(0);
+    await expect(mindMapCanvas.getByTestId("expand-workspace-sidebar-button")).toBeVisible();
+    await expect(page.getByTestId("resize-project-notes-panel")).toBeVisible();
+    await expect(page.getByTestId("project-notes-drawer-backdrop")).toHaveCount(0);
+
+    const chatBox = await getElementBox(nodeDetailPanel, "node detail panel");
+    const notesBox = await getElementBox(notesWindow, "project notes window");
+    expect(notesBox.x).toBeGreaterThanOrEqual(chatBox.x + chatBox.width - 1);
+    await expectNoHorizontalOverflow(page);
+
+    await page.getByTestId("close-project-notes-button").click();
+    await expect(page.getByTestId("project-notes-panel")).toHaveCount(0);
+    await expect(page.getByTestId("workspace-sidebar")).toBeVisible();
+    await expect(notesButton).toHaveAttribute("aria-expanded", "false");
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("keeps failed project notes saves out of the node composer", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Desktop notes errors are covered once.");
+
+  const sourceProject = makeWorkspaceProject(`notes-failure-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.route(`**/api/projects/${project.id}`, async (route) => {
+      if (route.request().method() === "PATCH") {
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: {
+              code: "NOTES_SAVE_FAILED",
+              message: "Request failed.",
+              requestId: "e2e_notes_failure",
+            },
+          }),
+        });
+        return;
+      }
+
+      await route.continue();
+    });
+
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.goto(`/workspace/${project.id}`);
+    await page.getByTestId("node-detail-notes-button").click();
+
+    const notesEditor = page.getByTestId("project-notes-input");
+    await notesEditor.click();
+    await page.keyboard.type("This note will fail to save.");
+
+    await expect(page.getByTestId("project-notes-save-status")).toContainText(
+      "Save failed",
+      { timeout: 5_000 },
+    );
+    await expect(page.getByTestId("project-notes-error-alert")).toContainText(
+      "Notes could not be saved.",
+    );
+
+    await page.getByTestId("close-project-notes-button").click();
+    await expect(page.getByTestId("project-notes-panel")).toHaveCount(0);
+    await expect(page.getByTestId("message-error-alert")).toHaveCount(0);
   } finally {
     if (projectIdToDelete) {
       await page.request
@@ -1909,7 +2142,7 @@ test("keeps long conversation content inside the node detail scroll area", async
   }
 });
 
-test("keeps long project notes inside the fixed desktop side window", async ({
+test("keeps long project notes inside the desktop side panel", async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Desktop notes scrolling is covered once.");
@@ -1959,7 +2192,7 @@ test("keeps long project notes inside the fixed desktop side window", async ({
       };
     });
 
-    expect(metrics.windowHeight).toBeLessThanOrEqual(metrics.viewportHeight - 80);
+    expect(metrics.windowHeight).toBeLessThanOrEqual(metrics.viewportHeight);
     expect(metrics.panelHeight).toBeLessThanOrEqual(metrics.windowHeight + 1);
     expect(metrics.editorScrollHeight).toBeGreaterThan(metrics.editorClientHeight + 24);
     await expectWheelScrolls(page, notesEditor);

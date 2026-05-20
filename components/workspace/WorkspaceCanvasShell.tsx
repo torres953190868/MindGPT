@@ -133,7 +133,7 @@ type SidePanelResizeBoundsOptions = {
   isWorkspaceSidebarCollapsed: boolean;
   isNodeDetailPanelCollapsed: boolean;
   isProjectNotesSidePanelOpen: boolean;
-  isWideLayout: boolean;
+  canShowInlineProjectNotes: boolean;
 };
 
 type ProjectNotesPanelResizeBoundsOptions = {
@@ -158,6 +158,14 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
+function isDesktopForInlineNotes() {
+  return window.matchMedia("(min-width: 1024px)").matches;
+}
+
+function isCompactDesktopForInlineNotes() {
+  return window.matchMedia("(min-width: 1024px) and (max-width: 1279px)").matches;
+}
+
 function getGridGapCount(includedColumns: boolean[]) {
   const columnCount = includedColumns.filter(Boolean).length;
 
@@ -173,14 +181,14 @@ function getSidePanelResizeBounds({
   isWorkspaceSidebarCollapsed,
   isNodeDetailPanelCollapsed,
   isProjectNotesSidePanelOpen,
-  isWideLayout,
+  canShowInlineProjectNotes,
 }: SidePanelResizeBoundsOptions) {
   const isWorkspaceSidebarVisible =
     side === "left" ? true : !isWorkspaceSidebarCollapsed;
   const isNodeDetailPanelVisible =
     side === "right" ? true : !isNodeDetailPanelCollapsed;
   const reserveProjectNotesPanel =
-    isWideLayout && isProjectNotesSidePanelOpen && isNodeDetailPanelVisible;
+    canShowInlineProjectNotes && isProjectNotesSidePanelOpen && isNodeDetailPanelVisible;
   const gapCount = getGridGapCount([
     isWorkspaceSidebarVisible,
     isWorkspaceSidebarVisible,
@@ -307,6 +315,7 @@ export function WorkspaceCanvasShell({
   const workspaceGridRef = useRef<HTMLDivElement | null>(null);
   const workspaceSidebarRestoreWidthRef = useRef(WORKSPACE_SIDEBAR_DEFAULT_WIDTH);
   const detailPanelRestoreWidthRef = useRef(DETAIL_PANEL_DEFAULT_WIDTH);
+  const autoCollapsedSidebarForNotesRef = useRef(false);
   const [workspaceSidebarWidth, setWorkspaceSidebarWidth] = useState(
     WORKSPACE_SIDEBAR_DEFAULT_WIDTH,
   );
@@ -343,15 +352,6 @@ export function WorkspaceCanvasShell({
     `minmax(${DESKTOP_MAP_MIN_WIDTH}px,1fr)`,
     !isNodeDetailPanelCollapsed ? `${DESKTOP_RESIZE_HANDLE_WIDTH}px` : null,
     !isNodeDetailPanelCollapsed ? "var(--detail-panel-width)" : null,
-  ]
-    .filter(Boolean)
-    .join(" ");
-  const wideGridColumns = [
-    !isWorkspaceSidebarCollapsed ? "var(--workspace-sidebar-width)" : null,
-    !isWorkspaceSidebarCollapsed ? `${DESKTOP_RESIZE_HANDLE_WIDTH}px` : null,
-    `minmax(${DESKTOP_MAP_MIN_WIDTH}px,1fr)`,
-    !isNodeDetailPanelCollapsed ? `${DESKTOP_RESIZE_HANDLE_WIDTH}px` : null,
-    !isNodeDetailPanelCollapsed ? "var(--detail-panel-width)" : null,
     isProjectNotesSidePanelOpen ? `${DESKTOP_RESIZE_HANDLE_WIDTH}px` : null,
     isProjectNotesSidePanelOpen ? "var(--project-notes-panel-width)" : null,
   ]
@@ -362,11 +362,10 @@ export function WorkspaceCanvasShell({
     "--detail-panel-width": `${detailPanelWidth}px`,
     "--project-notes-panel-width": `${projectNotesPanelWidth}px`,
     "--workspace-grid-columns": desktopGridColumns,
-    "--workspace-wide-grid-columns": wideGridColumns,
     "--mobile-map-height": `${mobileMapHeight}px`,
   } as CSSProperties;
   const workspaceGridClassName =
-    "grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden rounded-b-xl border border-t-0 border-[#e5e1ec] bg-white shadow-[0_18px_60px_rgba(44,35,62,0.08)] lg:h-full lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:shadow-none xl:grid-cols-[var(--workspace-wide-grid-columns)]";
+    "grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden rounded-b-xl border border-t-0 border-[#e5e1ec] bg-white shadow-[0_18px_60px_rgba(44,35,62,0.08)] lg:h-full lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:shadow-none";
   const mobileTabsClassName = hasProjectNotes
     ? "grid grid-cols-4 gap-2 rounded-[24px] border border-white/80 bg-white/68 p-2 shadow-sm lg:hidden"
     : "grid grid-cols-3 gap-2 rounded-[24px] border border-white/80 bg-white/68 p-2 shadow-sm lg:hidden";
@@ -386,7 +385,7 @@ export function WorkspaceCanvasShell({
         isWorkspaceSidebarCollapsed,
         isNodeDetailPanelCollapsed,
         isProjectNotesSidePanelOpen,
-        isWideLayout: window.matchMedia("(min-width: 1280px)").matches,
+        canShowInlineProjectNotes: isDesktopForInlineNotes(),
       });
     },
     [
@@ -404,7 +403,7 @@ export function WorkspaceCanvasShell({
     (gridWidth = getWorkspaceGridWidth()) => {
       if (!gridWidth || window.matchMedia("(max-width: 1023px)").matches) return;
 
-      const isWideLayout = window.matchMedia("(min-width: 1280px)").matches;
+      const canShowInlineProjectNotes = isDesktopForInlineNotes();
       let nextWorkspaceSidebarWidth = workspaceSidebarWidth;
       let nextDetailPanelWidth = detailPanelWidth;
       let nextProjectNotesPanelWidth = projectNotesPanelWidth;
@@ -419,7 +418,7 @@ export function WorkspaceCanvasShell({
           isWorkspaceSidebarCollapsed,
           isNodeDetailPanelCollapsed,
           isProjectNotesSidePanelOpen,
-          isWideLayout,
+          canShowInlineProjectNotes,
         });
         nextWorkspaceSidebarWidth = clamp(
           nextWorkspaceSidebarWidth,
@@ -438,12 +437,12 @@ export function WorkspaceCanvasShell({
           isWorkspaceSidebarCollapsed,
           isNodeDetailPanelCollapsed,
           isProjectNotesSidePanelOpen,
-          isWideLayout,
+          canShowInlineProjectNotes,
         });
         nextDetailPanelWidth = clamp(nextDetailPanelWidth, bounds.minWidth, bounds.maxWidth);
       }
 
-      if (isWideLayout && isProjectNotesSidePanelOpen) {
+      if (canShowInlineProjectNotes && isProjectNotesSidePanelOpen) {
         const bounds = getProjectNotesPanelResizeBounds({
           gridWidth,
           workspaceSidebarWidth: nextWorkspaceSidebarWidth,
@@ -478,12 +477,30 @@ export function WorkspaceCanvasShell({
     ],
   );
 
+  const restoreAutoCollapsedSidebarForNotes = useCallback(() => {
+    if (!autoCollapsedSidebarForNotesRef.current) return;
+
+    autoCollapsedSidebarForNotesRef.current = false;
+    setWorkspaceSidebarWidth(workspaceSidebarRestoreWidthRef.current);
+    setIsWorkspaceSidebarCollapsed(false);
+  }, []);
+
+  const autoCollapseSidebarForNotesIfNeeded = useCallback(() => {
+    if (isWorkspaceSidebarCollapsed || !isCompactDesktopForInlineNotes()) return;
+
+    workspaceSidebarRestoreWidthRef.current = workspaceSidebarWidth;
+    autoCollapsedSidebarForNotesRef.current = true;
+    setIsWorkspaceSidebarCollapsed(true);
+  }, [isWorkspaceSidebarCollapsed, workspaceSidebarWidth]);
+
   const handleCollapseWorkspaceSidebar = useCallback(() => {
+    autoCollapsedSidebarForNotesRef.current = false;
     workspaceSidebarRestoreWidthRef.current = workspaceSidebarWidth;
     setIsWorkspaceSidebarCollapsed(true);
   }, [workspaceSidebarWidth]);
 
   const handleExpandWorkspaceSidebar = useCallback(() => {
+    autoCollapsedSidebarForNotesRef.current = false;
     const bounds = getSideBounds("left");
     setWorkspaceSidebarWidth(
       clamp(workspaceSidebarRestoreWidthRef.current, bounds.minWidth, bounds.maxWidth),
@@ -495,7 +512,8 @@ export function WorkspaceCanvasShell({
     detailPanelRestoreWidthRef.current = detailPanelWidth;
     setIsNodeDetailPanelCollapsed(true);
     setIsProjectNotesPanelOpen(false);
-  }, [detailPanelWidth]);
+    restoreAutoCollapsedSidebarForNotes();
+  }, [detailPanelWidth, restoreAutoCollapsedSidebarForNotes]);
 
   const handleExpandNodeDetailPanel = useCallback(() => {
     const bounds = getSideBounds("right");
@@ -510,25 +528,42 @@ export function WorkspaceCanvasShell({
 
     if (window.matchMedia("(max-width: 1023px)").matches) {
       setIsProjectNotesPanelOpen(false);
+      restoreAutoCollapsedSidebarForNotes();
       setMobileWorkspaceView((current) => (current === "notes" ? "chat" : "notes"));
       return;
     }
 
-    setIsProjectNotesPanelOpen((isOpen) => !isOpen);
-  }, [hasProjectNotes]);
+    if (isProjectNotesPanelOpen) {
+      setIsProjectNotesPanelOpen(false);
+      restoreAutoCollapsedSidebarForNotes();
+      return;
+    }
+
+    autoCollapseSidebarForNotesIfNeeded();
+    setIsProjectNotesPanelOpen(true);
+  }, [
+    autoCollapseSidebarForNotesIfNeeded,
+    hasProjectNotes,
+    isProjectNotesPanelOpen,
+    restoreAutoCollapsedSidebarForNotes,
+  ]);
 
   const handleCloseProjectNotesPanel = useCallback(() => {
     setIsProjectNotesPanelOpen(false);
     setMobileWorkspaceView((current) => (current === "notes" ? "chat" : current));
-  }, []);
+    restoreAutoCollapsedSidebarForNotes();
+  }, [restoreAutoCollapsedSidebarForNotes]);
 
   const handleSelectMobileWorkspaceView = useCallback(
     (view: MobileWorkspaceView) => {
       if (view === "notes" && !hasProjectNotes) return;
       setMobileWorkspaceView(view);
-      if (view === "notes") setIsProjectNotesPanelOpen(false);
+      if (view === "notes") {
+        setIsProjectNotesPanelOpen(false);
+        restoreAutoCollapsedSidebarForNotes();
+      }
     },
-    [hasProjectNotes],
+    [hasProjectNotes, restoreAutoCollapsedSidebarForNotes],
   );
 
   const handleSelectNodeFromOutline = useCallback(
@@ -557,7 +592,7 @@ export function WorkspaceCanvasShell({
       isWorkspaceSidebarCollapsed,
       isNodeDetailPanelCollapsed,
       isProjectNotesSidePanelOpen,
-      isWideLayout: window.matchMedia("(min-width: 1280px)").matches,
+      canShowInlineProjectNotes: isDesktopForInlineNotes(),
     });
     const restoreWidthRef =
       side === "left" ? workspaceSidebarRestoreWidthRef : detailPanelRestoreWidthRef;
@@ -728,21 +763,49 @@ export function WorkspaceCanvasShell({
   useEffect(() => {
     if (!hasProjectNotes && mobileWorkspaceView === "notes") {
       setMobileWorkspaceView("chat");
+      restoreAutoCollapsedSidebarForNotes();
     }
-  }, [hasProjectNotes, mobileWorkspaceView]);
+  }, [hasProjectNotes, mobileWorkspaceView, restoreAutoCollapsedSidebarForNotes]);
+
+  useEffect(() => {
+    if (!isProjectNotesPanelOpen) return undefined;
+
+    function syncSidebarForInlineNotes() {
+      if (isCompactDesktopForInlineNotes()) {
+        if (!isWorkspaceSidebarCollapsed) {
+          workspaceSidebarRestoreWidthRef.current = workspaceSidebarWidth;
+          autoCollapsedSidebarForNotesRef.current = true;
+          setIsWorkspaceSidebarCollapsed(true);
+        }
+        return;
+      }
+
+      restoreAutoCollapsedSidebarForNotes();
+    }
+
+    syncSidebarForInlineNotes();
+    window.addEventListener("resize", syncSidebarForInlineNotes);
+
+    return () => window.removeEventListener("resize", syncSidebarForInlineNotes);
+  }, [
+    isProjectNotesPanelOpen,
+    isWorkspaceSidebarCollapsed,
+    restoreAutoCollapsedSidebarForNotes,
+    workspaceSidebarWidth,
+  ]);
 
   useEffect(() => {
     if (!isProjectNotesPanelOpen) return undefined;
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setIsProjectNotesPanelOpen(false);
+        handleCloseProjectNotesPanel();
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isProjectNotesPanelOpen]);
+  }, [handleCloseProjectNotesPanel, isProjectNotesPanelOpen]);
 
   useEffect(() => {
     const grid = workspaceGridRef.current;
@@ -1008,19 +1071,9 @@ export function WorkspaceCanvasShell({
         {shouldShowProjectNotesDrawer && (
           <WorkspaceResizeHandle
             orientation="vertical"
-            desktopBreakpoint="xl"
             ariaLabel="Resize project notes panel"
             testId="resize-project-notes-panel"
             onResizeStart={handleProjectNotesPanelResizeStart}
-          />
-        )}
-        {shouldShowProjectNotesDrawer && (
-          <button
-            type="button"
-            aria-label="Close project notes drawer"
-            data-testid="project-notes-drawer-backdrop"
-            onClick={handleCloseProjectNotesPanel}
-            className="fixed inset-0 z-30 bg-[#332b38]/20 backdrop-blur-[1px] xl:hidden"
           />
         )}
         {shouldShowProjectNotesPanel && projectNotesConfig && (
@@ -1028,8 +1081,8 @@ export function WorkspaceCanvasShell({
             data-testid="project-notes-window"
             className={
               isProjectNotesMobileViewOpen
-                ? "h-[calc(100svh-12rem)] max-h-[calc(100svh-12rem)] min-h-0 min-w-0 overflow-hidden xl:relative xl:inset-auto xl:z-auto xl:h-full xl:max-h-full xl:w-full xl:max-w-none"
-                : "fixed bottom-3 right-3 top-3 z-40 flex min-h-0 w-[calc(100vw-24px)] max-w-[420px] min-w-0 overflow-hidden xl:relative xl:inset-auto xl:z-auto xl:h-full xl:max-h-full xl:w-full xl:max-w-none"
+                ? "h-[calc(100svh-12rem)] max-h-[calc(100svh-12rem)] min-h-0 min-w-0 overflow-hidden lg:relative lg:inset-auto lg:z-auto lg:h-full lg:max-h-full lg:w-full lg:max-w-none"
+                : "fixed bottom-3 right-3 top-3 z-40 flex min-h-0 w-[calc(100vw-24px)] max-w-[420px] min-w-0 overflow-hidden lg:relative lg:inset-auto lg:z-auto lg:h-full lg:max-h-full lg:w-full lg:max-w-none"
             }
           >
             <ProjectNotesPanel

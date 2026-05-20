@@ -48,6 +48,8 @@ export function MindMap({
         id: node.id,
         type: "branchNode",
         position: node.position,
+        selected: selectedNodeId === node.id,
+        dragHandle: ".branch-node-edge-hit-area",
         data: {
           mindNode: node,
           selected: selectedNodeId === node.id,
