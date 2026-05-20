@@ -54,6 +54,7 @@ export type RagRepository = {
     update: Pick<RagDocument, "fileName" | "title">,
   ) => Promise<RagDocument>;
   deleteDocument: (document: RagDocument) => Promise<void>;
+  getDocumentFilePath: (document: RagDocument) => string | null;
   readDocumentFile: (document: RagDocument) => Promise<Uint8Array | null>;
   setDocumentStatus: (
     documentId: string,
@@ -81,6 +82,7 @@ export type RagRepository = {
   getPage: (documentId: string, pageNumber: number) => Promise<RagPage | null>;
   getSections: (documentId: string) => Promise<RagSection[]>;
   replaceChunks: (documentId: string, chunks: RagChunk[]) => Promise<RagChunk[]>;
+  countChunks: (documentId: string) => Promise<number>;
   getChunks: (documentId: string) => Promise<RagChunk[]>;
   transferOwner: (fromUserId: string, toUserId: string) => Promise<number>;
 };
@@ -365,8 +367,11 @@ function enqueueWrite<T>(operation: () => Promise<T>) {
 
 function requireFilePath(document: RagDocument) {
   if (!document.storagePath) return null;
-  if (!document.storagePath.startsWith(RAG_FILES_DIR)) return null;
-  return document.storagePath;
+  const filePath = path.resolve(document.storagePath);
+  const filesDir = path.resolve(RAG_FILES_DIR);
+  const relativePath = path.relative(filesDir, filePath);
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) return null;
+  return filePath;
 }
 
 async function deleteDocumentFile(document: RagDocument) {
@@ -467,6 +472,10 @@ class FileRagRepository implements RagRepository {
       await writeDataFile(data);
     });
     await deleteDocumentFile(document);
+  }
+
+  getDocumentFilePath(document: RagDocument) {
+    return requireFilePath(document);
   }
 
   async readDocumentFile(document: RagDocument) {
@@ -589,6 +598,11 @@ class FileRagRepository implements RagRepository {
       .sort((left, right) => left.chunkIndex - right.chunkIndex);
   }
 
+  async countChunks(documentId: string) {
+    const data = await readDataFile();
+    return data.chunks.filter((chunk) => chunk.documentId === documentId).length;
+  }
+
   async transferOwner(fromUserId: string, toUserId: string) {
     if (fromUserId === toUserId) return 0;
 
@@ -699,6 +713,10 @@ class SupabaseRagRepository implements RagRepository {
       .eq("id", document.id);
     assertNoError(error, "delete document");
     await deleteDocumentFile(document);
+  }
+
+  getDocumentFilePath(document: RagDocument) {
+    return requireFilePath(document);
   }
 
   async readDocumentFile(document: RagDocument) {
@@ -866,6 +884,15 @@ class SupabaseRagRepository implements RagRepository {
       .order("chunk_index");
     assertNoError(error, "read document chunks");
     return (data ?? []).map(toChunk);
+  }
+
+  async countChunks(documentId: string) {
+    const { count, error } = await getSupabaseAdminClient()
+      .from("document_chunks")
+      .select("id", { count: "exact", head: true })
+      .eq("document_id", documentId);
+    assertNoError(error, "count document chunks");
+    return count ?? 0;
   }
 
   async transferOwner(fromUserId: string, toUserId: string) {

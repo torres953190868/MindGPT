@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import type { ChatAttachment, ChatDocumentContext } from "@/lib/types";
 import { generateGroundedAnswer } from "./answer";
 import { getMaxPdfSizeBytes } from "./config";
@@ -36,6 +37,17 @@ function isPdf(fileName: string, mimeType: string) {
     mimeType.toLowerCase() === "application/pdf" ||
     fileName.toLowerCase().endsWith(".pdf")
   );
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
+}
+
+function throwPdfFileNotFound(): never {
+  throw new RagError("PDF file was not found.", {
+    code: "PDF_FILE_NOT_FOUND",
+    status: 404,
+  });
 }
 
 export async function uploadPdfForOwner(
@@ -85,15 +97,15 @@ export async function listDocumentsForOwner(userId: string) {
 export async function getDocumentDetailsForOwner(userId: string, documentId: string) {
   const repository = getRagRepository();
   const document = await requireOwnedDocument(userId, documentId);
-  const [sections, chunks] = await Promise.all([
+  const [sections, chunkCount] = await Promise.all([
     repository.getSections(documentId),
-    repository.getChunks(documentId),
+    repository.countChunks(documentId),
   ]);
 
   return {
     document,
     sections,
-    chunkCount: chunks.length,
+    chunkCount,
   };
 }
 
@@ -137,13 +149,36 @@ export async function getDocumentFileForOwner(userId: string, documentId: string
   const bytes = await repository.readDocumentFile(document);
 
   if (!bytes) {
-    throw new RagError("PDF file was not found.", {
-      code: "PDF_FILE_NOT_FOUND",
-      status: 404,
-    });
+    throwPdfFileNotFound();
   }
 
   return { document, bytes };
+}
+
+export async function getDocumentFileStreamInfoForOwner(
+  userId: string,
+  documentId: string,
+) {
+  const repository = getRagRepository();
+  const document = await requireOwnedDocument(userId, documentId);
+  const filePath = repository.getDocumentFilePath(document);
+  if (!filePath) throwPdfFileNotFound();
+
+  try {
+    const fileStats = await stat(filePath);
+    if (!fileStats.isFile()) throwPdfFileNotFound();
+
+    return {
+      document,
+      filePath,
+      byteLength: fileStats.size,
+    };
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      throwPdfFileNotFound();
+    }
+    throw error;
+  }
 }
 
 export async function getDocumentChunksForOwner(userId: string, documentId: string) {

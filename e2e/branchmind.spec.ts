@@ -855,6 +855,214 @@ test("shows compact account entry on desktop and responsive mobile navigation", 
   await expect(page.getByRole("link", { name: /Projects/ })).toBeVisible();
 });
 
+test("reader header home button returns to the home workspace", async ({ page }) => {
+  await page.route("**/api/documents", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ documents: [] }),
+    });
+  });
+  await page.route("**/api/projects", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ projects: [] }),
+    });
+  });
+  await mockHomeModelCatalog(page);
+
+  await page.goto("/reader");
+
+  const homeButton = page.getByTestId("reader-home-button");
+  await expect(homeButton).toBeVisible();
+  await expect(homeButton).toHaveAttribute("href", "/");
+
+  await homeButton.click();
+  await expect(page).toHaveURL("/");
+});
+
+test("places PDF rename and delete actions on document rows", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "PDF reader row actions are covered once.");
+
+  const timestamp = new Date().toISOString();
+  const pdfBytes = createSyntheticPdf([["Reader Row Actions", "Page one"]]);
+  const makeDocument = (id: string, title: string, fileName: string) => ({
+    id,
+    fileName,
+    mimeType: "application/pdf",
+    pageCount: 1,
+    title,
+    status: "parsed",
+    errorMessage: null,
+    errorCode: null,
+    errorStage: null,
+    errorRequestId: null,
+    updatedAt: timestamp,
+  });
+  let documents = [
+    makeDocument("doc-row-actions-one", "First Paper", "first-paper.pdf"),
+    makeDocument("doc-row-actions-two", "Second Paper", "second-paper.pdf"),
+    makeDocument("doc-row-actions-three", "Third Paper", "third-paper.pdf"),
+  ];
+  const deletedIds: string[] = [];
+  const confirmedMessages: string[] = [];
+
+  page.on("dialog", async (dialog) => {
+    confirmedMessages.push(dialog.message());
+    await dialog.accept();
+  });
+
+  await page.route("**/api/documents", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fulfill({ status: 405, body: "Method not allowed" });
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ documents }),
+    });
+  });
+  await page.route(/\/api\/documents\/doc-row-actions-[^/]+\/file$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/pdf",
+      body: Buffer.from(pdfBytes),
+    });
+  });
+  await page.route(
+    /\/api\/documents\/doc-row-actions-[^/]+\/pages\/1$/,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          page: {
+            pageNumber: 1,
+            cleanText: "Reader row actions extracted text.",
+            tokenCount: 5,
+          },
+        }),
+      });
+    },
+  );
+  await page.route(/\/api\/documents\/doc-row-actions-[^/]+$/, async (route) => {
+    const request = route.request();
+    const documentId = new URL(request.url()).pathname.split("/").pop();
+    const document = documents.find((item) => item.id === documentId);
+
+    if (!document) {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Document not found." }),
+      });
+      return;
+    }
+
+    if (request.method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          document,
+          sections: [
+            {
+              id: `${document.id}-section`,
+              title: document.title,
+              headingPath: [document.title],
+              level: 1,
+              pageStart: 1,
+              pageEnd: 1,
+              source: "regex",
+            },
+          ],
+          chunkCount: 0,
+        }),
+      });
+      return;
+    }
+
+    if (request.method() === "PATCH") {
+      const payload = request.postDataJSON() as { name?: string };
+      documents = documents.map((item) =>
+        item.id === document.id
+          ? { ...item, title: payload.name ?? item.title, updatedAt: new Date().toISOString() }
+          : item,
+      );
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          document: documents.find((item) => item.id === document.id),
+        }),
+      });
+      return;
+    }
+
+    if (request.method() === "DELETE") {
+      deletedIds.push(document.id);
+      documents = documents.filter((item) => item.id !== document.id);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ documents }),
+      });
+      return;
+    }
+
+    await route.fulfill({ status: 405, body: "Method not allowed" });
+  });
+
+  await page.setViewportSize({ width: 1210, height: 768 });
+  await page.goto("/reader?document=doc-row-actions-one&page=1");
+
+  const sidebar = page.getByTestId("pdf-documents-sidebar");
+  const firstRow = sidebar.locator(
+    '[data-testid="pdf-document-row"][data-document-id="doc-row-actions-one"]',
+  );
+  const secondRow = sidebar.locator(
+    '[data-testid="pdf-document-row"][data-document-id="doc-row-actions-two"]',
+  );
+  const thirdRow = sidebar.locator(
+    '[data-testid="pdf-document-row"][data-document-id="doc-row-actions-three"]',
+  );
+
+  await expect(firstRow).toContainText("First Paper");
+  await expect(sidebar.getByLabel("Rename selected PDF")).toHaveCount(0);
+  await expect(sidebar.getByLabel("Delete selected PDF")).toHaveCount(0);
+
+  await firstRow.hover();
+  await firstRow.getByTestId("rename-pdf-button").click();
+  await expect(firstRow.getByRole("textbox", { name: "PDF name" })).toHaveValue(
+    "First Paper",
+  );
+  await expect(secondRow.getByRole("textbox", { name: "PDF name" })).toHaveCount(0);
+  await expect(page).toHaveURL(/document=doc-row-actions-one/);
+  await firstRow.getByLabel("Cancel rename").click();
+
+  await secondRow.hover();
+  await secondRow.getByTestId("delete-pdf-button").click();
+  await expect.poll(() => deletedIds).toEqual(["doc-row-actions-two"]);
+  await expect(page).toHaveURL(/document=doc-row-actions-one/);
+  await expect(secondRow).toHaveCount(0);
+  await expect(firstRow).toContainText("First Paper");
+
+  await firstRow.hover();
+  await firstRow.getByTestId("delete-pdf-button").click();
+  await expect
+    .poll(() => deletedIds)
+    .toEqual(["doc-row-actions-two", "doc-row-actions-one"]);
+  await expect(page).toHaveURL(/document=doc-row-actions-three/);
+  await expect(thirdRow).toContainText("Third Paper");
+  expect(confirmedMessages.join("\n")).toContain("Second Paper");
+  expect(confirmedMessages.join("\n")).toContain("First Paper");
+});
+
 test("reader opens an owned PDF at a source chunk URL", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "PDF reader rendering is covered once.");
 

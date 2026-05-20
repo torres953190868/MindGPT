@@ -23,8 +23,6 @@ import {
   Minus,
   Pencil,
   Plus,
-  RefreshCcw,
-  Send,
   Trash2,
   Upload,
   X,
@@ -72,38 +70,6 @@ type RagPage = {
   pageNumber: number;
   cleanText: string;
   tokenCount: number;
-};
-
-type RagChunk = {
-  id: string;
-  chunkIndex: number;
-  pageStart: number;
-  pageEnd: number;
-  headingPath: string[];
-  tokenCount: number;
-  content: string;
-  metadata: unknown;
-};
-
-type RagCitation = {
-  pageStart: number;
-  pageEnd: number;
-  chunkId: string;
-  headingPath: string[];
-  quote: string;
-};
-
-type RagQueryResponse = {
-  answer: string;
-  citations: RagCitation[];
-  retrievedChunks: Array<{
-    chunkId: string;
-    score: number;
-    pageStart: number;
-    pageEnd: number;
-    headingPath: string[];
-    preview: string;
-  }>;
 };
 
 type DocumentDetails = {
@@ -240,7 +206,7 @@ function hasExtractedPages(details: DocumentDetails | null) {
   return Boolean(
     details &&
       details.document.pageCount > 0 &&
-      (details.sections.length > 0 || details.document.status === "indexed"),
+      (details.document.status === "parsed" || details.document.status === "indexed"),
   );
 }
 
@@ -313,7 +279,6 @@ export function PdfReader() {
   const searchParams = useSearchParams();
   const documentParam = searchParams.get("document");
   const pageParam = searchParams.get("page");
-  const chunkParam = searchParams.get("chunk");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
@@ -324,11 +289,8 @@ export function PdfReader() {
   const selectedIdRef = useRef<string | null>(null);
   const readerActionIdRef = useRef(0);
   const pageRequestIdRef = useRef(0);
-  const sourceChunkRequestIdRef = useRef(0);
   const pageParamRef = useRef<string | null>(pageParam);
-  const chunkParamRef = useRef<string | null>(chunkParam);
   const pageNumberRef = useRef<number | null>(null);
-  const sourceChunkIdRef = useRef<string | null>(null);
 
   const [documents, setDocuments] = useState<RagDocument[]>([]);
   const [documentsReady, setDocumentsReady] = useState(false);
@@ -338,13 +300,10 @@ export function PdfReader() {
   const [renameSaving, setRenameSaving] = useState(false);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [details, setDetails] = useState<DocumentDetails | null>(null);
-  const [page, setPage] = useState<RagPage | null>(null);
-  const [sourceChunk, setSourceChunk] = useState<RagChunk | null>(null);
+  const [, setPage] = useState<RagPage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [parsing, setParsing] = useState(false);
-  const [indexing, setIndexing] = useState(false);
-  const [sourceLoading, setSourceLoading] = useState(false);
 
   const [pdfDocument, setPdfDocument] = useState<PdfDocumentProxy | null>(null);
   const [pdfPageCount, setPdfPageCount] = useState(0);
@@ -360,37 +319,27 @@ export function PdfReader() {
   const [toolsSidebarWidth, setToolsSidebarWidth] = useState(
     PDF_TOOLS_SIDEBAR_DEFAULT_WIDTH,
   );
-  const [askQuestion, setAskQuestion] = useState("");
-  const [askResult, setAskResult] = useState<RagQueryResponse | null>(null);
-  const [askLoading, setAskLoading] = useState(false);
-  const [askError, setAskError] = useState<string | null>(null);
   const [expandedTocRootIds, setExpandedTocRootIds] = useState<Set<string>>(
     () => new Set(),
   );
 
   const selectedDocument = details?.document ?? null;
-  const selectedListDocument =
-    documents.find((document) => document.id === selectedId) ?? null;
   const selectedDocumentErrorReference = formatRequestReference(
     selectedDocument?.errorRequestId,
   );
   const pageCount = pdfPageCount || selectedDocument?.pageCount || 0;
   const selectedDocumentTitle =
     selectedDocument?.title || selectedDocument?.fileName || "Select a PDF";
-  const busy = uploading || parsing || indexing;
-  const indexButtonLabel =
-    selectedDocument?.status === "indexed" ? "Re-index PDF" : "Enable Ask PDF";
-  const canAskPdf = selectedDocument?.status === "indexed";
+  const busy = uploading || parsing;
   const pdfReaderGridStyle = {
     "--pdf-reader-grid-columns": `${documentsSidebarWidth}px ${PDF_RESIZE_HANDLE_WIDTH}px minmax(${PDF_VIEWER_MIN_WIDTH}px,1fr) ${PDF_RESIZE_HANDLE_WIDTH}px ${toolsSidebarWidth}px`,
   } as CSSProperties;
 
   const updateReaderUrl = useCallback(
-    (documentId: string, nextPage: number | null, chunkId?: string | null) => {
+    (documentId: string, nextPage: number | null) => {
       const params = new URLSearchParams();
       params.set("document", documentId);
       if (nextPage) params.set("page", String(nextPage));
-      if (chunkId) params.set("chunk", chunkId);
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [pathname, router],
@@ -572,68 +521,18 @@ export function PdfReader() {
     [isCurrentReaderAction, nextReaderActionId],
   );
 
-  const loadSourceChunk = useCallback(
-    async (
-      documentId: string,
-      chunkId: string,
-      options: ReaderActionOptions = {},
-    ) => {
-      const actionId = options.actionId ?? nextReaderActionId();
-      const sourceChunkRequestId = sourceChunkRequestIdRef.current + 1;
-      sourceChunkRequestIdRef.current = sourceChunkRequestId;
-      setSourceLoading(true);
-
-      try {
-        const data = await readJsonApi<{ chunks: RagChunk[] }>(
-          `/api/documents/${documentId}/chunks`,
-        );
-        if (
-          !isCurrentReaderAction(actionId, documentId) ||
-          sourceChunkRequestIdRef.current !== sourceChunkRequestId
-        ) {
-          return null;
-        }
-
-        const chunk = data.chunks.find((item) => item.id === chunkId) ?? null;
-        if (!chunk) throw new Error("Source chunk was not found.");
-        setSourceChunk(chunk);
-        return chunk;
-      } catch (chunkError) {
-        if (
-          isCurrentReaderAction(actionId, documentId) &&
-          sourceChunkRequestIdRef.current === sourceChunkRequestId
-        ) {
-          throw chunkError;
-        }
-        return null;
-      } finally {
-        if (sourceChunkRequestIdRef.current === sourceChunkRequestId) {
-          setSourceLoading(false);
-        }
-      }
-    },
-    [isCurrentReaderAction, nextReaderActionId],
-  );
-
   const selectDocument = useCallback(
     async (
       documentId: string,
       options: {
         pageNumber?: number | null;
-        chunkId?: string | null;
         updateUrl?: boolean;
       } = {},
     ) => {
       const actionId = nextReaderActionId();
-      const isDifferentDocument = selectedIdRef.current !== documentId;
       selectedIdRef.current = documentId;
       setSelectedId(documentId);
       setError(null);
-      setSourceChunk(null);
-      if (isDifferentDocument) {
-        setAskResult(null);
-        setAskError(null);
-      }
 
       try {
         const nextDetails = await readJsonApi<DocumentDetails>(
@@ -642,26 +541,10 @@ export function PdfReader() {
         if (!isCurrentReaderAction(actionId, documentId)) return;
         setDetails(nextDetails);
 
-        let chunk: RagChunk | null = null;
-        const chunkId = options.chunkId?.trim() || null;
-        if (chunkId) {
-          try {
-            chunk = await loadSourceChunk(documentId, chunkId, { actionId });
-            if (!isCurrentReaderAction(actionId, documentId)) return;
-          } catch (chunkError) {
-            if (!isCurrentReaderAction(actionId, documentId)) return;
-            setError(
-              chunkError instanceof Error
-                ? chunkError.message
-                : "Source chunk failed to load.",
-            );
-          }
-        }
-
         const fallbackPage =
           nextDetails.sections[0]?.pageStart ??
           (nextDetails.document.pageCount > 0 ? 1 : null);
-        const nextPage = options.pageNumber ?? chunk?.pageStart ?? fallbackPage;
+        const nextPage = options.pageNumber ?? fallbackPage;
         const clampedPage = nextPage
           ? clampPageNumber(nextPage, nextDetails.document.pageCount)
           : null;
@@ -683,19 +566,13 @@ export function PdfReader() {
           clampedPage &&
           isCurrentReaderAction(actionId, documentId)
         ) {
-          updateReaderUrl(documentId, clampedPage, chunk?.id ?? null);
+          updateReaderUrl(documentId, clampedPage);
         }
       } catch (loadError) {
         if (isCurrentReaderAction(actionId, documentId)) throw loadError;
       }
     },
-    [
-      isCurrentReaderAction,
-      loadPage,
-      loadSourceChunk,
-      nextReaderActionId,
-      updateReaderUrl,
-    ],
+    [isCurrentReaderAction, loadPage, nextReaderActionId, updateReaderUrl],
   );
 
   useEffect(() => {
@@ -749,16 +626,11 @@ export function PdfReader() {
 
   useEffect(() => {
     pageParamRef.current = pageParam;
-    chunkParamRef.current = chunkParam;
-  }, [chunkParam, pageParam]);
+  }, [pageParam]);
 
   useEffect(() => {
     pageNumberRef.current = pageNumber;
   }, [pageNumber]);
-
-  useEffect(() => {
-    sourceChunkIdRef.current = sourceChunk?.id ?? null;
-  }, [sourceChunk?.id]);
 
   useEffect(() => {
     if (!documentsReady) return;
@@ -770,10 +642,7 @@ export function PdfReader() {
       setPage(null);
       setPageNumber(null);
       setPageInput("");
-      setSourceChunk(null);
       selectedIdRef.current = null;
-      setAskResult(null);
-      setAskError(null);
       return;
     }
 
@@ -791,7 +660,6 @@ export function PdfReader() {
 
     selectDocument(requestedDocument, {
       pageNumber: parsePageNumber(pageParamRef.current),
-      chunkId: chunkParamRef.current,
       updateUrl: requestedDocument !== documentParam,
     }).catch((loadError: unknown) => {
       setError(loadError instanceof Error ? loadError.message : "Load failed.");
@@ -809,72 +677,32 @@ export function PdfReader() {
     if (!documentsReady || !selectedId || documentParam !== selectedId) return;
     if (!details || details.document.id !== selectedId) return;
 
-    const chunkId = chunkParam?.trim() || null;
     const requestedPage = parsePageNumber(pageParam);
-    if (!requestedPage && !chunkId) return;
+    if (!requestedPage) return;
 
     const effectivePageCount = pageCount || details.document.pageCount;
     const clampedPage = requestedPage
       ? clampPageNumber(requestedPage, effectivePageCount)
       : null;
 
-    if (chunkId) {
-      if (
-        sourceChunkIdRef.current === chunkId &&
-        (!clampedPage || pageNumberRef.current === clampedPage)
-      ) {
-        return;
-      }
-
-      const actionId = nextReaderActionId();
-      setError(null);
-      loadSourceChunk(selectedId, chunkId, { actionId })
-        .then((chunk) => {
-          if (!chunk || !isCurrentReaderAction(actionId, selectedId)) return null;
-          const nextPage = clampPageNumber(
-            clampedPage ?? chunk.pageStart,
-            effectivePageCount,
-          );
-          if (pageNumberRef.current === nextPage) return null;
-          return loadPage(selectedId, nextPage, {
-            actionId,
-            loadExtractedText: hasExtractedPages(details),
-          });
-        })
-        .catch((loadError: unknown) => {
-          if (isCurrentReaderAction(actionId, selectedId)) {
-            setError(loadError instanceof Error ? loadError.message : "Load failed.");
-          }
-        });
-      return;
-    }
-
-    let actionId: number | null = null;
-    if (sourceChunkIdRef.current) {
-      actionId = nextReaderActionId();
-      setSourceChunk(null);
-    }
-
     if (clampedPage && pageNumberRef.current !== clampedPage) {
-      actionId ??= nextReaderActionId();
+      const actionId = nextReaderActionId();
       setError(null);
       loadPage(selectedId, clampedPage, {
         actionId,
         loadExtractedText: hasExtractedPages(details),
       }).catch((loadError: unknown) => {
-        if (actionId && isCurrentReaderAction(actionId, selectedId)) {
+        if (isCurrentReaderAction(actionId, selectedId)) {
           setError(loadError instanceof Error ? loadError.message : "Page failed to load.");
         }
       });
     }
   }, [
-    chunkParam,
     details,
     documentParam,
     documentsReady,
     isCurrentReaderAction,
     loadPage,
-    loadSourceChunk,
     nextReaderActionId,
     pageCount,
     pageParam,
@@ -1042,17 +870,14 @@ export function PdfReader() {
     setPage(null);
     setPageNumber(null);
     setPageInput("");
-    setSourceChunk(null);
-    setAskResult(null);
-    setAskError(null);
     router.replace(pathname, { scroll: false });
   }
 
-  function startRenameSelectedDocument() {
-    if (!selectedListDocument || busy || renameSaving) return;
+  function startRenameDocument(document: RagDocument) {
+    if (busy || renameSaving || deletingDocumentId) return;
     setError(null);
-    setRenamingDocumentId(selectedListDocument.id);
-    setRenameValue(selectedListDocument.title || selectedListDocument.fileName);
+    setRenamingDocumentId(document.id);
+    setRenameValue(document.title || document.fileName);
   }
 
   function cancelRenameDocument() {
@@ -1096,9 +921,8 @@ export function PdfReader() {
     }
   }
 
-  async function handleDeleteSelectedDocument() {
-    const document = selectedListDocument;
-    if (!document || busy || deletingDocumentId) return;
+  async function handleDeleteDocument(document: RagDocument) {
+    if (busy || deletingDocumentId) return;
     const label = document.title || document.fileName;
     if (!window.confirm(`Delete "${label}"? This cannot be undone.`)) return;
 
@@ -1128,27 +952,6 @@ export function PdfReader() {
     }
   }
 
-  async function handleReindex() {
-    if (!selectedId || indexing || parsing) return;
-
-    try {
-      setError(null);
-      setAskError(null);
-      setIndexing(true);
-      await readJsonApi(`/api/documents/${selectedId}/index`, { method: "POST" });
-      await loadDocuments();
-      await selectDocument(selectedId, {
-        pageNumber: pageNumber ?? page?.pageNumber,
-        chunkId: sourceChunk?.id ?? null,
-      });
-    } catch (indexError) {
-      setError(indexError instanceof Error ? indexError.message : "Index failed.");
-      await selectDocument(selectedId, { pageNumber }).catch(() => undefined);
-    } finally {
-      setIndexing(false);
-    }
-  }
-
   async function goToPage(nextPage: number) {
     if (!selectedId || !pageCount) return;
     const clampedPage = clampPageNumber(nextPage, pageCount);
@@ -1156,74 +959,17 @@ export function PdfReader() {
 
     try {
       setError(null);
-      setSourceChunk(null);
       const loadedPage = await loadPage(selectedId, clampedPage, {
         actionId,
         loadExtractedText: hasExtractedPages(details),
       });
       if (loadedPage && isCurrentReaderAction(actionId, selectedId)) {
-        updateReaderUrl(selectedId, clampedPage, null);
+        updateReaderUrl(selectedId, clampedPage);
       }
     } catch (pageError) {
       if (isCurrentReaderAction(actionId, selectedId)) {
         setError(pageError instanceof Error ? pageError.message : "Page failed to load.");
       }
-    }
-  }
-
-  async function goToSourcePage(nextPage: number, chunkId: string | null = null) {
-    if (!selectedId || !pageCount) return;
-    const clampedPage = clampPageNumber(nextPage, pageCount);
-    const actionId = nextReaderActionId();
-
-    try {
-      setError(null);
-      if (chunkId) {
-        const chunk = await loadSourceChunk(selectedId, chunkId, { actionId });
-        if (!chunk || !isCurrentReaderAction(actionId, selectedId)) return;
-      } else {
-        setSourceChunk(null);
-      }
-      const loadedPage = await loadPage(selectedId, clampedPage, {
-        actionId,
-        loadExtractedText: hasExtractedPages(details),
-      });
-      if (loadedPage && isCurrentReaderAction(actionId, selectedId)) {
-        updateReaderUrl(selectedId, clampedPage, chunkId);
-      }
-    } catch (pageError) {
-      if (isCurrentReaderAction(actionId, selectedId)) {
-        setError(pageError instanceof Error ? pageError.message : "Page failed to load.");
-      }
-    }
-  }
-
-  async function handleAskPdf(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const question = askQuestion.trim();
-    if (!selectedId || !selectedDocument || selectedDocument.status !== "indexed") return;
-    if (!question || askLoading) return;
-
-    try {
-      setAskError(null);
-      setAskLoading(true);
-      const result = await readJsonApi<RagQueryResponse>(
-        `/api/documents/${selectedId}/query`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question }),
-        },
-      );
-      setAskResult(result);
-    } catch (askRequestError) {
-      setAskError(
-        askRequestError instanceof Error
-          ? askRequestError.message
-          : "Ask PDF failed.",
-      );
-    } finally {
-      setAskLoading(false);
     }
   }
 
@@ -1272,12 +1018,6 @@ export function PdfReader() {
     );
   }, [defaultExpandedTocRootId, tocRootIdsKey]);
 
-  const askDisabled =
-    !selectedDocument ||
-    !canAskPdf ||
-    !askQuestion.trim() ||
-    askLoading;
-
   function renderTocChildNode(node: TocNode, depth = 0) {
     const section = node.section;
     const isActive = activeSectionId === section.id;
@@ -1317,40 +1057,14 @@ export function PdfReader() {
       ref={readerGridRef}
       data-testid="pdf-reader"
       style={pdfReaderGridStyle}
-      className="grid min-h-[calc(100vh-92px)] w-full min-w-0 overflow-hidden rounded-lg border border-[#e2ddea] bg-white shadow-[0_18px_50px_rgba(55,47,68,0.12)] lg:grid-cols-[var(--pdf-reader-grid-columns)] lg:items-start"
+      className="grid min-h-[calc(100vh-92px)] w-full min-w-0 overflow-hidden rounded-lg border border-[#e2ddea] bg-white shadow-[0_18px_50px_rgba(55,47,68,0.12)] lg:h-[calc(100vh-92px)] lg:grid-cols-[var(--pdf-reader-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch"
     >
       <aside
         data-testid="pdf-documents-sidebar"
         className="min-w-0 border-b border-[#e7e2ee] bg-[#fcfbfe] p-4 lg:max-h-[calc(100vh-92px)] lg:overflow-hidden lg:border-b-0 lg:border-r"
       >
-        <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="mb-4">
           <h2 className="text-sm font-black text-[#211a2e]">Documents</h2>
-          <div className="flex shrink-0 items-center gap-1">
-            <button
-              type="button"
-              onClick={startRenameSelectedDocument}
-              disabled={!selectedListDocument || busy || renameSaving}
-              aria-label="Rename selected PDF"
-              title="Rename selected PDF"
-              className="grid h-8 w-8 place-items-center rounded-md border border-[#e5dfec] bg-white text-[#5d4d72] transition hover:bg-[#f8f5fc] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Pencil size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDeleteSelectedDocument().catch(() => undefined)}
-              disabled={!selectedListDocument || busy || Boolean(deletingDocumentId)}
-              aria-label="Delete selected PDF"
-              title="Delete selected PDF"
-              className="grid h-8 w-8 place-items-center rounded-md border border-[#f1d8d6] bg-white text-[#9b4a43] transition hover:bg-[#fff4f2] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {deletingDocumentId ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <Trash2 size={14} />
-              )}
-            </button>
-          </div>
         </div>
 
         <form onSubmit={handleUpload} className="space-y-3">
@@ -1379,7 +1093,7 @@ export function PdfReader() {
             ) : (
               <Upload size={15} />
             )}
-            {uploading ? "Uploading" : parsing ? "Parsing" : indexing ? "Indexing" : "Upload PDF"}
+            {uploading ? "Uploading" : parsing ? "Parsing" : "Upload PDF"}
           </button>
         </form>
 
@@ -1390,6 +1104,8 @@ export function PdfReader() {
             return (
               <div
                 key={document.id}
+                data-testid="pdf-document-row"
+                data-document-id={document.id}
                 className={`group w-full min-w-0 rounded-md border px-3 py-3 text-left transition ${
                   isSelected
                     ? "border-[#d8f0e4] bg-[#effaf4]"
@@ -1445,37 +1161,75 @@ export function PdfReader() {
                     </span>
                   </form>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      selectDocument(document.id, { updateUrl: true }).catch(
-                        (loadError: unknown) => {
-                          setError(
-                            loadError instanceof Error
-                              ? loadError.message
-                              : "Load failed.",
-                          );
-                        },
-                      )
-                    }
-                    className="flex w-full min-w-0 items-start gap-2 text-left"
-                  >
-                    <FileText
-                      size={16}
-                      className={`mt-0.5 shrink-0 ${isSelected ? "text-[#338962]" : "text-[#8a8293]"}`}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs font-black text-[#272131]">
-                        {document.title || document.fileName}
+                  <div className="flex min-w-0 items-start gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        selectDocument(document.id, { updateUrl: true }).catch(
+                          (loadError: unknown) => {
+                            setError(
+                              loadError instanceof Error
+                                ? loadError.message
+                                : "Load failed.",
+                            );
+                          },
+                        )
+                      }
+                      className="flex min-w-0 flex-1 items-start gap-2 text-left"
+                    >
+                      <FileText
+                        size={16}
+                        className={`mt-0.5 shrink-0 ${isSelected ? "text-[#338962]" : "text-[#8a8293]"}`}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-black text-[#272131]">
+                          {document.title || document.fileName}
+                        </span>
+                        <span className="mt-1 block text-[11px] font-bold text-[#7a7183]">
+                          {document.pageCount || "-"} pages
+                        </span>
                       </span>
-                      <span className="mt-1 block text-[11px] font-bold text-[#7a7183]">
-                        {document.pageCount || "-"} pages
-                      </span>
+                      {isSelected && (
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[#30a66d]" />
+                      )}
+                    </button>
+                    <span
+                      role="group"
+                      aria-label={`${document.title || document.fileName} actions`}
+                      className={`mt-0.5 flex shrink-0 items-center gap-1 opacity-100 transition ${
+                        isSelected
+                          ? "sm:opacity-100"
+                          : "sm:pointer-events-none sm:opacity-0 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 sm:group-focus-within:pointer-events-auto sm:group-focus-within:opacity-100"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => startRenameDocument(document)}
+                        disabled={busy || renameSaving || Boolean(deletingDocumentId)}
+                        aria-label={`Rename ${document.title || document.fileName}`}
+                        title="Rename PDF"
+                        data-testid="rename-pdf-button"
+                        className="grid h-7 w-7 place-items-center rounded-md border border-[#e5dfec] bg-white text-[#5d4d72] transition hover:bg-[#f8f5fc] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteDocument(document).catch(() => undefined)}
+                        disabled={busy || Boolean(deletingDocumentId)}
+                        aria-label={`Delete ${document.title || document.fileName}`}
+                        title="Delete PDF"
+                        data-testid="delete-pdf-button"
+                        className="grid h-7 w-7 place-items-center rounded-md border border-[#f1d8d6] bg-white text-[#9b4a43] transition hover:bg-[#fff4f2] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {deletingDocumentId === document.id ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={13} />
+                        )}
+                      </button>
                     </span>
-                    {isSelected && (
-                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[#30a66d]" />
-                    )}
-                  </button>
+                  </div>
                 )}
               </div>
             );
@@ -1490,7 +1244,6 @@ export function PdfReader() {
 
       <WorkspaceResizeHandle
         orientation="vertical"
-        variant="compact"
         ariaLabel="Resize documents sidebar"
         testId="resize-pdf-documents-sidebar"
         onResizeStart={handleDocumentsSidebarResizeStart}
@@ -1602,22 +1355,6 @@ export function PdfReader() {
               </button>
             )}
 
-            {selectedDocument && (
-              <button
-                type="button"
-                onClick={handleReindex}
-                disabled={indexing || parsing}
-                className="grid h-9 w-9 place-items-center rounded-md border border-[#e8e3ee] bg-white text-[#45805d] transition hover:bg-[#f1fbf6] disabled:cursor-not-allowed disabled:opacity-45"
-                aria-label={indexButtonLabel}
-                title={indexButtonLabel}
-              >
-                {indexing ? (
-                  <Loader2 size={15} className="animate-spin" />
-                ) : (
-                  <RefreshCcw size={15} />
-                )}
-              </button>
-            )}
           </div>
         </div>
 
@@ -1632,6 +1369,16 @@ export function PdfReader() {
                 </p>
               )}
             </div>
+          </div>
+        )}
+
+        {error && (
+          <div
+            data-testid="pdf-reader-error"
+            className="mx-4 mt-3 flex items-start gap-2 rounded-md bg-[#ffeceb] px-4 py-3 text-sm font-bold text-[#8f3f3a]"
+          >
+            <AlertCircle size={17} className="mt-0.5 shrink-0" />
+            <p>{error}</p>
           </div>
         )}
 
@@ -1679,7 +1426,6 @@ export function PdfReader() {
 
       <WorkspaceResizeHandle
         orientation="vertical"
-        variant="compact"
         ariaLabel="Resize PDF tools sidebar"
         testId="resize-pdf-tools-sidebar"
         onResizeStart={handleToolsSidebarResizeStart}
@@ -1691,12 +1437,12 @@ export function PdfReader() {
       >
         <div
           data-testid="pdf-toc-section"
-          className="min-h-0 border-b border-[#e7e2ee] p-4"
+          className="min-h-0 flex-1 p-4"
         >
           <h2 className="text-xs font-black text-[#211a2e]">TOC (Extracted)</h2>
           <div
             data-testid="pdf-toc-list"
-            className="mt-3 max-h-72 space-y-2 overflow-auto pr-1 lg:max-h-[360px]"
+            className="mt-3 max-h-72 space-y-2 overflow-auto pr-1 lg:max-h-[calc(100vh-160px)]"
           >
             {tocTree.map((node) => {
               const section = node.section;
@@ -1766,139 +1512,6 @@ export function PdfReader() {
             {tocTree.length === 0 && (
               <p className="rounded-md bg-white px-3 py-4 text-sm font-bold text-[#76667f]">
                 No sections detected yet.
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div
-          data-testid="pdf-ask-section"
-          className="flex min-h-0 flex-col p-4"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-xs font-black text-[#211a2e]">Ask PDF</h2>
-            {sourceLoading && (
-              <Loader2 size={14} className="shrink-0 animate-spin text-[#76667f]" />
-            )}
-          </div>
-
-          {selectedDocument && !canAskPdf && (
-            <button
-              type="button"
-              onClick={handleReindex}
-              disabled={indexing || parsing}
-              data-testid="enable-ask-pdf-button"
-              className="mt-3 inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-md border border-[#d8f0e4] bg-[#effaf4] px-3 text-xs font-black text-[#2f7654] transition hover:bg-[#e4f6ed] disabled:cursor-not-allowed disabled:opacity-55"
-            >
-              {indexing ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <RefreshCcw size={14} />
-              )}
-              Enable Ask PDF
-            </button>
-          )}
-
-          <form
-            onSubmit={handleAskPdf}
-            data-testid="ask-pdf-form"
-            className="mt-3 space-y-2"
-          >
-            <textarea
-              value={askQuestion}
-              onChange={(event) => setAskQuestion(event.target.value)}
-              disabled={!selectedDocument || !canAskPdf || askLoading}
-              data-testid="ask-pdf-input"
-              placeholder="Ask anything about this PDF..."
-              rows={3}
-              className="min-h-20 w-full resize-none rounded-md border border-[#e5dfec] bg-white p-3 text-xs font-bold leading-5 text-[#292334] outline-none placeholder:text-[#a29aaa] focus:border-[#9b7bd2] focus:ring-2 focus:ring-[#e4d9f5] disabled:cursor-not-allowed disabled:opacity-60"
-            />
-            <button
-              type="submit"
-              disabled={askDisabled}
-              data-testid="ask-pdf-button"
-              className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-md bg-[#8c6fca] px-3 text-xs font-black text-white shadow-sm transition hover:bg-[#7a5ebb] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {askLoading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-              Ask
-            </button>
-          </form>
-
-          {(error || askError) && (
-            <p className="mt-3 flex items-start gap-2 rounded-md bg-[#ffeceb] px-3 py-3 text-xs font-bold leading-5 text-[#8f3f3a]">
-              <AlertCircle size={15} className="mt-0.5 shrink-0" />
-              {askError || error}
-            </p>
-          )}
-
-          <div className="mt-3 max-h-80 min-h-0 overflow-auto pr-1">
-            {askResult && (
-              <div data-testid="ask-pdf-answer" className="space-y-3">
-                <p className="whitespace-pre-wrap rounded-md bg-white p-3 text-xs font-bold leading-6 text-[#342d3d]">
-                  {askResult.answer}
-                </p>
-                {askResult.citations.length > 0 && (
-                  <div className="space-y-2">
-                    {askResult.citations.map((citation) => (
-                      <button
-                        key={`${citation.chunkId}-${citation.pageStart}`}
-                        type="button"
-                        data-testid="ask-pdf-citation"
-                        onClick={() =>
-                          goToSourcePage(citation.pageStart, citation.chunkId).catch(
-                            () => undefined,
-                          )
-                        }
-                        className="w-full rounded-md border border-[#e7e1ee] bg-white px-3 py-2 text-left transition hover:border-[#cdbce9] hover:bg-[#fbf8ff]"
-                      >
-                        <span className="block text-[11px] font-black text-[#5d4186]">
-                          {pagesLabel(citation.pageStart, citation.pageEnd)}
-                        </span>
-                        {citation.headingPath.length > 0 && (
-                          <span className="mt-1 block truncate text-[11px] font-bold text-[#72687c]">
-                            {citation.headingPath.join(" / ")}
-                          </span>
-                        )}
-                        <span className="mt-1 block line-clamp-3 text-xs font-bold leading-5 text-[#3d3547]">
-                          {citation.quote}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {sourceChunk && (
-              <div
-                data-testid="source-evidence"
-                className="mt-3 rounded-md border border-[#dbeee4] bg-[#f3fbf7] p-3"
-              >
-                <p className="text-[11px] font-black text-[#2e6f50]">
-                  {pagesLabel(sourceChunk.pageStart, sourceChunk.pageEnd)}
-                </p>
-                {sourceChunk.headingPath.length > 0 && (
-                  <p className="mt-1 truncate text-[11px] font-bold text-[#4f775f]">
-                    {sourceChunk.headingPath.join(" / ")}
-                  </p>
-                )}
-                <p className="mt-2 whitespace-pre-wrap text-xs font-bold leading-6 text-[#314338]">
-                  {sourceChunk.content}
-                </p>
-              </div>
-            )}
-
-            {!askResult && !sourceChunk && !sourceLoading && (
-              <p className="rounded-md bg-white px-3 py-4 text-xs font-bold leading-5 text-[#76667f]">
-                {selectedDocument?.status === "indexed"
-                  ? "Ready"
-                  : selectedDocument
-                    ? parsing
-                      ? "Extracting text and outline for reading."
-                      : indexing
-                        ? "Enabling Ask PDF."
-                        : "Enable Ask PDF before asking."
-                    : "Select a PDF"}
               </p>
             )}
           </div>

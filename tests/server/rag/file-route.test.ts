@@ -1,8 +1,11 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpError } from "@/lib/server/http";
 import { RagError } from "@/lib/server/rag/errors";
-import { getDocumentFileForOwner } from "@/lib/server/rag/service";
+import { getDocumentFileStreamInfoForOwner } from "@/lib/server/rag/service";
 
 const getBranchMindAuthContextMock = vi.hoisted(() => vi.fn());
 
@@ -11,11 +14,37 @@ vi.mock("@/lib/server/auth", () => ({
 }));
 
 vi.mock("@/lib/server/rag/service", () => ({
-  getDocumentFileForOwner: vi.fn(),
+  getDocumentFileStreamInfoForOwner: vi.fn(),
 }));
 
-function createFileRequest() {
-  return new NextRequest("http://localhost/api/documents/doc_route/file");
+type StreamInfo = Awaited<ReturnType<typeof getDocumentFileStreamInfoForOwner>>;
+
+let tempDirs: string[] = [];
+
+function createFileRequest(headers?: HeadersInit) {
+  return new NextRequest("http://localhost/api/documents/doc_route/file", {
+    headers,
+  });
+}
+
+async function mockPdfStreamInfo(
+  bytes: Uint8Array,
+  document: Partial<StreamInfo["document"]> = {},
+) {
+  const tempDir = await mkdtemp(join(tmpdir(), "branchmind-file-route-"));
+  tempDirs.push(tempDir);
+  const filePath = join(tempDir, "memory.pdf");
+  await writeFile(filePath, bytes);
+
+  vi.mocked(getDocumentFileStreamInfoForOwner).mockResolvedValue({
+    document: {
+      fileName: "memory.pdf",
+      mimeType: "application/pdf",
+      ...document,
+    } as StreamInfo["document"],
+    filePath,
+    byteLength: bytes.byteLength,
+  });
 }
 
 describe("document file route", () => {
@@ -25,18 +54,19 @@ describe("document file route", () => {
       principal: { id: "user_route", email: null, authMode: "local" },
       session: { id: "user_route", isNew: false },
     });
-    vi.mocked(getDocumentFileForOwner).mockReset();
+    vi.mocked(getDocumentFileStreamInfoForOwner).mockReset();
+  });
+
+  afterEach(async () => {
+    await Promise.all(
+      tempDirs.map((tempDir) => rm(tempDir, { recursive: true, force: true })),
+    );
+    tempDirs = [];
   });
 
   it("serves owned PDF bytes inline", async () => {
     const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
-    vi.mocked(getDocumentFileForOwner).mockResolvedValue({
-      document: {
-        fileName: "memory.pdf",
-        mimeType: "application/pdf",
-      } as Awaited<ReturnType<typeof getDocumentFileForOwner>>["document"],
-      bytes,
-    });
+    await mockPdfStreamInfo(bytes);
     const { GET } = await import("@/app/api/documents/[documentId]/file/route");
 
     const response = await GET(createFileRequest(), {
@@ -48,19 +78,72 @@ describe("document file route", () => {
     expect(response.headers.get("content-disposition")).toBe(
       'inline; filename="memory.pdf"',
     );
-    expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(getDocumentFileForOwner).toHaveBeenCalledWith("user_route", "doc_route");
+    expect(response.headers.get("accept-ranges")).toBe("bytes");
+    expect(response.headers.get("cache-control")).toBe("private, max-age=300");
+    expect(response.headers.get("content-length")).toBe("4");
+    expect(getDocumentFileStreamInfoForOwner).toHaveBeenCalledWith(
+      "user_route",
+      "doc_route",
+    );
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+  });
+
+  it("serves a byte range for PDF streaming clients", async () => {
+    const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+    await mockPdfStreamInfo(bytes);
+    const { GET } = await import("@/app/api/documents/[documentId]/file/route");
+
+    const response = await GET(createFileRequest({ Range: "bytes=1-2" }), {
+      params: Promise.resolve({ documentId: "doc_route" }),
+    });
+
+    expect(response.status).toBe(206);
+    expect(response.headers.get("accept-ranges")).toBe("bytes");
+    expect(response.headers.get("content-length")).toBe("2");
+    expect(response.headers.get("content-range")).toBe("bytes 1-2/4");
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(
+      new Uint8Array([0x50, 0x44]),
+    );
+  });
+
+  it("serves a suffix byte range for PDF streaming clients", async () => {
+    const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+    await mockPdfStreamInfo(bytes);
+    const { GET } = await import("@/app/api/documents/[documentId]/file/route");
+
+    const response = await GET(createFileRequest({ Range: "bytes=-2" }), {
+      params: Promise.resolve({ documentId: "doc_route" }),
+    });
+
+    expect(response.status).toBe(206);
+    expect(response.headers.get("content-length")).toBe("2");
+    expect(response.headers.get("content-range")).toBe("bytes 2-3/4");
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(
+      new Uint8Array([0x44, 0x46]),
+    );
+  });
+
+  it("rejects an unsatisfiable byte range", async () => {
+    const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+    await mockPdfStreamInfo(bytes);
+    const { GET } = await import("@/app/api/documents/[documentId]/file/route");
+
+    const response = await GET(createFileRequest({ Range: "bytes=99-120" }), {
+      params: Promise.resolve({ documentId: "doc_route" }),
+    });
+
+    expect(response.status).toBe(416);
+    expect(response.headers.get("accept-ranges")).toBe("bytes");
+    expect(response.headers.get("content-length")).toBe("0");
+    expect(response.headers.get("content-range")).toBe("bytes */4");
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array());
   });
 
   it("serves non-ASCII PDF filenames with an ASCII-safe response header", async () => {
     const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
-    vi.mocked(getDocumentFileForOwner).mockResolvedValue({
-      document: {
-        fileName: "英文原版-AI Engineering -- Chip Huyen -- 2024.pdf",
-        mimeType: "application/pdf",
-      } as Awaited<ReturnType<typeof getDocumentFileForOwner>>["document"],
-      bytes,
+    await mockPdfStreamInfo(bytes, {
+      fileName: "英文原版-AI Engineering -- Chip Huyen -- 2024.pdf",
+      mimeType: "application/pdf",
     });
     const { GET } = await import("@/app/api/documents/[documentId]/file/route");
 
@@ -76,7 +159,7 @@ describe("document file route", () => {
   });
 
   it("returns the safe missing file error without exposing storage paths", async () => {
-    vi.mocked(getDocumentFileForOwner).mockRejectedValue(
+    vi.mocked(getDocumentFileStreamInfoForOwner).mockRejectedValue(
       new RagError("PDF file was not found.", {
         code: "PDF_FILE_NOT_FOUND",
         status: 404,
@@ -112,6 +195,6 @@ describe("document file route", () => {
 
     expect(response.status).toBe(401);
     expect(body.error.code).toBe("AUTH_REQUIRED");
-    expect(getDocumentFileForOwner).not.toHaveBeenCalled();
+    expect(getDocumentFileStreamInfoForOwner).not.toHaveBeenCalled();
   });
 });
