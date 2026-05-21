@@ -36,6 +36,7 @@ import {
   PendingAttachmentChips,
   useChatComposerControls,
 } from "@/components/chat/ChatComposerControls";
+import type { ConversationMessageItem } from "@/lib/graph";
 import type {
   ChatAttachment,
   ChatMessage,
@@ -46,6 +47,7 @@ import { MarkdownMessage } from "./MarkdownMessage";
 
 type NodeDetailPanelProps = {
   node: MindNode | null;
+  conversationMessages?: ConversationMessageItem[];
   onCreateNode: (
     nodeId: string,
     mode: "continue" | "branch",
@@ -185,19 +187,20 @@ function NodeBriefCard({ node }: { node: MindNode }) {
     <article
       aria-label="Node brief"
       data-testid="node-brief-card"
-      className="rounded-[20px] bg-[#f5effc] p-3 text-sm leading-6 text-[#514062]"
+      className="rounded-xl border border-brand-100 bg-brand-50 p-4 text-sm leading-6 text-neutral-700"
     >
-      <p className="mb-1 text-xs font-black uppercase opacity-65">Node brief</p>
-      <h3 className="text-base font-black leading-snug text-[#3a3041]">
+      <p className="mb-1 text-[11px] font-black uppercase tracking-wider text-neutral-500">Node brief</p>
+      <h3 className="text-base font-black leading-snug text-neutral-900">
         {node.title}
       </h3>
-      {summary && <p className="mt-2 text-[#5f5368]">{summary}</p>}
+      {summary && <p className="mt-2 text-neutral-600">{summary}</p>}
     </article>
   );
 }
 
 export function NodeDetailPanel({
   node,
+  conversationMessages,
   onCreateNode,
   onEditUserMessage,
   onRetryAssistantMessage,
@@ -223,7 +226,7 @@ export function NodeDetailPanel({
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"continue" | "branch">("continue");
   const [selectedSourceText, setSelectedSourceText] = useState("");
-  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [copiedMessageKey, setCopiedMessageKey] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -237,6 +240,16 @@ export function NodeDetailPanel({
   const streamingMessageId =
     isCreating && lastMessage?.role === "assistant" ? lastMessage.id : null;
   const streamingContent = streamingMessageId ? lastMessage?.content ?? "" : "";
+  const displayMessages =
+    node && conversationMessages
+      ? conversationMessages
+      : node
+        ? node.messages.map((message) => ({
+            sourceNodeId: node.id,
+            message,
+            inherited: false,
+          }))
+        : [];
   const isComposerBusy = composerControls.controlsBusy;
   const displayError = composerControls.attachmentError ?? error;
   const isInitialSubmit = initialSubmit;
@@ -352,18 +365,20 @@ export function NodeDetailPanel({
     }
   }
 
-  async function handleCopyMessage(message: ChatMessage) {
+  async function handleCopyMessage(message: ChatMessage, messageKey: string) {
     if (!message.content) return;
 
     try {
       await copyTextToClipboard(message.content);
-      setCopiedMessageId(message.id);
+      setCopiedMessageKey(messageKey);
       if (copyTimeoutRef.current !== null) window.clearTimeout(copyTimeoutRef.current);
       copyTimeoutRef.current = window.setTimeout(() => {
-        setCopiedMessageId((currentId) => (currentId === message.id ? null : currentId));
+        setCopiedMessageKey((currentKey) =>
+          currentKey === messageKey ? null : currentKey,
+        );
       }, 1800);
     } catch {
-      setCopiedMessageId(null);
+      setCopiedMessageKey(null);
     }
   }
 
@@ -443,7 +458,7 @@ export function NodeDetailPanel({
       <aside
         aria-label="Node details"
         data-testid="node-detail-panel"
-        className="flex min-h-0 w-full max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:h-full lg:max-h-[calc(100vh-6rem)] lg:self-start lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
+        className="flex min-h-0 w-full max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-neutral-100 bg-white/90 p-4 shadow-lg lg:h-full lg:max-h-[calc(100vh-6rem)] lg:self-start lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
       >
         {showCollapseButton && (
           <button
@@ -472,10 +487,10 @@ export function NodeDetailPanel({
       data-testid="node-detail-panel"
       className="grid min-h-0 w-full max-h-[calc(100vh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:h-full lg:max-h-[calc(100vh-6rem)] lg:self-start lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
     >
-      <div className="shrink-0 space-y-3 border-b border-[#eadff1] pb-4">
+        <div className="shrink-0 space-y-3 border-b border-neutral-200 pb-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1 space-y-3">
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#74687c]">
+            <p className="text-[11px] font-black uppercase tracking-wider text-neutral-500">
               {node.branchType}
             </p>
             {isEditingTitle ? (
@@ -490,7 +505,7 @@ export function NodeDetailPanel({
                   aria-label="Edit node title"
                   data-testid="node-title-edit-input"
                   maxLength={120}
-                  className="min-w-0 flex-1 rounded-[16px] border border-white/80 bg-white/82 px-3 py-2 text-xl font-black leading-snug text-[#332a39] outline-none focus:border-[#b696d4] focus:ring-4 focus:ring-[#eadcf7] disabled:cursor-not-allowed disabled:opacity-65"
+                  className="min-w-0 flex-1 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-xl font-black leading-snug text-neutral-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65"
                 />
                 <div className="flex shrink-0 gap-1">
                   <button
@@ -518,7 +533,7 @@ export function NodeDetailPanel({
                 </div>
               </div>
             ) : (
-              <h2 id={titleId} className="text-xl font-black leading-snug text-[#332a39]">
+              <h2 id={titleId} className="text-xl font-black leading-snug text-neutral-900">
                 {node.title}
               </h2>
             )}
@@ -532,9 +547,9 @@ export function NodeDetailPanel({
                 aria-label="Edit node title"
                 title="Edit title"
                 data-testid="edit-node-title-button"
-                className="grid h-11 w-11 place-items-center rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7] disabled:cursor-not-allowed disabled:opacity-45"
+                className="grid h-10 w-10 place-items-center rounded-full bg-neutral-100 text-brand-600 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-45"
               >
-                <Pencil size={17} />
+                <Pencil size={16} />
               </button>
             )}
             {showCollapseButton && (
@@ -545,14 +560,14 @@ export function NodeDetailPanel({
                 aria-controls="conversation-history"
                 aria-expanded="true"
                 data-testid="collapse-node-detail-panel-button"
-                className="grid h-11 w-11 place-items-center rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+                className="grid h-10 w-10 place-items-center rounded-full bg-neutral-100 text-neutral-600 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
               >
                 <PanelRightClose size={18} />
               </button>
             )}
           </div>
         </div>
-        <p className="text-sm leading-6 text-[#5f5368]">{node.summary}</p>
+        <p className="text-sm leading-6 text-neutral-600">{node.summary}</p>
         <div className="flex flex-wrap gap-2">
           {node.children.length > 0 && (
             <button
@@ -563,7 +578,7 @@ export function NodeDetailPanel({
               aria-expanded={!node.collapsed}
               aria-controls="mind-map"
               data-testid="toggle-node-button"
-              className="inline-flex h-11 items-center gap-2 rounded-[16px] bg-[#ffe4ec] px-3 text-sm font-black text-[#9a4c64] transition hover:bg-[#ffd3df] disabled:cursor-not-allowed disabled:opacity-65"
+              className="inline-flex h-11 items-center gap-2 rounded-xl bg-danger-100 px-3 text-sm font-black text-danger-700 transition hover:bg-danger-200 disabled:cursor-not-allowed disabled:opacity-65"
             >
               <Ribbon size={16} />
               {node.collapsed ? "Expand" : "Fold"}
@@ -576,7 +591,7 @@ export function NodeDetailPanel({
               onClick={() => onDeleteNode(node.id)}
               aria-label="Delete node"
               data-testid="delete-node-button"
-              className="inline-flex h-11 items-center gap-2 rounded-[16px] bg-[#ffeceb] px-3 text-sm font-black text-[#a4514b] transition hover:bg-[#ffd7d4] disabled:cursor-not-allowed disabled:opacity-65"
+              className="inline-flex h-11 items-center gap-2 rounded-xl bg-danger-50 px-3 text-sm font-black text-danger-600 transition hover:bg-danger-100 disabled:cursor-not-allowed disabled:opacity-65"
             >
               <Trash2 size={16} />
               Delete
@@ -590,10 +605,10 @@ export function NodeDetailPanel({
               aria-controls="project-notes-panel"
               aria-expanded={isNotesOpen}
               data-testid="node-detail-notes-button"
-              className={`inline-flex h-11 items-center gap-2 rounded-[16px] px-3 text-sm font-black transition focus:outline-none focus:ring-4 focus:ring-[#eadcf7] ${
+              className={`inline-flex h-11 items-center gap-2 rounded-xl px-3 text-sm font-black transition focus:outline-none focus:ring-2 focus:ring-brand-200 ${
                 isNotesOpen
-                  ? "bg-[#eadcf7] text-[#6e4ca0] hover:bg-[#dfc9f3]"
-                  : "bg-white/75 text-[#776c80] hover:bg-white"
+                  ? "bg-brand-100 text-brand-800 hover:bg-brand-200"
+                  : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
               }`}
             >
               <NotebookPen size={16} />
@@ -614,35 +629,41 @@ export function NodeDetailPanel({
         onTouchEnd={captureSelectedSourceText}
         className="min-h-0 flex-1 space-y-3 overflow-auto overscroll-contain py-4 pr-1"
       >
-        {node.messages.length === 0 ? (
+        {displayMessages.length === 0 ? (
           <NodeBriefCard node={node} />
         ) : (
-          node.messages.map((message) => {
-            const isStreamingAssistant = message.id === streamingMessageId;
+          displayMessages.map(({ sourceNodeId, message, inherited }) => {
+            const messageKey = `${sourceNodeId}:${message.id}`;
+            const isStreamingAssistant =
+              sourceNodeId === node.id && message.id === streamingMessageId;
             const isEditingMessage =
-              message.role === "user" && message.id === editingMessageId;
-            const isCopied = copiedMessageId === message.id;
+              !inherited && message.role === "user" && message.id === editingMessageId;
+            const isCopied = copiedMessageKey === messageKey;
 
             return (
-              <div
-                key={message.id}
+                  <div
+                key={messageKey}
                 data-testid="conversation-message"
                 data-message-id={message.id}
+                data-source-node-id={sourceNodeId}
+                data-inherited={inherited ? "true" : undefined}
                 data-streaming={isStreamingAssistant ? "true" : undefined}
                 className={`group text-sm leading-6 ${
                   message.role === "user"
-                    ? "ml-6 text-[#315e45]"
-                    : "mr-6 text-[#514062]"
+                    ? "ml-6 text-success-800"
+                    : "mr-6 text-neutral-700"
                 }`}
               >
                 <article
                   aria-label={`${message.role} message`}
                   aria-live={isStreamingAssistant ? "polite" : undefined}
-                  className={`rounded-[20px] p-3 ${
-                    message.role === "user" ? "bg-[#e7f5ed]" : "bg-[#f5effc]"
+                  className={`rounded-xl border p-3 ${
+                    message.role === "user"
+                      ? "border-success-100 bg-success-50"
+                      : "border-brand-100 bg-brand-50"
                   }`}
                 >
-                  <p className="mb-1 text-xs font-black uppercase opacity-65">{message.role}</p>
+                  <p className="mb-1 text-[11px] font-black uppercase tracking-wider opacity-65">{message.role}</p>
                   {isEditingMessage ? (
                     <div className="space-y-2">
                       <textarea
@@ -652,7 +673,7 @@ export function NodeDetailPanel({
                         aria-label="Edit user message"
                         data-testid="message-edit-input"
                         rows={4}
-                        className="w-full resize-none rounded-[16px] border border-white/80 bg-white/78 p-3 text-sm leading-6 text-[#315e45] outline-none focus:border-[#8fc7aa] focus:ring-4 focus:ring-[#d7f0e2] disabled:cursor-not-allowed disabled:opacity-65"
+                        className="w-full resize-none rounded-xl border border-neutral-200 bg-white p-3 text-sm leading-6 text-success-800 outline-none focus:border-success-400 focus:ring-2 focus:ring-success-200 disabled:cursor-not-allowed disabled:opacity-65"
                       />
                       <div className="flex justify-end gap-2">
                         <MessageActionButton
@@ -706,29 +727,31 @@ export function NodeDetailPanel({
                       label={`Copy ${message.role} message`}
                       title={isCopied ? "Copied" : `Copy ${message.role} message`}
                       testId="copy-message-button"
-                      onClick={() => void handleCopyMessage(message)}
+                      onClick={() => void handleCopyMessage(message, messageKey)}
                       disabled={!message.content}
                     >
                       {isCopied ? <Check size={15} /> : <Copy size={15} />}
                     </MessageActionButton>
-                    {message.role === "user" ? (
-                      <MessageActionButton
-                        label="Edit user message"
-                        testId="edit-message-button"
-                        onClick={() => handleStartEdit(message)}
-                        disabled={isCreating}
-                      >
-                        <Pencil size={15} />
-                      </MessageActionButton>
-                    ) : (
-                      <MessageActionButton
-                        label="Retry assistant response"
-                        testId="retry-message-button"
-                        onClick={() => handleRetryMessage(message)}
-                        disabled={isCreating}
-                      >
-                        <RotateCcw size={15} />
-                      </MessageActionButton>
+                    {!inherited && (
+                      message.role === "user" ? (
+                        <MessageActionButton
+                          label="Edit user message"
+                          testId="edit-message-button"
+                          onClick={() => handleStartEdit(message)}
+                          disabled={isCreating}
+                        >
+                          <Pencil size={15} />
+                        </MessageActionButton>
+                      ) : (
+                        <MessageActionButton
+                          label="Retry assistant response"
+                          testId="retry-message-button"
+                          onClick={() => handleRetryMessage(message)}
+                          disabled={isCreating}
+                        >
+                          <RotateCcw size={15} />
+                        </MessageActionButton>
+                      )
                     )}
                   </div>
                 )}
@@ -738,21 +761,21 @@ export function NodeDetailPanel({
         )}
       </section>
 
-      <form
+        <form
         aria-label="Message composer"
         aria-busy={isComposerBusy}
         aria-describedby={displayError ? errorId : isComposerBusy ? statusId : undefined}
         data-testid="message-composer"
         onSubmit={handleSubmit}
-        className="shrink-0 space-y-3 border-t border-[#eadff1] pt-4"
+        className="shrink-0 space-y-3 border-t border-neutral-200 pt-4"
       >
         {!isInitialSubmit && selectedSourceText && (
           <div
             aria-label="Selected source text"
             data-testid="selected-source-text"
-            className="space-y-2 rounded-[20px] bg-white/70 p-3 text-sm text-[#5d5168]"
+            className="space-y-2 rounded-xl border border-brand-100 bg-brand-50 p-3 text-sm text-neutral-700"
           >
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8f7d9a]">
+            <p className="text-[11px] font-black uppercase tracking-wider text-neutral-500">
               Selected text
             </p>
             <p className="line-clamp-3 leading-6">{getSelectionPreview(selectedSourceText)}</p>
@@ -762,7 +785,7 @@ export function NodeDetailPanel({
               disabled={isComposerBusy}
               aria-label="Branch from selection"
               data-testid="branch-from-selection-button"
-              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-[16px] bg-[#eadcf7] text-sm font-black text-[#6e4ca0] transition hover:bg-[#dfc9f3] disabled:cursor-not-allowed disabled:opacity-65"
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-brand-100 text-sm font-black text-brand-800 transition hover:bg-brand-200 disabled:cursor-not-allowed disabled:opacity-65"
             >
               <GitBranch size={16} />
               Branch from selection
@@ -784,10 +807,10 @@ export function NodeDetailPanel({
               aria-label="Continue down"
               aria-pressed={mode === "continue"}
               data-testid="continue-down-button"
-              className={`inline-flex h-11 items-center justify-center gap-2 rounded-[16px] text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-65 ${
+              className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-65 ${
                 mode === "continue"
-                  ? "bg-[#dff5ea] text-[#376b50]"
-                  : "bg-white/75 text-[#776c80] hover:bg-white"
+                  ? "bg-success-100 text-success-800"
+                  : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
               }`}
             >
               <Sprout size={16} />
@@ -800,10 +823,10 @@ export function NodeDetailPanel({
               aria-label="Branch right"
               aria-pressed={mode === "branch"}
               data-testid="branch-right-button"
-              className={`inline-flex h-11 items-center justify-center gap-2 rounded-[16px] text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-65 ${
+              className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-65 ${
                 mode === "branch"
-                  ? "bg-[#eadcf7] text-[#6e4ca0]"
-                  : "bg-white/75 text-[#776c80] hover:bg-white"
+                  ? "bg-brand-100 text-brand-800"
+                  : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
               }`}
             >
               <GitBranch size={16} />
@@ -830,7 +853,7 @@ export function NodeDetailPanel({
             data-testid="message-instruction-input"
             placeholder={composerPlaceholder}
             rows={3}
-            className="w-full resize-none rounded-[20px] border border-white bg-white/82 p-3 text-sm text-[#332b38] outline-none placeholder:text-[#665a70] focus:border-[#b696d4] focus:ring-4 focus:ring-[#eadcf7] disabled:cursor-not-allowed disabled:opacity-65"
+            className="w-full resize-none rounded-xl border border-neutral-200 bg-white p-3 text-sm text-neutral-900 outline-none shadow-sm placeholder:text-neutral-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65"
           />
         </div>
         <button
@@ -838,7 +861,7 @@ export function NodeDetailPanel({
           disabled={isComposerBusy || !input.trim()}
           aria-label="Send message"
           data-testid="send-message-button"
-          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-[18px] bg-[#7c5fb1] font-black text-white transition hover:bg-[#6f52a5] disabled:cursor-not-allowed disabled:opacity-65"
+          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 font-black text-white shadow-md shadow-brand-200/50 transition hover:-translate-y-0.5 hover:bg-brand-700 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-65"
         >
           {composerControls.isPreparingAttachments ? (
             <Loader2 size={17} className="animate-spin" />
@@ -867,7 +890,7 @@ export function NodeDetailPanel({
             id={errorId}
             role="alert"
             data-testid="message-error-alert"
-            className="rounded-[18px] bg-[#ffeceb] px-3 py-2 text-sm font-bold text-[#8f3f3a]"
+            className="rounded-xl border border-danger-200 bg-danger-50 px-3 py-2 text-sm font-bold text-danger-700"
           >
             {displayError}
           </p>

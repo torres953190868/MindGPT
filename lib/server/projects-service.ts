@@ -1,4 +1,4 @@
-import { getContextTitles } from "@/lib/graph";
+import { getContextTitles, getNodeConversationMessages } from "@/lib/graph";
 import {
   createRootProject,
   createPendingRootProject,
@@ -7,6 +7,7 @@ import {
   removeNode,
   setNodeCollapsed,
   setProjectNotes,
+  setProjectTitle,
   updateNodeTitle,
   updateNodePosition,
 } from "@/lib/server/project-model";
@@ -45,6 +46,7 @@ type RegenerateNodeUpdate = {
 type PrepareRegenerateNodeUpdate = Omit<RegenerateNodeUpdate, "reply">;
 
 type ProjectUpdate = {
+  title?: string;
   notes?: string;
 };
 
@@ -300,6 +302,13 @@ export async function updateProjectForOwner(
   if (!project) notFound();
 
   let nextProject: Project | null = project;
+  if (typeof update.title === "string") {
+    nextProject = setProjectTitle(nextProject, update.title);
+    if (!nextProject) {
+      badRequest("Project title is required.", "PROJECT_TITLE_REQUIRED");
+    }
+  }
+
   if (typeof update.notes === "string") {
     nextProject = setProjectNotes(nextProject, update.notes);
   }
@@ -372,6 +381,21 @@ export async function updateNodeForOwner(
   nodeId: string,
   update: NodeUpdate,
 ) {
+  if (
+    update.position &&
+    typeof update.title !== "string" &&
+    typeof update.collapsed !== "boolean"
+  ) {
+    const project = await getProjectsRepository().updateNodePositionForOwner(
+      ownerId,
+      projectId,
+      nodeId,
+      update.position,
+    );
+    if (!project) notFound();
+    return project;
+  }
+
   const project = await readOwnedProject(ownerId, projectId);
   if (!project) notFound();
 
@@ -439,6 +463,7 @@ export async function prepareChildContext(ownerId: string, projectId: string, pa
     parent,
     contextTitles: getContextTitles(project, parentId),
     contextSummaries: getContextSummaries(project, parentId),
+    messages: getNodeConversationMessages(project, parentId).map((item) => item.message),
   };
 }
 
@@ -458,7 +483,7 @@ export async function prepareRegenerateNodeContext(
     badRequest("User instruction is required.", "USER_INSTRUCTION_REQUIRED");
   }
 
-  const parent = node.parentId ? project.nodes[node.parentId] : null;
+  const parentId = node.parentId;
   const userMessage = findRegenerateUserMessage(node, update);
 
   return {
@@ -466,8 +491,10 @@ export async function prepareRegenerateNodeContext(
     instruction,
     attachments: userMessage?.attachments ?? [],
     mode: node.branchType,
-    contextSummaries: parent ? getContextSummaries(project, parent.id) : [],
-    messages: parent?.messages ?? [],
+    contextSummaries: parentId ? getContextSummaries(project, parentId) : [],
+    messages: parentId
+      ? getNodeConversationMessages(project, parentId).map((item) => item.message)
+      : [],
   };
 }
 

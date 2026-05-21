@@ -70,6 +70,14 @@ describe("JSON request validation", () => {
     ).toBe(false);
   });
 
+  it("validates project titles for PATCH requests", () => {
+    expect(updateProjectSchema.parse({ title: "  Renamed workspace  " }).title).toBe(
+      "Renamed workspace",
+    );
+    expect(updateProjectSchema.safeParse({ title: "   " }).success).toBe(false);
+    expect(updateProjectSchema.safeParse({ title: "x".repeat(121) }).success).toBe(false);
+  });
+
   it("accepts root project attachments and model selection", async () => {
     const body = await parseJsonBody(
       jsonRequest(

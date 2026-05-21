@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { EyeOff } from "lucide-react";
 import {
   Controls,
   ReactFlow,
@@ -8,6 +9,7 @@ import {
   type Edge,
   type Node,
   type NodeChange,
+  type OnNodeDrag,
   type NodeTypes,
 } from "@xyflow/react";
 import { getVisibleNodeIds } from "@/lib/graph";
@@ -86,9 +88,9 @@ export function MindMap({
             targetHandle: isBranchChild ? "branch-target" : "continue-target",
             animated: selectedNodeId === node.id || selectedNodeId === childId,
             style: {
-              stroke: isBranchChild ? "#b293d8" : "#8cc9a7",
-              strokeWidth: 2.5,
-              strokeDasharray: "7 6",
+              stroke: isBranchChild ? "#c4ade6" : "#9bd8c6",
+              strokeWidth: 2,
+              strokeDasharray: "6 5",
             },
           };
         }),
@@ -96,6 +98,7 @@ export function MindMap({
   }, [project.nodes, selectedNodeId, visibleNodeIds]);
 
   const [nodes, setNodes] = useState(graphNodes);
+  const dragDisabled = Boolean(creatingNodeId || streamingNodeId);
 
   useEffect(() => {
     setNodes(graphNodes);
@@ -104,13 +107,16 @@ export function MindMap({
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
       setNodes((current) => applyNodeChanges(changes, current) as Node<BranchNodeData>[]);
-
-      changes.forEach((change) => {
-        if (change.type !== "position" || change.dragging || !change.position) return;
-        void onMoveNode(change.id, change.position);
-      });
     },
-    [onMoveNode],
+    [],
+  );
+
+  const handleNodeDragStop: OnNodeDrag<Node<BranchNodeData>> = useCallback(
+    (_, node) => {
+      if (dragDisabled) return;
+      void onMoveNode(node.id, node.position);
+    },
+    [dragDisabled, onMoveNode],
   );
 
   if (graphNodes.length === 0) {
@@ -120,9 +126,12 @@ export function MindMap({
         aria-live="polite"
         aria-label="Mind map has no visible nodes"
         data-testid="mind-map-empty-state"
-        className="branchmind-grid grid h-full min-h-[360px] place-items-center rounded-[28px] text-sm font-black text-[#5c5065] lg:rounded-none"
+        className="branchmind-grid grid h-full min-h-[360px] place-items-center rounded-2xl lg:rounded-none"
       >
-        No visible nodes
+        <div className="flex flex-col items-center gap-2 text-center">
+          <EyeOff size={28} className="text-neutral-400" />
+          <span className="text-sm font-black text-neutral-600">No visible nodes</span>
+        </div>
       </div>
     );
   }
@@ -141,8 +150,10 @@ export function MindMap({
         nodes={nodes}
         edges={graphEdges}
         nodeTypes={nodeTypes}
+        nodesDraggable={!dragDisabled}
         onNodeClick={(_, node) => onSelectNode(node.id)}
         onNodesChange={handleNodesChange}
+        onNodeDragStop={handleNodeDragStop}
         fitView
         minZoom={0.25}
         maxZoom={1.7}

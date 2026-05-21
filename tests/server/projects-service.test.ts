@@ -5,6 +5,7 @@ const readProjectsMock = vi.hoisted(() => vi.fn());
 const readProjectsForSessionMock = vi.hoisted(() => vi.fn());
 const deleteProjectMock = vi.hoisted(() => vi.fn());
 const saveProjectMock = vi.hoisted(() => vi.fn());
+const updateNodePositionForOwnerMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/server/projects-repository", async (importOriginal) => {
   const actual =
@@ -17,14 +18,17 @@ vi.mock("@/lib/server/projects-repository", async (importOriginal) => {
       readProjectsForSession: readProjectsForSessionMock,
       deleteProject: deleteProjectMock,
       saveProject: saveProjectMock,
+      updateNodePositionForOwner: updateNodePositionForOwnerMock,
     })),
   };
 });
 
 import {
   deleteProjectForOwner,
+  prepareChildContext,
   prepareRegenerateNodeContext,
   syncProjectForOwner,
+  updateProjectForOwner,
   updateNodeForOwner,
 } from "@/lib/server/projects-service";
 
@@ -153,16 +157,124 @@ function makeSyncProject(): Project {
   };
 }
 
+function makeInheritedProject(): Project {
+  const timestamp = "2026-01-01T00:00:00.000Z";
+
+  return {
+    id: "project_inherit",
+    ownerSessionId: "owner_inherit",
+    title: "Inherited project",
+    notes: "",
+    rootNodeId: "node_root_inherit",
+    nodes: {
+      node_root_inherit: {
+        id: "node_root_inherit",
+        projectId: "project_inherit",
+        parentId: null,
+        title: "Root title",
+        titleManuallyEdited: false,
+        summary: "Root summary",
+        messages: [
+          {
+            id: "user_root_inherit",
+            role: "user",
+            content: "Root prompt",
+            attachments: [],
+            createdAt: timestamp,
+          },
+          {
+            id: "assistant_root_inherit",
+            role: "assistant",
+            content: "Root answer",
+            attachments: [],
+            createdAt: timestamp,
+          },
+        ],
+        children: ["node_parent_inherit"],
+        position: { x: 120, y: 120 },
+        branchType: "root",
+        collapsed: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+      node_parent_inherit: {
+        id: "node_parent_inherit",
+        projectId: "project_inherit",
+        parentId: "node_root_inherit",
+        title: "Parent title",
+        titleManuallyEdited: false,
+        summary: "Parent summary",
+        messages: [
+          {
+            id: "user_parent_inherit",
+            role: "user",
+            content: "Parent prompt",
+            attachments: [],
+            createdAt: timestamp,
+          },
+          {
+            id: "assistant_parent_inherit",
+            role: "assistant",
+            content: "Parent answer",
+            attachments: [],
+            createdAt: timestamp,
+          },
+        ],
+        children: ["node_child_inherit"],
+        position: { x: 120, y: 410 },
+        branchType: "continue",
+        collapsed: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+      node_child_inherit: {
+        id: "node_child_inherit",
+        projectId: "project_inherit",
+        parentId: "node_parent_inherit",
+        title: "Child title",
+        titleManuallyEdited: false,
+        summary: "Child summary",
+        messages: [
+          {
+            id: "user_child_inherit",
+            role: "user",
+            content: "Child prompt",
+            attachments: [],
+            createdAt: timestamp,
+          },
+          {
+            id: "assistant_child_inherit",
+            role: "assistant",
+            content: "Child answer",
+            attachments: [],
+            createdAt: timestamp,
+          },
+        ],
+        children: [],
+        position: { x: 510, y: 410 },
+        branchType: "branch",
+        collapsed: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
 describe("prepareRegenerateNodeContext", () => {
   beforeEach(() => {
     readProjectsMock.mockReset();
     readProjectsForSessionMock.mockReset();
     deleteProjectMock.mockReset();
     saveProjectMock.mockReset();
+    updateNodePositionForOwnerMock.mockReset();
     readProjectsMock.mockResolvedValue([makeProject()]);
     readProjectsForSessionMock.mockResolvedValue([]);
     deleteProjectMock.mockResolvedValue(undefined);
     saveProjectMock.mockResolvedValue(undefined);
+    updateNodePositionForOwnerMock.mockResolvedValue(null);
   });
 
   it("keeps the edited user message attachments for regenerate RAG", async () => {
@@ -195,15 +307,71 @@ describe("prepareRegenerateNodeContext", () => {
   });
 });
 
+describe("inherited conversation context", () => {
+  beforeEach(() => {
+    readProjectsMock.mockReset();
+    readProjectsForSessionMock.mockReset();
+    deleteProjectMock.mockReset();
+    saveProjectMock.mockReset();
+    updateNodePositionForOwnerMock.mockReset();
+    readProjectsMock.mockResolvedValue([makeInheritedProject()]);
+    readProjectsForSessionMock.mockResolvedValue([]);
+    deleteProjectMock.mockResolvedValue(undefined);
+    saveProjectMock.mockResolvedValue(undefined);
+    updateNodePositionForOwnerMock.mockResolvedValue(null);
+  });
+
+  it("prepares child creation with the root-to-parent conversation", async () => {
+    const context = await prepareChildContext(
+      "owner_inherit",
+      "project_inherit",
+      "node_parent_inherit",
+    );
+
+    expect(context.contextTitles).toEqual(["Root title", "Parent title"]);
+    expect(context.messages.map((message) => message.content)).toEqual([
+      "Root prompt",
+      "Root answer",
+      "Parent prompt",
+      "Parent answer",
+    ]);
+  });
+
+  it("prepares child regeneration with the ancestor conversation", async () => {
+    const context = await prepareRegenerateNodeContext(
+      "owner_inherit",
+      "project_inherit",
+      "node_child_inherit",
+      {
+        assistantMessageId: "assistant_child_inherit",
+      },
+    );
+
+    expect(context.instruction).toBe("Child prompt");
+    expect(context.contextSummaries).toEqual([
+      "Root title: Root summary",
+      "Parent title: Parent summary",
+    ]);
+    expect(context.messages.map((message) => message.content)).toEqual([
+      "Root prompt",
+      "Root answer",
+      "Parent prompt",
+      "Parent answer",
+    ]);
+  });
+});
+
 describe("deleteProjectForOwner", () => {
   beforeEach(() => {
     readProjectsMock.mockReset();
     readProjectsForSessionMock.mockReset();
     deleteProjectMock.mockReset();
     saveProjectMock.mockReset();
+    updateNodePositionForOwnerMock.mockReset();
     readProjectsForSessionMock.mockResolvedValue([]);
     deleteProjectMock.mockResolvedValue(undefined);
     saveProjectMock.mockResolvedValue(undefined);
+    updateNodePositionForOwnerMock.mockResolvedValue(null);
   });
 
   it("deletes owned projects and returns the refreshed owner list", async () => {
@@ -235,8 +403,10 @@ describe("updateNodeForOwner", () => {
     readProjectsForSessionMock.mockReset();
     deleteProjectMock.mockReset();
     saveProjectMock.mockReset();
+    updateNodePositionForOwnerMock.mockReset();
     readProjectsMock.mockResolvedValue([makeProject()]);
     saveProjectMock.mockResolvedValue(undefined);
+    updateNodePositionForOwnerMock.mockResolvedValue(null);
   });
 
   it("manually updates root node titles and syncs the project title", async () => {
@@ -259,6 +429,71 @@ describe("updateNodeForOwner", () => {
       }),
     );
   });
+
+  it("persists drag positions without saving the whole project", async () => {
+    const movedProject = makeProject();
+    movedProject.nodes.node_regenerate = {
+      ...movedProject.nodes.node_regenerate,
+      position: { x: 42, y: 64 },
+    };
+    updateNodePositionForOwnerMock.mockResolvedValue(movedProject);
+
+    const result = await updateNodeForOwner(
+      "owner_regenerate",
+      "project_regenerate",
+      "node_regenerate",
+      { position: { x: 42, y: 64 } },
+    );
+
+    expect(result.nodes.node_regenerate.position).toEqual({ x: 42, y: 64 });
+    expect(updateNodePositionForOwnerMock).toHaveBeenCalledWith(
+      "owner_regenerate",
+      "project_regenerate",
+      "node_regenerate",
+      { x: 42, y: 64 },
+    );
+    expect(readProjectsMock).not.toHaveBeenCalled();
+    expect(saveProjectMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateProjectForOwner", () => {
+  beforeEach(() => {
+    readProjectsMock.mockReset();
+    readProjectsForSessionMock.mockReset();
+    deleteProjectMock.mockReset();
+    saveProjectMock.mockReset();
+    updateNodePositionForOwnerMock.mockReset();
+    readProjectsMock.mockResolvedValue([makeProject()]);
+    saveProjectMock.mockResolvedValue(undefined);
+    updateNodePositionForOwnerMock.mockResolvedValue(null);
+  });
+
+  it("renames projects without changing the root node title", async () => {
+    const result = await updateProjectForOwner(
+      "owner_regenerate",
+      "project_regenerate",
+      { title: "  Renamed project  " },
+    );
+
+    expect(result.title).toBe("Renamed project");
+    expect(result.nodes.node_regenerate).toMatchObject({
+      title: "Regenerate node",
+      titleManuallyEdited: false,
+    });
+    expect(saveProjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerSessionId: "owner_regenerate",
+        title: "Renamed project",
+        nodes: expect.objectContaining({
+          node_regenerate: expect.objectContaining({
+            title: "Regenerate node",
+            titleManuallyEdited: false,
+          }),
+        }),
+      }),
+    );
+  });
 });
 
 describe("syncProjectForOwner", () => {
@@ -267,8 +502,10 @@ describe("syncProjectForOwner", () => {
     readProjectsForSessionMock.mockReset();
     deleteProjectMock.mockReset();
     saveProjectMock.mockReset();
+    updateNodePositionForOwnerMock.mockReset();
     readProjectsMock.mockResolvedValue([]);
     saveProjectMock.mockResolvedValue(undefined);
+    updateNodePositionForOwnerMock.mockResolvedValue(null);
   });
 
   it("rejects synced projects when node messages are missing", async () => {

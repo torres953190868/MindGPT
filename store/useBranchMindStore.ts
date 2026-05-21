@@ -27,14 +27,38 @@ import type {
 
 const LEGACY_PROJECTS_KEY = "branchmind.projects.v1";
 const LEGACY_ACTIVE_PROJECT_KEY = "branchmind.activeProjectId.v1";
+const PENDING_NODE_POSITION_SYNC_KEY = "branchmind.pendingNodePositionSync.v1";
+const NODE_POSITION_SYNC_DELAY_MS = 750;
+const NODE_POSITION_SYNC_RETRY_DELAY_MS = 5_000;
 
 const inFlightProjectSyncs = new Set<string>();
+const pendingNodePositionVersions = new Map<string, number>();
+const pendingNodePositionSyncs = new Map<string, PendingNodePositionSync>();
+let nextNodePositionVersion = 0;
+let nodePositionFlushListenersInstalled = false;
+
+type PendingNodePositionSync = PendingNodePositionSyncRecord & {
+  version: number;
+  timer: ReturnType<typeof setTimeout> | null;
+};
 
 type PendingInitialProjectStream = {
   projectId: string;
   nodeId: string;
   assistantMessageId: string;
   modelSelection?: ChatModelSelection;
+};
+
+type PendingNodePositionSyncRecord = {
+  projectId: string;
+  nodeId: string;
+  position: NodePosition;
+  updatedAt: string;
+};
+
+type StoredPendingNodePositionSyncs = {
+  version: 1;
+  records: PendingNodePositionSyncRecord[];
 };
 
 type BranchMindState = {
@@ -79,6 +103,7 @@ type BranchMindState = {
     assistantMessageId: string,
     modelSelection?: ChatModelSelection,
   ) => Promise<boolean>;
+  updateProjectTitle: (projectId: string, title: string) => Promise<boolean>;
   updateProjectNotes: (projectId: string, notes: string) => Promise<boolean>;
   updateNodeTitle: (nodeId: string, title: string) => Promise<boolean>;
   updateNodePosition: (nodeId: string, position: NodePosition) => Promise<void>;
@@ -188,6 +213,18 @@ function replaceProject(projects: Project[], nextProject: Project) {
   );
 }
 
+function nodePositionKey(projectId: string, nodeId: string) {
+  return `${projectId}:${nodeId}`;
+}
+
+function positionsEqual(left: NodePosition, right: NodePosition) {
+  return left.x === right.x && left.y === right.y;
+}
+
+function newestTimestamp(left: string, right?: string) {
+  return right && right > left ? right : left;
+}
+
 function upsertProject(projects: Project[], nextProject: Project) {
   const exists = projects.some((project) => project.id === nextProject.id);
   if (!exists) return [nextProject, ...projects];
@@ -208,6 +245,94 @@ function getSelectedNodeId(project: Project | null, selectedNodeId: string | nul
 function isProjectWaitingForSync(state: BranchMindState, projectId: string) {
   const record = state.pendingProjectSyncs[projectId];
   return Boolean(record && record.status !== "synced");
+}
+
+function isNodePosition(value: unknown): value is NodePosition {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    typeof (value as NodePosition).x === "number" &&
+    typeof (value as NodePosition).y === "number" &&
+    Number.isFinite((value as NodePosition).x) &&
+    Number.isFinite((value as NodePosition).y)
+  );
+}
+
+function isPendingNodePositionSyncRecord(
+  value: unknown,
+): value is PendingNodePositionSyncRecord {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    typeof (value as PendingNodePositionSyncRecord).projectId === "string" &&
+    typeof (value as PendingNodePositionSyncRecord).nodeId === "string" &&
+    isNodePosition((value as PendingNodePositionSyncRecord).position) &&
+    typeof (value as PendingNodePositionSyncRecord).updatedAt === "string"
+  );
+}
+
+function readPendingNodePositionSyncRecords() {
+  if (typeof window === "undefined") return [];
+
+  const raw = window.localStorage.getItem(PENDING_NODE_POSITION_SYNC_KEY);
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw) as StoredPendingNodePositionSyncs;
+    return Array.isArray(parsed.records)
+      ? parsed.records.filter(isPendingNodePositionSyncRecord)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePendingNodePositionSyncRecords(
+  records: PendingNodePositionSyncRecord[],
+) {
+  if (typeof window === "undefined") return;
+
+  const payload: StoredPendingNodePositionSyncs = {
+    version: 1,
+    records,
+  };
+  window.localStorage.setItem(PENDING_NODE_POSITION_SYNC_KEY, JSON.stringify(payload));
+}
+
+function persistPendingNodePositionSyncRecord(record: PendingNodePositionSyncRecord) {
+  try {
+    const records = readPendingNodePositionSyncRecords();
+    writePendingNodePositionSyncRecords([
+      record,
+      ...records.filter(
+        (item) => item.projectId !== record.projectId || item.nodeId !== record.nodeId,
+      ),
+    ]);
+  } catch {
+    // Drag state still lives in memory; storage is a resilience layer for reloads.
+  }
+}
+
+function clearPendingNodePositionSyncRecord(projectId: string, nodeId: string) {
+  try {
+    writePendingNodePositionSyncRecords(
+      readPendingNodePositionSyncRecords().filter(
+        (record) => record.projectId !== projectId || record.nodeId !== nodeId,
+      ),
+    );
+  } catch {
+    // A stale record is harmless; hydrate drops it once the server is newer.
+  }
+}
+
+function reconcilePendingNodePositionSyncRecords(
+  records: PendingNodePositionSyncRecord[],
+) {
+  try {
+    writePendingNodePositionSyncRecords(records);
+  } catch {
+    // Keep going; the in-memory project state has already been reconciled.
+  }
 }
 
 function getPendingSyncMap(records: PendingProjectSyncRecord[]) {
@@ -263,6 +388,178 @@ function removeProjectLocally(
 
 type BranchMindSet = StoreApi<BranchMindState>["setState"];
 type BranchMindGet = StoreApi<BranchMindState>["getState"];
+
+function applyPendingNodePositionSyncRecords(
+  projects: Project[],
+  records: PendingNodePositionSyncRecord[],
+) {
+  let nextProjects = projects;
+  const pendingRecords: PendingNodePositionSyncRecord[] = [];
+
+  for (const record of records) {
+    const project = nextProjects.find((item) => item.id === record.projectId);
+    const node = project?.nodes[record.nodeId];
+    if (!project || !node) continue;
+
+    if (record.updatedAt <= node.updatedAt) continue;
+
+    pendingRecords.push(record);
+    nextProjects = replaceProject(nextProjects, {
+      ...project,
+      updatedAt: newestTimestamp(project.updatedAt, record.updatedAt),
+      nodes: {
+        ...project.nodes,
+        [record.nodeId]: {
+          ...node,
+          position: record.position,
+          updatedAt: record.updatedAt,
+        },
+      },
+    });
+  }
+
+  return { projects: nextProjects, pendingRecords };
+}
+
+function mergeConfirmedNodePosition(
+  set: BranchMindSet,
+  pending: PendingNodePositionSync,
+  data: UpdateNodeResponse,
+) {
+  const positionKey = nodePositionKey(pending.projectId, pending.nodeId);
+  if (pendingNodePositionVersions.get(positionKey) !== pending.version) return;
+
+  set((current) => {
+    const currentProject = current.projects.find((item) => item.id === pending.projectId);
+    const currentNode = currentProject?.nodes[pending.nodeId];
+    const serverNode = data.project.nodes[pending.nodeId];
+    if (!currentProject || !currentNode) return current;
+
+    const confirmedPosition = positionsEqual(currentNode.position, pending.position)
+      ? (serverNode?.position ?? pending.position)
+      : currentNode.position;
+    const nextProject = {
+      ...currentProject,
+      updatedAt: newestTimestamp(currentProject.updatedAt, data.project.updatedAt),
+      nodes: {
+        ...currentProject.nodes,
+        [pending.nodeId]: {
+          ...currentNode,
+          position: confirmedPosition,
+          updatedAt: newestTimestamp(currentNode.updatedAt, serverNode?.updatedAt),
+        },
+      },
+    };
+
+    return {
+      projects: replaceProject(current.projects, nextProject),
+      aiError: null,
+    };
+  });
+
+  clearPendingNodePositionSyncRecord(pending.projectId, pending.nodeId);
+  pendingNodePositionVersions.delete(positionKey);
+}
+
+async function flushPendingNodePositionSync(
+  set: BranchMindSet,
+  key: string,
+  options: { keepalive?: boolean; reportErrors?: boolean } = {},
+) {
+  const pending = pendingNodePositionSyncs.get(key);
+  if (!pending) return;
+
+  if (pending.timer) clearTimeout(pending.timer);
+  pendingNodePositionSyncs.delete(key);
+
+  try {
+    const response = await fetch(
+      `/api/projects/${pending.projectId}/nodes/${pending.nodeId}`,
+      {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ position: pending.position }),
+        keepalive: options.keepalive,
+      },
+    );
+    const data = await readJson<UpdateNodeResponse>(response);
+    mergeConfirmedNodePosition(set, pending, data);
+  } catch (error) {
+    if (
+      options.reportErrors !== false &&
+      pendingNodePositionVersions.get(key) === pending.version
+    ) {
+      set({ aiError: getErrorMessage(error) });
+      const timer = setTimeout(() => {
+        void flushPendingNodePositionSync(set, key);
+      }, NODE_POSITION_SYNC_RETRY_DELAY_MS);
+      pendingNodePositionSyncs.set(key, {
+        ...pending,
+        timer,
+      });
+    }
+  }
+}
+
+function flushPendingNodePositionSyncs(
+  set: BranchMindSet,
+  options: { keepalive?: boolean; reportErrors?: boolean } = {},
+) {
+  for (const key of Array.from(pendingNodePositionSyncs.keys())) {
+    void flushPendingNodePositionSync(set, key, options);
+  }
+}
+
+function installNodePositionFlushListeners(set: BranchMindSet) {
+  if (
+    nodePositionFlushListenersInstalled ||
+    typeof window === "undefined" ||
+    typeof document === "undefined"
+  ) {
+    return;
+  }
+
+  nodePositionFlushListenersInstalled = true;
+  const flushForPageExit = () => {
+    flushPendingNodePositionSyncs(set, {
+      keepalive: true,
+      reportErrors: false,
+    });
+  };
+
+  window.addEventListener("pagehide", flushForPageExit);
+  window.addEventListener("beforeunload", flushForPageExit);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushForPageExit();
+  });
+}
+
+function queueNodePositionSync(
+  set: BranchMindSet,
+  record: PendingNodePositionSyncRecord,
+  options: { delayMs?: number; version?: number } = {},
+) {
+  installNodePositionFlushListeners(set);
+
+  const key = nodePositionKey(record.projectId, record.nodeId);
+  const existing = pendingNodePositionSyncs.get(key);
+  if (existing?.timer) clearTimeout(existing.timer);
+
+  const version = options.version ?? ++nextNodePositionVersion;
+  pendingNodePositionVersions.set(key, version);
+
+  const delayMs = options.delayMs ?? NODE_POSITION_SYNC_DELAY_MS;
+  const timer = setTimeout(() => {
+    void flushPendingNodePositionSync(set, key);
+  }, delayMs);
+
+  pendingNodePositionSyncs.set(key, {
+    ...record,
+    version,
+    timer,
+  });
+}
 
 function getProjectPendingStream(
   state: BranchMindState,
@@ -556,6 +853,7 @@ function clearLegacyProjects() {
 async function loadProjects() {
   const legacy = readLegacyProjects();
   const pendingSyncRecords = readPendingProjectSyncRecords();
+  const pendingNodePositionRecords = readPendingNodePositionSyncRecords();
 
   if (legacy.projects.length > 0) {
     const response = await fetch("/api/projects/import", {
@@ -566,10 +864,16 @@ async function loadProjects() {
     const data = await readJson<ProjectsResponse>(response);
 
     clearLegacyProjects();
+    const nodePositions = applyPendingNodePositionSyncRecords(
+      mergePendingProjects(data.projects, pendingSyncRecords),
+      pendingNodePositionRecords,
+    );
+    reconcilePendingNodePositionSyncRecords(nodePositions.pendingRecords);
     return {
-      projects: mergePendingProjects(data.projects, pendingSyncRecords),
+      projects: nodePositions.projects,
       preferredProjectId: legacy.activeProjectId,
       pendingProjectSyncs: getPendingSyncMap(pendingSyncRecords),
+      pendingNodePositions: nodePositions.pendingRecords,
       warning: null,
     };
   }
@@ -577,19 +881,31 @@ async function loadProjects() {
   try {
     const response = await fetch("/api/projects");
     const data = await readJson<ProjectsResponse>(response);
+    const nodePositions = applyPendingNodePositionSyncRecords(
+      mergePendingProjects(data.projects, pendingSyncRecords),
+      pendingNodePositionRecords,
+    );
+    reconcilePendingNodePositionSyncRecords(nodePositions.pendingRecords);
     return {
-      projects: mergePendingProjects(data.projects, pendingSyncRecords),
+      projects: nodePositions.projects,
       preferredProjectId: null,
       pendingProjectSyncs: getPendingSyncMap(pendingSyncRecords),
+      pendingNodePositions: nodePositions.pendingRecords,
       warning: null,
     };
   } catch (error) {
     if (pendingSyncRecords.length === 0) throw error;
 
+    const nodePositions = applyPendingNodePositionSyncRecords(
+      pendingSyncRecords.map((record) => record.project),
+      pendingNodePositionRecords,
+    );
+    reconcilePendingNodePositionSyncRecords(nodePositions.pendingRecords);
     return {
-      projects: pendingSyncRecords.map((record) => record.project),
+      projects: nodePositions.projects,
       preferredProjectId: null,
       pendingProjectSyncs: getPendingSyncMap(pendingSyncRecords),
+      pendingNodePositions: nodePositions.pendingRecords,
       warning: getErrorMessage(error),
     };
   }
@@ -612,7 +928,13 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
     if (typeof window === "undefined" || (get().hydrated && !force)) return;
 
     try {
-      const { projects, preferredProjectId, pendingProjectSyncs, warning } =
+      const {
+        projects,
+        preferredProjectId,
+        pendingProjectSyncs,
+        pendingNodePositions,
+        warning,
+      } =
         await loadProjects();
       if (get().hydrated && !force) return;
 
@@ -634,6 +956,10 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
       Object.values(pendingProjectSyncs)
         .filter((record) => record.status === "syncing")
         .forEach((record) => syncPendingProject(set, get, record.project.id));
+
+      pendingNodePositions.forEach((record) => {
+        queueNodePositionSync(set, record, { delayMs: 0 });
+      });
     } catch (error) {
       set({
         hydrated: true,
@@ -985,6 +1311,52 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
     }
   },
 
+  updateProjectTitle: async (projectId, title) => {
+    const trimmed = title.trim();
+    if (!trimmed) return false;
+
+    const state = get();
+    const project = state.projects.find((item) => item.id === projectId);
+    if (
+      !project ||
+      state.creatingNodeId ||
+      state.streamingNodeId ||
+      isProjectWaitingForSync(state, projectId)
+    ) {
+      return false;
+    }
+
+    const timestamp = new Date().toISOString();
+    const optimisticProject = {
+      ...project,
+      title: trimmed,
+      updatedAt: timestamp,
+    };
+
+    set({
+      projects: replaceProject(state.projects, optimisticProject),
+      aiError: null,
+    });
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: trimmed }),
+      });
+      const data = await readJson<UpdateProjectResponse>(response);
+
+      set({ projects: replaceProject(get().projects, data.project) });
+      return true;
+    } catch (error) {
+      set((current) => ({
+        projects: replaceProject(current.projects, project),
+        aiError: getErrorMessage(error),
+      }));
+      return false;
+    }
+  },
+
   updateNodeTitle: async (nodeId, title) => {
     const trimmed = title.trim();
     if (!trimmed) return false;
@@ -1047,20 +1419,55 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
     const state = get();
     const projectId = state.activeProjectId;
     if (!projectId) return;
-    if (isProjectWaitingForSync(state, projectId)) return;
-
-    try {
-      const response = await fetch(`/api/projects/${projectId}/nodes/${nodeId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ position }),
-      });
-      const data = await readJson<UpdateNodeResponse>(response);
-
-      set({ projects: replaceProject(get().projects, data.project) });
-    } catch (error) {
-      set({ aiError: getErrorMessage(error) });
+    if (
+      state.creatingNodeId ||
+      state.streamingNodeId ||
+      isProjectWaitingForSync(state, projectId)
+    ) {
+      return;
     }
+    const project = state.projects.find((item) => item.id === projectId);
+    const node = project?.nodes[nodeId];
+    if (!project || !node || positionsEqual(node.position, position)) return;
+
+    const timestamp = new Date().toISOString();
+    const optimisticProject = {
+      ...project,
+      nodes: {
+        ...project.nodes,
+        [nodeId]: {
+          ...node,
+          position,
+          updatedAt: timestamp,
+        },
+      },
+      updatedAt: timestamp,
+    };
+    const positionKey = nodePositionKey(projectId, nodeId);
+    const positionVersion = ++nextNodePositionVersion;
+    pendingNodePositionVersions.set(positionKey, positionVersion);
+
+    set({
+      projects: replaceProject(state.projects, optimisticProject),
+      aiError: null,
+    });
+
+    persistPendingNodePositionSyncRecord({
+      projectId,
+      nodeId,
+      position,
+      updatedAt: timestamp,
+    });
+    queueNodePositionSync(
+      set,
+      {
+        projectId,
+        nodeId,
+        position,
+        updatedAt: timestamp,
+      },
+      { version: positionVersion },
+    );
   },
 
   toggleNodeCollapsed: async (nodeId) => {

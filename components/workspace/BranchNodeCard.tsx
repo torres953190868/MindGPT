@@ -29,10 +29,10 @@ export function BranchNodeCard({ data }: NodeProps) {
       data-testid="branch-node-card"
       data-node-id={mindNode.id}
       data-selected={selected ? "true" : "false"}
-      className={`branch-node-edge-hit-area group w-[292px] rounded-[24px] border bg-white p-4 text-left shadow-lg transition ${
+      className={`branch-node-edge-hit-area group w-[292px] rounded-2xl border bg-white p-4 text-left shadow-md transition ${
         selected
-          ? "border-[#9d75cf] shadow-[#cab2e5]/60 ring-4 ring-[#eadcf7]"
-          : "border-white/90 shadow-[#e2d9ee]/45 hover:-translate-y-1 hover:shadow-xl"
+          ? "border-brand-400 shadow-lg ring-2 ring-brand-300"
+          : "border-white/90 shadow-[rgba(44,35,62,0.08)] hover:-translate-y-1 hover:shadow-lg"
       }`}
     >
       <Handle
@@ -84,7 +84,7 @@ export function BranchNodeCard({ data }: NodeProps) {
         >
           <span className="flex items-start justify-between gap-3">
             <span>
-              <span className="block text-xs font-black uppercase tracking-[0.16em] text-[#74687c]">
+              <span className="block text-xs font-black uppercase tracking-[0.16em] text-neutral-500">
                 {mindNode.branchType === "root"
                   ? "Root"
                   : mindNode.branchType === "branch"
@@ -93,14 +93,14 @@ export function BranchNodeCard({ data }: NodeProps) {
               </span>
               <span
                 id={nodeTitleId}
-                className="mt-1 line-clamp-2 block text-base font-black text-[#352b3c]"
+                className="mt-1 line-clamp-2 block text-base font-black text-neutral-900"
               >
                 {mindNode.title}
               </span>
             </span>
             <span
               aria-label={`${mindNode.children.length} child nodes`}
-              className="grid h-9 min-w-9 place-items-center rounded-full bg-[#fff0b8] px-2 text-sm font-black text-[#755816]"
+              className="grid h-8 min-w-8 place-items-center rounded-full bg-brand-100 px-2 text-sm font-black text-brand-700"
             >
               {mindNode.children.length}
             </span>
@@ -108,7 +108,7 @@ export function BranchNodeCard({ data }: NodeProps) {
 
           <span
             id={nodeSummaryId}
-            className="mt-3 line-clamp-3 block text-sm leading-6 text-[#5f5368]"
+            className="mt-3 line-clamp-3 block text-sm leading-6 text-neutral-600"
           >
             {mindNode.summary}
           </span>
@@ -127,7 +127,7 @@ export function BranchNodeCard({ data }: NodeProps) {
             }}
             aria-label="Continue down"
             title="Continue down"
-            className="grid h-9 w-9 place-items-center rounded-full bg-[#dff5ea] text-[#376f51] transition hover:bg-[#ccefdc] disabled:cursor-not-allowed disabled:opacity-50"
+            className="grid h-9 w-9 place-items-center rounded-full bg-success-100 text-success-700 transition hover:scale-110 hover:bg-success-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Sprout size={17} />
           </button>
@@ -143,7 +143,7 @@ export function BranchNodeCard({ data }: NodeProps) {
             }}
             aria-label="Branch right"
             title="Branch right"
-            className="grid h-9 w-9 place-items-center rounded-full bg-[#eadcf7] text-[#6e4ca0] transition hover:bg-[#dfc9f3] disabled:cursor-not-allowed disabled:opacity-50"
+            className="grid h-9 w-9 place-items-center rounded-full bg-brand-100 text-brand-700 transition hover:scale-110 hover:bg-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <GitBranch size={17} />
           </button>
@@ -166,7 +166,7 @@ export function BranchNodeCard({ data }: NodeProps) {
             title="Toggle children"
             data-testid="toggle-children-button"
             data-node-id={mindNode.id}
-            className="grid h-9 w-9 place-items-center rounded-full bg-[#ffe4ec] text-[#a64e68] transition hover:bg-[#ffd2df] disabled:cursor-not-allowed disabled:opacity-50"
+            className="grid h-9 w-9 place-items-center rounded-full bg-danger-100 text-danger-600 transition hover:scale-110 hover:bg-danger-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Ribbon size={17} />
           </button>

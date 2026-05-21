@@ -1677,6 +1677,40 @@ test("edits a root node title from the node detail header", async ({ page }) => 
   }
 });
 
+test("renames a project from the workspace header", async ({ page }) => {
+  const sourceProject = makeWorkspaceProject(`project-title-edit-${makeSeed()}`);
+  const editedTitle = "Workspace title from header";
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.goto(`/workspace/${project.id}`);
+    await page.getByTestId("edit-project-title-button").click();
+    await expect(page.getByTestId("project-title-edit-input")).toHaveValue(project.title);
+    await page.getByTestId("project-title-edit-input").fill(editedTitle);
+    await page.getByTestId("save-project-title-button").click();
+
+    await expect(page.getByTestId("project-title-edit-input")).toHaveCount(0);
+    await expect(page.getByTestId("workspace-header")).toContainText(editedTitle);
+    await expect(page.getByTestId("node-detail-panel")).toContainText("Seeded root node");
+
+    const persisted = await getPersistedProject(page, project.id);
+    expect(persisted.title).toBe(editedTitle);
+    expect(persisted.nodes[persisted.rootNodeId]).toMatchObject({
+      title: "Seeded root node",
+      titleManuallyEdited: false,
+    });
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
 test("splits node edge drag from inner open actions", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Node hit areas are covered once.");
 
@@ -1701,6 +1735,22 @@ test("splits node edge drag from inner open actions", async ({ page }, testInfo)
   try {
     const project = await importProject(page, sourceProject);
     projectIdToDelete = project.id;
+    const positionPatches: Array<{ nodeId: string; position: { x: number; y: number } }> = [];
+    await page.route(`**/api/projects/${project.id}/nodes/*`, async (route) => {
+      const request = route.request();
+      if (request.method() === "PATCH") {
+        const payload = request.postDataJSON() as { position?: { x: number; y: number } };
+        if (payload.position) {
+          positionPatches.push({
+            nodeId: new URL(request.url()).pathname.split("/").pop() ?? "",
+            position: payload.position,
+          });
+        }
+      }
+
+      await route.continue();
+    });
+
     const root = project.nodes[project.rootNodeId];
     const tools = getNodeByTitle(project, "Programming Tools");
 
@@ -1730,6 +1780,7 @@ test("splits node edge drag from inner open actions", async ({ page }, testInfo)
     expect((await getPersistedProject(page, project.id)).nodes[root.id].position).toEqual(
       positionBeforeToggle,
     );
+    expect(positionPatches).toEqual([]);
 
     const openButtonBoxBefore = await getElementBox(
       rootCard.getByTestId("open-node-button"),
@@ -1748,6 +1799,7 @@ test("splits node edge drag from inner open actions", async ({ page }, testInfo)
     expect((await getPersistedProject(page, project.id)).nodes[root.id].position).toEqual(
       positionBeforeToggle,
     );
+    expect(positionPatches).toEqual([]);
 
     const rootBoxBeforeHandleDrag = await getElementBox(rootCard, "root card before handle drag");
     const sourceHandleBox = await getElementBox(
@@ -1763,6 +1815,7 @@ test("splits node edge drag from inner open actions", async ({ page }, testInfo)
     const rootBoxAfterHandleDrag = await getElementBox(rootCard, "root card after handle drag");
     expect(Math.abs(rootBoxAfterHandleDrag.x - rootBoxBeforeHandleDrag.x)).toBeLessThan(2);
     expect(Math.abs(rootBoxAfterHandleDrag.y - rootBoxBeforeHandleDrag.y)).toBeLessThan(2);
+    expect(positionPatches).toEqual([]);
 
     const positionBeforeEdgeDrag = (await getPersistedProject(page, project.id)).nodes[root.id]
       .position;
@@ -1777,6 +1830,8 @@ test("splits node edge drag from inner open actions", async ({ page }, testInfo)
     await expect
       .poll(async () => (await getPersistedProject(page, project.id)).nodes[root.id].position.x)
       .toBeGreaterThan(positionBeforeEdgeDrag.x + 20);
+    expect(positionPatches).toHaveLength(1);
+    expect(positionPatches[0].nodeId).toBe(root.id);
   } finally {
     if (projectIdToDelete) {
       await page.request
@@ -2568,15 +2623,20 @@ test("streams a node reply into a draft child node", async ({ page }, testInfo) 
     await expect(page.getByTestId("branch-node-card")).toHaveCount(2);
     await expect(page.getByTestId("streaming-assistant-response")).toBeVisible();
     await expect(page.getByTestId("message-streaming-status")).toBeVisible();
-    await expect(page.getByTestId("conversation-message")).toHaveCount(2);
+    const messages = page.getByTestId("conversation-message");
+    await expect(messages).toHaveCount(4);
+    await expect(messages.nth(0)).toHaveAttribute("data-inherited", "true");
+    await expect(messages.nth(1)).toHaveAttribute("data-inherited", "true");
+    await expect(messages.nth(0).getByTestId("edit-message-button")).toHaveCount(0);
+    await expect(messages.nth(1).getByTestId("retry-message-button")).toHaveCount(0);
+    await expect(messages.nth(3).getByTestId("retry-message-button")).toHaveCount(1);
 
     await expect(page.getByTestId("conversation-history")).toContainText(
       `Instruction received: ${instruction}`,
     );
-    await expect(page.getByTestId("conversation-message")).toHaveCount(2);
-    await expect(page.getByTestId("conversation-message").first()).toContainText(
-      instruction,
-    );
+    await expect(messages).toHaveCount(4);
+    await expect(messages.nth(2)).toContainText(instruction);
+    await expect(messages.nth(2)).not.toHaveAttribute("data-inherited", "true");
     await expect(page.getByTestId("message-streaming-status")).toHaveCount(0);
     await expect(page.getByTestId("streaming-assistant-response")).toHaveCount(0);
   } finally {
@@ -2635,7 +2695,9 @@ test("attaches file metadata to a sent message", async ({ page }, testInfo) => {
     await page.getByTestId("message-instruction-input").fill(instruction);
     await page.getByTestId("send-message-button").click();
 
-    await expect(page.getByTestId("conversation-message").first()).toContainText(
+    await expect(
+      page.locator('[data-testid="conversation-message"]:not([data-inherited="true"])').first(),
+    ).toContainText(
       instruction,
     );
     await expect(page.getByTestId("message-attachment")).toHaveCount(2);

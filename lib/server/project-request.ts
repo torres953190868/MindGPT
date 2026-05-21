@@ -9,6 +9,7 @@ import {
 export { PROJECT_NOTES_MAX_LENGTH };
 
 export const updateProjectSchema = z.object({
+  title: z.string().trim().min(1).max(120).optional(),
   notes: z.string().max(PROJECT_NOTES_MAX_LENGTH).optional(),
 });
 

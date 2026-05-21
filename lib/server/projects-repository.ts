@@ -6,7 +6,7 @@ import {
   requireSupabaseServerConfig,
 } from "@/lib/supabase/server";
 import type { Database, Json } from "@/lib/supabase/database.types";
-import type { ChatMessage, MindNode, Project } from "@/lib/types";
+import type { ChatMessage, MindNode, NodePosition, Project } from "@/lib/types";
 import * as fileStore from "./projects-store";
 
 type ProjectRow = Database["public"]["Tables"]["branchmind_projects"]["Row"];
@@ -40,6 +40,12 @@ export type ProjectsRepository = {
   writeProjects: (projects: Project[]) => Promise<void>;
   updateProjects: (updater: (projects: OwnedProject[]) => Project[] | Promise<Project[]>) => Promise<OwnedProject[]>;
   saveProject: (project: Project) => Promise<void>;
+  updateNodePositionForOwner: (
+    ownerId: string,
+    projectId: string,
+    nodeId: string,
+    position: NodePosition,
+  ) => Promise<ProjectDto | null>;
   deleteProject: (projectId: string) => Promise<void>;
   transferOwner: (fromOwnerId: string, toOwnerId: string) => Promise<number>;
 };
@@ -496,6 +502,52 @@ class SupabaseProjectsRepository implements ProjectsRepository {
     }
   }
 
+  async updateNodePositionForOwner(
+    ownerId: string,
+    projectId: string,
+    nodeId: string,
+    position: NodePosition,
+  ) {
+    const client = getSupabaseAdminClient();
+    const projectLookup = await client
+      .from("branchmind_projects")
+      .select("*")
+      .eq("id", projectId)
+      .eq("owner_session_id", ownerId)
+      .maybeSingle();
+    assertNoError(projectLookup.error, "read existing project");
+    if (!projectLookup.data) return null;
+
+    const timestamp = new Date().toISOString();
+    const nodeUpdate = await client
+      .from("branchmind_nodes")
+      .update({
+        position_x: position.x,
+        position_y: position.y,
+        updated_at: timestamp,
+      })
+      .eq("project_id", projectId)
+      .eq("id", nodeId)
+      .select("id")
+      .maybeSingle();
+    assertNoError(nodeUpdate.error, "update node position");
+    if (!nodeUpdate.data) return null;
+
+    const projectUpdate = await client
+      .from("branchmind_projects")
+      .update({ updated_at: timestamp })
+      .eq("id", projectId)
+      .eq("owner_session_id", ownerId)
+      .select("*")
+      .maybeSingle();
+    assertNoError(projectUpdate.error, "touch project after node position update");
+
+    const [project] = await this.compose([
+      projectUpdate.data ?? { ...projectLookup.data, updated_at: timestamp },
+    ]);
+    return project ? toProjectDto(project) : null;
+  }
+
   async deleteProject(projectId: string) {
     await this.deleteProjects([projectId]);
   }
@@ -593,6 +645,35 @@ const fileRepository: ProjectsRepository = {
         ? projects.map((item) => (item.id === project.id ? project : item))
         : [project, ...projects];
     });
+  },
+  updateNodePositionForOwner: async (ownerId, projectId, nodeId, position) => {
+    let updatedProject: Project | null = null;
+
+    await fileStore.updateProjects((projects) => {
+      const project = projects.find(
+        (item) => item.id === projectId && projectBelongsToSession(item, ownerId),
+      );
+      const node = project?.nodes[nodeId];
+      if (!project || !node) return projects;
+
+      const timestamp = new Date().toISOString();
+      updatedProject = {
+        ...project,
+        nodes: {
+          ...project.nodes,
+          [nodeId]: {
+            ...node,
+            position,
+            updatedAt: timestamp,
+          },
+        },
+        updatedAt: timestamp,
+      };
+
+      return projects.map((item) => (item.id === projectId ? updatedProject! : item));
+    });
+
+    return updatedProject ? toProjectDto(updatedProject) : null;
   },
   deleteProject: async (projectId) => {
     await fileStore.updateProjects((projects) =>

@@ -27,7 +27,7 @@ describe("requestDeepSeekReply", () => {
     await expect(
       requestDeepSeekReply({ instruction: "Explain trees" }),
     ).rejects.toMatchObject({
-      name: "DeepSeekError",
+      name: "AIProviderError",
       status: 500,
     });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -398,14 +398,84 @@ describe("streamDeepSeekReply", () => {
     vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
-        createSseResponse([createSseChunk('{"title":'), "data: [DONE]\n\n"]),
+      vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          createSseResponse([createSseChunk('{"title":'), "data: [DONE]\n\n"]),
+        ),
       ),
     );
 
     await expect(collectStreamingEvents()).rejects.toMatchObject({
       code: "DEEPSEEK_INVALID_STREAMING_JSON",
       status: 502,
+    });
+  });
+
+  it("retries retryable upstream streaming failures before emitting deltas", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+    const rawReply = JSON.stringify({
+      title: "Retried stream",
+      summary: "The retry succeeded.",
+      content: "Recovered after an upstream failure.",
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { message: "try again" } }), {
+          status: 502,
+        }),
+      )
+      .mockResolvedValueOnce(
+        createSseResponse([createSseChunk(rawReply), "data: [DONE]\n\n"]),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const events = await collectStreamingEvents();
+    const complete = events.find(
+      (event): event is Extract<DeepSeekStreamingEvent, { type: "complete" }> =>
+        event.type === "complete",
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(complete?.reply).toMatchObject({
+      title: "Retried stream",
+      content: "Recovered after an upstream failure.",
+    });
+  });
+
+  it("falls back to visible streamed content when final JSON is truncated", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        createSseResponse([
+          createSseChunk('{"title":"Recovered","summary":"Recovered","content":"Recovered body'),
+          "data: [DONE]\n\n",
+        ]),
+      ),
+    );
+
+    const events = await collectStreamingEvents();
+    const streamedContent = events
+      .filter((event): event is Extract<DeepSeekStreamingEvent, { type: "delta" }> =>
+        event.type === "delta",
+      )
+      .map((event) => event.contentDelta)
+      .join("");
+    const complete = events.find(
+      (event): event is Extract<DeepSeekStreamingEvent, { type: "complete" }> =>
+        event.type === "complete",
+    );
+
+    expect(streamedContent).toBe("Recovered body");
+    expect(complete?.reply).toMatchObject({
+      title: "AI: Explain streaming",
+      summary: "Recovered body",
+      content: "Recovered body",
     });
   });
 

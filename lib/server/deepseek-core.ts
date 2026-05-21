@@ -56,7 +56,7 @@ export class DeepSeekError extends Error {
     } = {},
   ) {
     super(message);
-    this.name = "DeepSeekError";
+    this.name = "AIProviderError";
     this.code = options.code ?? "DEEPSEEK_ERROR";
     this.expose = options.expose ?? false;
     this.retryable = options.retryable ?? false;
@@ -72,6 +72,20 @@ export const RETRY_DELAY_MS = 300;
 export const DEFAULT_ALLOWED_MODELS = DEFAULT_DEEPSEEK_ALLOWED_MODELS;
 
 const RETRYABLE_STATUSES = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
+
+function parseTimeoutMs(value: string | undefined) {
+  if (!value) return null;
+  const timeoutMs = Number(value.trim());
+  return Number.isFinite(timeoutMs) && timeoutMs >= 1_000 ? timeoutMs : null;
+}
+
+export function getChatRequestTimeoutMs(provider: ChatCompletionsProvider) {
+  return (
+    parseTimeoutMs(process.env[`${provider.errorCodePrefix}_TIMEOUT_MS`]) ??
+    parseTimeoutMs(process.env.AI_PROVIDER_TIMEOUT_MS) ??
+    DEEPSEEK_TIMEOUT_MS
+  );
+}
 
 const deepSeekResponseSchema = z
   .object({
@@ -380,6 +394,41 @@ function normalizeParsedReply(reply: z.infer<typeof branchMindReplySchema>) {
   };
 }
 
+function stringField(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function objectValue(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function partialReplyFromObject(
+  value: unknown,
+  instruction: string,
+  visibleContent: string,
+) {
+  const object = objectValue(value);
+  if (!object) return null;
+
+  const content = stringField(object.content) ?? visibleContent.trim();
+  if (!content) return null;
+
+  const fallbackTitle = instruction.trim() || "AI response";
+
+  return {
+    title: compact(stringField(object.title) ?? fallbackTitle, 48),
+    summary: compact(stringField(object.summary) ?? content, 110),
+    content,
+  };
+}
+
+function looksLikeJsonContainer(raw: string) {
+  const normalized = raw.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "");
+  return normalized.startsWith("{") || normalized.startsWith("[");
+}
+
 export function parseReply(raw: string, instruction: string): MockReply {
   const cleaned = cleanReplyJson(raw);
 
@@ -391,6 +440,47 @@ export function parseReply(raw: string, instruction: string): MockReply {
   }
 
   return safeReply(instruction, raw);
+}
+
+export function parseStreamingReply(
+  raw: string,
+  instruction: string,
+  visibleContent = "",
+): MockReply {
+  const cleaned = cleanReplyJson(raw);
+
+  try {
+    const parsedJson = JSON.parse(cleaned);
+    const parsed = branchMindReplySchema.safeParse(parsedJson);
+    if (parsed.success) return normalizeParsedReply(parsed.data);
+
+    const partialReply = partialReplyFromObject(
+      parsedJson,
+      instruction,
+      visibleContent,
+    );
+    if (partialReply) return partialReply;
+
+    throw new DeepSeekError("DeepSeek streaming response failed validation.", 502, {
+      code: "DEEPSEEK_INVALID_STREAMING_REPLY",
+      retryable: true,
+    });
+  } catch (error) {
+    if (error instanceof DeepSeekError) throw error;
+
+    if (visibleContent.trim()) {
+      return safeReply(instruction, visibleContent.trim());
+    }
+
+    if (cleaned && !looksLikeJsonContainer(cleaned)) {
+      return safeReply(instruction, cleaned);
+    }
+
+    throw new DeepSeekError("DeepSeek returned invalid streaming JSON.", 502, {
+      code: "DEEPSEEK_INVALID_STREAMING_JSON",
+      retryable: true,
+    });
+  }
 }
 
 export function parseRequiredReply(raw: string): MockReply {

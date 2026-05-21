@@ -376,6 +376,107 @@ export type Database = {
           },
         ];
       };
+      branchmind_user_plans: {
+        Row: {
+          user_id: string;
+          plan: string;
+          display_name: string | null;
+          stripe_customer_id: string | null;
+          stripe_subscription_id: string | null;
+          subscription_status: string | null;
+          current_period_end: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          plan?: string;
+          display_name?: string | null;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          subscription_status?: string | null;
+          current_period_end?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          plan?: string;
+          display_name?: string | null;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          subscription_status?: string | null;
+          current_period_end?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "branchmind_user_plans_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      branchmind_user_usage: {
+        Row: {
+          user_id: string;
+          date: string;
+          project_count: number;
+          node_count: number;
+          document_count: number;
+          ai_message_count: number;
+        };
+        Insert: {
+          user_id: string;
+          date?: string;
+          project_count?: number;
+          node_count?: number;
+          document_count?: number;
+          ai_message_count?: number;
+        };
+        Update: {
+          user_id?: string;
+          date?: string;
+          project_count?: number;
+          node_count?: number;
+          document_count?: number;
+          ai_message_count?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "branchmind_user_usage_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      branchmind_plan_limits: {
+        Row: {
+          plan: string;
+          max_projects: number | null;
+          max_nodes: number | null;
+          max_documents: number | null;
+          max_ai_messages_per_day: number | null;
+        };
+        Insert: {
+          plan: string;
+          max_projects?: number | null;
+          max_nodes?: number | null;
+          max_documents?: number | null;
+          max_ai_messages_per_day?: number | null;
+        };
+        Update: {
+          plan?: string;
+          max_projects?: number | null;
+          max_nodes?: number | null;
+          max_documents?: number | null;
+          max_ai_messages_per_day?: number | null;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

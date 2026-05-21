@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { getContextTitles } from "@/lib/graph";
+import { getContextTitles, getNodeConversationMessages } from "@/lib/graph";
 import {
   addChildNode,
   createPendingRootProject,
@@ -10,6 +10,7 @@ import {
   removeNode,
   setNodeCollapsed,
   setProjectNotes,
+  setProjectTitle,
   updateNodeTitle,
   updateNodePosition,
 } from "@/lib/server/project-model";
@@ -229,6 +230,29 @@ describe("project model helpers", () => {
     }
   });
 
+  it("updates project titles without changing the root node title", () => {
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      const project = createRootProject("Graph search", rootReply);
+      const rootId = project.rootNodeId;
+      vi.setSystemTime(new Date("2026-01-01T00:00:01.000Z"));
+      const updated = setProjectTitle(project, "  Renamed workspace  ");
+
+      expect(updated?.title).toBe("Renamed workspace");
+      expect(updated?.updatedAt).toBe("2026-01-01T00:00:01.000Z");
+      expect(updated?.nodes[rootId]).toMatchObject({
+        title: "Root concept",
+        titleManuallyEdited: false,
+      });
+      expect(project.title).toBe("Graph search");
+      expect(project.nodes[rootId].title).toBe("Root concept");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("preserves manually edited titles when regenerating", () => {
     vi.useFakeTimers();
 
@@ -366,5 +390,73 @@ describe("project model helpers", () => {
       "Nested branch",
     ]);
     expectConsistentGraph(branched.project);
+  });
+
+  it("builds root-to-current conversation chains", () => {
+    const project = createRootProject("Graph search", rootReply);
+    const rootId = project.rootNodeId;
+    const continued = addChildNode(project, rootId, "continue", "Next", childReply)!;
+    const branched = addChildNode(
+      continued.project,
+      continued.node.id,
+      "branch",
+      "Nested side path",
+      { ...childReply, content: "Nested content" },
+    )!;
+
+    const rootMessages = getNodeConversationMessages(project, rootId);
+    const childMessages = getNodeConversationMessages(continued.project, continued.node.id);
+    const grandchildMessages = getNodeConversationMessages(
+      branched.project,
+      branched.node.id,
+    );
+
+    expect(rootMessages.map((item) => item.message.content)).toEqual([
+      "Graph search",
+      "Root content",
+    ]);
+    expect(rootMessages.every((item) => !item.inherited)).toBe(true);
+    expect(childMessages.map((item) => item.message.content)).toEqual([
+      "Graph search",
+      "Root content",
+      "Next",
+      "Child content",
+    ]);
+    expect(childMessages.map((item) => item.inherited)).toEqual([
+      true,
+      true,
+      false,
+      false,
+    ]);
+    expect(grandchildMessages.map((item) => item.message.content)).toEqual([
+      "Graph search",
+      "Root content",
+      "Next",
+      "Child content",
+      "Nested side path",
+      "Nested content",
+    ]);
+  });
+
+  it("keeps the current node messages when an ancestor is missing", () => {
+    const project = createRootProject("Graph search", rootReply);
+    const rootId = project.rootNodeId;
+    const continued = addChildNode(project, rootId, "continue", "Next", childReply)!;
+    const brokenProject = {
+      ...continued.project,
+      nodes: {
+        ...continued.project.nodes,
+        [continued.node.id]: {
+          ...continued.node,
+          parentId: "missing-parent",
+        },
+      },
+    };
+
+    expect(
+      getNodeConversationMessages(brokenProject, continued.node.id).map(
+        (item) => item.message.content,
+      ),
+    ).toEqual(["Next", "Child content"]);
   });
 });

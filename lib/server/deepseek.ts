@@ -1,10 +1,10 @@
 import {
   createDeepSeekPayload,
-  DEEPSEEK_TIMEOUT_MS,
   delay,
   DeepSeekError,
   getActiveChatApiKey,
   getActiveChatUrl,
+  getChatRequestTimeoutMs,
   getDeepSeekContent,
   getMockReply,
   isAbortError,
@@ -28,7 +28,10 @@ async function fetchDeepSeek(
   model: string,
 ) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), DEEPSEEK_TIMEOUT_MS);
+  const timeout = setTimeout(
+    () => controller.abort(),
+    getChatRequestTimeoutMs(provider),
+  );
 
   try {
     return await fetch(getActiveChatUrl(provider), {
@@ -44,6 +47,7 @@ async function fetchDeepSeek(
     if (isAbortError(error)) {
       throw new DeepSeekError(`${provider.displayName} request timed out.`, 504, {
         code: `${provider.errorCodePrefix}_TIMEOUT`,
+        expose: true,
         retryable: true,
       });
     }

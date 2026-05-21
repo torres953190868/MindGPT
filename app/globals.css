@@ -2,6 +2,76 @@
 @import "@xyflow/react/dist/style.css";
 @import "katex/dist/katex.min.css";
 
+@theme {
+  /* Brand — Purple */
+  --color-brand-50: #f5f3fb;
+  --color-brand-100: #ebe5f5;
+  --color-brand-200: #d9caef;
+  --color-brand-300: #c4ade6;
+  --color-brand-400: #b696d4;
+  --color-brand-500: #9b7bd2;
+  --color-brand-600: #7c5fb1;
+  --color-brand-700: #6e4ca0;
+  --color-brand-800: #5a3d88;
+  --color-brand-900: #4a326f;
+
+  /* Success — Green */
+  --color-success-50: #e7f5f0;
+  --color-success-100: #dff5ea;
+  --color-success-200: #ccefdc;
+  --color-success-300: #9bd8c6;
+  --color-success-400: #48b596;
+  --color-success-500: #2f8b63;
+  --color-success-600: #277854;
+  --color-success-700: #1f7f64;
+
+  /* Danger — Red */
+  --color-danger-50: #fff0ef;
+  --color-danger-100: #ffeceb;
+  --color-danger-200: #ffd7d4;
+  --color-danger-300: #ffd1cf;
+  --color-danger-400: #f3c6c2;
+  --color-danger-500: #9a413d;
+  --color-danger-600: #833531;
+  --color-danger-700: #7a3e3a;
+
+  /* Neutral — Gray */
+  --color-neutral-50: #fbfafc;
+  --color-neutral-100: #f7f5fa;
+  --color-neutral-200: #ebe7f1;
+  --color-neutral-300: #e2ddea;
+  --color-neutral-400: #d9d3e4;
+  --color-neutral-500: #b9a5db;
+  --color-neutral-600: #9b94a5;
+  --color-neutral-700: #82758b;
+  --color-neutral-800: #665a70;
+  --color-neutral-900: #332a39;
+
+  /* Semantic aliases */
+  --color-text-primary: #332a39;
+  --color-text-secondary: #74687c;
+  --color-text-muted: #9b94a5;
+  --color-border-default: #e5e1ec;
+  --color-border-hover: #d9d3e4;
+  --color-surface-bg: #fff9fb;
+  --color-surface-canvas: #fcfbfd;
+  --color-surface-elevated: #ffffff;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(44, 35, 62, 0.05);
+  --shadow-md: 0 4px 20px rgba(44, 35, 62, 0.08);
+  --shadow-lg: 0 10px 35px rgba(44, 35, 62, 0.12);
+  --shadow-xl: 0 18px 55px rgba(44, 35, 62, 0.16);
+  --shadow-2xl: 0 24px 80px rgba(44, 35, 62, 0.22);
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+}
+
 :root {
   --background: #fff9fb;
   --foreground: #332b38;
@@ -34,8 +104,8 @@ textarea {
 
 .branchmind-grid {
   background-image:
-    linear-gradient(rgba(130, 101, 167, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(130, 101, 167, 0.08) 1px, transparent 1px);
+    linear-gradient(rgba(130, 101, 167, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(130, 101, 167, 0.05) 1px, transparent 1px);
   background-size: 28px 28px;
 }
 
@@ -484,4 +554,15 @@ textarea {
 .project-notes-math-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+/* Skeleton shimmer */
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #ebe7f1 25%, #f7f5fa 50%, #ebe7f1 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }

@@ -1,16 +1,18 @@
 import {
   createDeepSeekPayload,
   createProviderHttpError,
-  DEEPSEEK_TIMEOUT_MS,
   deepSeekStreamChunkSchema,
   DeepSeekError,
   getActiveChatApiKey,
   getActiveChatUrl,
+  getChatRequestTimeoutMs,
   getMockReply,
   isAbortError,
   isDeepSeekMockMode,
+  MAX_DEEPSEEK_ATTEMPTS,
   parseDeepSeekResponse,
-  parseRequiredReply,
+  parseStreamingReply,
+  RETRY_DELAY_MS,
   resolveChatModelSelection,
   type BranchMindReplyRequest,
 } from "@/lib/server/deepseek-core";
@@ -219,6 +221,26 @@ async function* readDeepSeekContentDeltas(stream: ReadableStream<Uint8Array>) {
   }
 }
 
+function normalizeStreamingError(
+  error: unknown,
+  provider: ChatCompletionsProvider,
+) {
+  if (isAbortError(error)) {
+    return new DeepSeekError(`${provider.displayName} request timed out.`, 504, {
+      code: `${provider.errorCodePrefix}_TIMEOUT`,
+      expose: true,
+      retryable: true,
+    });
+  }
+
+  if (error instanceof DeepSeekError) return error;
+
+  return new DeepSeekError(`${provider.displayName} API request failed.`, 502, {
+    code: `${provider.errorCodePrefix}_NETWORK_ERROR`,
+    retryable: true,
+  });
+}
+
 export async function* streamDeepSeekReply(
   body: BranchMindReplyRequest,
 ): AsyncGenerator<DeepSeekStreamingEvent> {
@@ -229,64 +251,84 @@ export async function* streamDeepSeekReply(
 
   const { provider, model } = resolveChatModelSelection(body.modelSelection);
   const apiKey = getActiveChatApiKey(provider);
+  let lastError: DeepSeekError | null = null;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), DEEPSEEK_TIMEOUT_MS);
-  let rawReply = "";
-  let visibleContent = "";
-
-  try {
-    const response = await fetchDeepSeekStream(
-      body,
-      provider,
-      apiKey,
-      model,
-      controller.signal,
+  for (let attempt = 1; attempt <= MAX_DEEPSEEK_ATTEMPTS; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      getChatRequestTimeoutMs(provider),
     );
-    if (!response.ok) {
-      throw createProviderHttpError(
-        provider,
-        response,
-        await readErrorResponse(response),
-      );
-    }
-    if (!response.body) {
-      throw new DeepSeekError("DeepSeek returned an empty stream.", 502, {
-        code: "DEEPSEEK_EMPTY_STREAM",
-        retryable: true,
-      });
-    }
+    let emittedDelta = false;
+    let rawReply = "";
+    let visibleContent = "";
 
-    for await (const rawDelta of readDeepSeekContentDeltas(response.body)) {
-      rawReply += rawDelta;
-      const contentPrefix = getJsonStringValuePrefix(rawReply, "content");
-      if (!contentPrefix || contentPrefix.value.length <= visibleContent.length) {
-        continue;
+    try {
+      const response = await fetchDeepSeekStream(
+        body,
+        provider,
+        apiKey,
+        model,
+        controller.signal,
+      );
+      if (!response.ok) {
+        throw createProviderHttpError(
+          provider,
+          response,
+          await readErrorResponse(response),
+        );
+      }
+      if (!response.body) {
+        throw new DeepSeekError("DeepSeek returned an empty stream.", 502, {
+          code: "DEEPSEEK_EMPTY_STREAM",
+          retryable: true,
+        });
       }
 
-      const contentDelta = contentPrefix.value.slice(visibleContent.length);
-      visibleContent = contentPrefix.value;
-      yield { type: "delta", contentDelta };
-    }
+      for await (const rawDelta of readDeepSeekContentDeltas(response.body)) {
+        rawReply += rawDelta;
+        const contentPrefix = getJsonStringValuePrefix(rawReply, "content");
+        if (!contentPrefix || contentPrefix.value.length <= visibleContent.length) {
+          continue;
+        }
 
-    const reply = parseRequiredReply(rawReply);
-    if (reply.content.length > visibleContent.length) {
-      yield {
-        type: "delta",
-        contentDelta: reply.content.slice(visibleContent.length),
-      };
-    }
-    yield { type: "complete", reply };
-  } catch (error) {
-    if (isAbortError(error)) {
-      throw new DeepSeekError(`${provider.displayName} request timed out.`, 504, {
-        code: `${provider.errorCodePrefix}_TIMEOUT`,
-        retryable: true,
-      });
-    }
+        const contentDelta = contentPrefix.value.slice(visibleContent.length);
+        visibleContent = contentPrefix.value;
+        emittedDelta = true;
+        yield { type: "delta", contentDelta };
+      }
 
-    throw error;
-  } finally {
-    clearTimeout(timeout);
+      const reply = parseStreamingReply(
+        rawReply,
+        body.instruction,
+        visibleContent,
+      );
+      if (reply.content.length > visibleContent.length) {
+        emittedDelta = true;
+        yield {
+          type: "delta",
+          contentDelta: reply.content.slice(visibleContent.length),
+        };
+      }
+      yield { type: "complete", reply };
+      return;
+    } catch (error) {
+      const nextError = normalizeStreamingError(error, provider);
+      lastError = nextError;
+
+      if (
+        emittedDelta ||
+        !nextError.retryable ||
+        attempt >= MAX_DEEPSEEK_ATTEMPTS
+      ) {
+        throw nextError;
+      }
+
+      await wait(RETRY_DELAY_MS);
+    } finally {
+      clearTimeout(timeout);
+    }
   }
+
+  throw lastError ?? new DeepSeekError("DeepSeek API call failed.");
 }

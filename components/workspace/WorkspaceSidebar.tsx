@@ -175,10 +175,10 @@ export function WorkspaceSidebar({
   }
 
   return (
-    <aside
+      <aside
       aria-label="Workspace sidebar"
       data-testid="workspace-sidebar"
-      className="flex min-h-[220px] w-full flex-col gap-3 rounded-lg border border-[#e5e1ec] bg-white p-3 shadow-sm lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none"
+      className="flex min-h-[220px] w-full flex-col gap-3 rounded-lg border border-neutral-200 bg-white p-3 shadow-sm lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none"
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
@@ -207,17 +207,17 @@ export function WorkspaceSidebar({
         </div>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b8294]" size={15} />
+        <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" size={15} />
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           aria-label="Search project nodes"
           data-testid="node-search-input"
           placeholder="Search nodes"
-          className="h-9 w-full rounded-md border border-[#e7e3ee] bg-white pl-9 pr-11 text-xs font-medium text-[#292234] outline-none placeholder:text-[#9b94a5] focus:border-[#a78ad1] focus:ring-2 focus:ring-[#d9caef]"
+          className="h-9 w-full rounded-md border border-neutral-200 bg-white pl-9 pr-11 text-xs font-medium text-neutral-900 outline-none placeholder:text-neutral-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
         />
-        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded bg-[#f3f0f7] px-1.5 py-0.5 text-[10px] font-bold text-[#8a7e99]">
+        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-md bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold text-neutral-500">
           ⌘K
         </span>
       </div>
@@ -225,13 +225,13 @@ export function WorkspaceSidebar({
       <div
         role="tablist"
         aria-label="Workspace sidebar views"
-        className="grid grid-cols-2 border-b border-[#ebe7f1] text-xs font-bold"
+        className="grid grid-cols-2 border-b border-neutral-200 text-xs font-bold"
       >
         <button
           type="button"
           role="tab"
           aria-selected="true"
-          className="relative h-9 text-[#209673] after:absolute after:bottom-[-1px] after:left-1/2 after:h-0.5 after:w-10 after:-translate-x-1/2 after:rounded-full after:bg-[#48b596] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#b9a5db]/40"
+          className="relative h-9 text-brand-700 after:absolute after:bottom-[-1px] after:left-1/2 after:h-0.5 after:w-10 after:-translate-x-1/2 after:rounded-full after:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-200/40"
         >
           Outline
         </button>
@@ -239,7 +239,7 @@ export function WorkspaceSidebar({
           type="button"
           role="tab"
           aria-selected="false"
-          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md text-[#746a80] transition hover:bg-[#f7f4fb] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#b9a5db]/40"
+          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md text-neutral-600 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-200/40"
         >
           <Tags size={13} />
           Tags
@@ -253,13 +253,14 @@ export function WorkspaceSidebar({
         className="min-h-[96px] flex-1 space-y-1 overflow-auto pr-1 lg:min-h-0"
       >
         {!hasMatches ? (
-          <p
+          <div
             role="status"
             data-testid="conversation-outline-empty-state"
-            className="rounded-md bg-[#f7f4fb] p-3 text-sm font-bold text-[#665a70]"
+            className="flex flex-col items-center rounded-lg bg-neutral-50 p-4 text-center"
           >
-            No matching nodes
-          </p>
+            <Search size={20} className="text-neutral-300" />
+            <p className="mt-2 text-sm font-bold text-neutral-600">No matching nodes</p>
+          </div>
         ) : (
           outlineRows.map(({ node, depth }) => (
             <OutlineItem
@@ -309,11 +310,14 @@ function OutlineItem({
       data-testid="conversation-outline-row"
       data-node-id={node.id}
       data-depth={depth}
-      className={`flex w-full items-start gap-1 rounded-[14px] px-1.5 py-1 text-left transition ${
-        selected ? "bg-[#eadcf7] text-[#49315f]" : "bg-white/65 text-[#655a6d] hover:bg-white"
+      className={`relative flex w-full items-start gap-1 rounded-xl px-1.5 py-1 text-left transition ${
+        selected ? "bg-brand-50 text-brand-800" : "bg-white/65 text-neutral-700 hover:bg-white"
       }`}
       style={{ paddingLeft: `${Math.min(depth, 4) * 6 + 6}px` }}
     >
+      {selected && (
+        <span className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-500" />
+      )}
       {hasChildren ? (
         <button
           type="button"
@@ -325,12 +329,12 @@ function OutlineItem({
           aria-expanded={expanded}
           data-testid="conversation-outline-toggle"
           data-node-id={node.id}
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7] lg:mt-0.5 lg:h-5 lg:w-5"
+          className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md text-brand-600 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-200 lg:mt-1"
         >
           {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         </button>
       ) : (
-        <span aria-hidden="true" className="h-11 w-11 shrink-0 lg:mt-0.5 lg:h-5 lg:w-3.5" />
+        <span aria-hidden="true" className="h-5 w-5 shrink-0 lg:mt-1 lg:w-3.5" />
       )}
       <button
         type="button"
@@ -339,11 +343,11 @@ function OutlineItem({
         aria-current={selected ? "true" : undefined}
         data-testid="conversation-outline-item"
         data-node-id={node.id}
-        className="flex min-h-11 min-w-0 flex-1 items-start gap-1.5 rounded-[12px] p-0.5 text-left outline-none transition focus:ring-4 focus:ring-[#eadcf7] lg:min-h-0"
+        className="flex min-h-10 min-w-0 flex-1 items-start gap-1.5 rounded-xl p-0.5 text-left outline-none transition focus:ring-2 focus:ring-brand-200 lg:min-h-0"
       >
         <span
           aria-hidden="true"
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white/80"
+          className={`grid h-6 w-6 shrink-0 place-items-center rounded-full ${selected ? "bg-brand-100 text-brand-700" : "bg-white/80 text-neutral-500"}`}
         >
           <Icon size={13} />
         </span>

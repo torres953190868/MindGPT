@@ -65,7 +65,7 @@ export async function POST(request: NextRequest, context: NodesRouteContext) {
       mode: body.mode,
       instruction: body.instruction,
       contextTitles: contextData.contextSummaries,
-      messages: contextData.parent.messages.map(({ role, content }) => ({
+      messages: contextData.messages.map(({ role, content }) => ({
         role,
         content,
       })),

@@ -306,6 +306,18 @@ export function setProjectNotes(project: Project, notes: string) {
   };
 }
 
+export function setProjectTitle(project: Project, title: string) {
+  const nextTitle = title.trim();
+  if (!nextTitle) return null;
+
+  const timestamp = now();
+  return {
+    ...project,
+    title: nextTitle,
+    updatedAt: timestamp,
+  };
+}
+
 export function removeNode(project: Project, nodeId: string) {
   const node = project.nodes[nodeId];
   if (!node || node.parentId === null) return null;

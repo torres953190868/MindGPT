@@ -1024,7 +1024,7 @@ export function PdfReader() {
 
     return (
       <div key={section.id} className="space-y-1">
-        <button
+          <button
           type="button"
           data-testid="toc-section-button"
           data-section-id={section.id}
@@ -1032,19 +1032,19 @@ export function PdfReader() {
           onClick={() => goToPage(section.pageStart).catch(() => undefined)}
           className={`w-full min-w-0 rounded-md py-1.5 pr-2 text-left text-xs font-bold leading-5 transition ${
             isActive
-              ? "bg-[#e9f7f0] text-[#285d45]"
-              : "text-[#4f4659] hover:bg-white"
+              ? "bg-success-50 text-success-800"
+              : "text-neutral-700 hover:bg-white"
           }`}
           style={{ paddingLeft: `${Math.min(depth, 4) * 10 + 8}px` }}
         >
           <span className="block truncate">{section.title}</span>
-          <span className="text-[10px] font-black text-[#82758b]">
+          <span className="text-[10px] font-black text-neutral-500">
             {pagesLabel(section.pageStart, section.pageEnd)}
           </span>
         </button>
 
         {node.children.length > 0 && (
-          <div className="ml-3 border-l border-[#d7e5dc] pl-2">
+          <div className="ml-3 border-l border-neutral-200 pl-2">
             {node.children.map((child) => renderTocChildNode(child, depth + 1))}
           </div>
         )}
@@ -1057,24 +1057,26 @@ export function PdfReader() {
       ref={readerGridRef}
       data-testid="pdf-reader"
       style={pdfReaderGridStyle}
-      className="grid min-h-[calc(100vh-92px)] w-full min-w-0 overflow-hidden rounded-lg border border-[#e2ddea] bg-white shadow-[0_18px_50px_rgba(55,47,68,0.12)] lg:h-[calc(100vh-92px)] lg:grid-cols-[var(--pdf-reader-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch"
+      className="grid min-h-[calc(100vh-92px)] w-full min-w-0 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl shadow-[rgba(44,35,62,0.08)] lg:h-[calc(100vh-92px)] lg:grid-cols-[var(--pdf-reader-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch"
     >
       <aside
         data-testid="pdf-documents-sidebar"
-        className="min-w-0 border-b border-[#e7e2ee] bg-[#fcfbfe] p-4 lg:max-h-[calc(100vh-92px)] lg:overflow-hidden lg:border-b-0 lg:border-r"
+        className="min-w-0 border-b border-neutral-200 bg-neutral-50 p-4 lg:max-h-[calc(100vh-92px)] lg:overflow-hidden lg:border-b-0 lg:border-r"
       >
         <div className="mb-4">
-          <h2 className="text-sm font-black text-[#211a2e]">Documents</h2>
+          <h2 className="text-xs font-black uppercase tracking-wider text-neutral-800">
+            Documents
+          </h2>
         </div>
 
         <form onSubmit={handleUpload} className="space-y-3">
           <label
             htmlFor="pdf-upload"
-            className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-[#a885dc] bg-white px-4 text-center text-xs font-extrabold text-[#5d4186] transition hover:bg-[#fbf8ff]"
+            className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-neutral-300 bg-white px-4 text-center text-xs font-extrabold text-neutral-600 transition hover:border-brand-300 hover:bg-brand-50"
           >
-            <Upload size={18} />
+            <Upload size={20} className="text-neutral-400" />
             <span>Upload PDF</span>
-            <span className="text-[11px] font-bold text-[#71677d]">or drag and drop</span>
+            <span className="text-[11px] font-bold text-neutral-500">or drag and drop</span>
             <input
               ref={fileInputRef}
               id="pdf-upload"
@@ -1086,7 +1088,7 @@ export function PdfReader() {
           <button
             type="submit"
             disabled={busy}
-            className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-[#7e61bd] px-3 text-xs font-black text-white shadow-sm transition hover:bg-[#6f53ae] disabled:cursor-not-allowed disabled:opacity-65"
+            className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-brand-600 px-3 text-xs font-black text-white shadow-md shadow-brand-200/50 transition hover:bg-brand-700 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-65"
           >
             {busy ? (
               <Loader2 size={15} className="animate-spin" />
@@ -1106,10 +1108,10 @@ export function PdfReader() {
                 key={document.id}
                 data-testid="pdf-document-row"
                 data-document-id={document.id}
-                className={`group w-full min-w-0 rounded-md border px-3 py-3 text-left transition ${
+                className={`group w-full min-w-0 rounded-lg border px-3 py-3 text-left transition ${
                   isSelected
-                    ? "border-[#d8f0e4] bg-[#effaf4]"
-                    : "border-transparent bg-transparent hover:bg-white"
+                    ? "border-success-200 bg-success-50 shadow-sm"
+                    : "border-transparent bg-transparent hover:bg-white hover:shadow-sm"
                 }`}
               >
                 {isRenaming ? (
@@ -1179,18 +1181,19 @@ export function PdfReader() {
                     >
                       <FileText
                         size={16}
-                        className={`mt-0.5 shrink-0 ${isSelected ? "text-[#338962]" : "text-[#8a8293]"}`}
+                        className={`mt-0.5 shrink-0 ${isSelected ? "text-success-600" : "text-neutral-500"}`}
                       />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs font-black text-[#272131]">
+                        <span className="block truncate text-xs font-black text-neutral-900">
                           {document.title || document.fileName}
                         </span>
-                        <span className="mt-1 block text-[11px] font-bold text-[#7a7183]">
+                        <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-neutral-600">
+                          <span className={`h-1.5 w-1.5 rounded-full ${isSelected ? "bg-success-400" : "bg-neutral-300"}`} />
                           {document.pageCount || "-"} pages
                         </span>
                       </span>
                       {isSelected && (
-                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[#30a66d]" />
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-success-500" />
                       )}
                     </button>
                     <span
@@ -1235,9 +1238,10 @@ export function PdfReader() {
             );
           })}
           {documents.length === 0 && (
-            <p className="rounded-md bg-white px-3 py-4 text-sm font-bold text-[#76667f]">
-              No PDFs yet.
-            </p>
+            <div className="flex flex-col items-center rounded-lg bg-white px-3 py-6 text-center">
+              <FileText size={24} className="text-neutral-300" />
+              <p className="mt-2 text-sm font-bold text-neutral-600">No PDFs yet.</p>
+            </div>
           )}
         </div>
       </aside>
@@ -1250,26 +1254,26 @@ export function PdfReader() {
       />
 
       <main className="flex min-w-0 flex-col bg-white lg:min-h-[calc(100vh-92px)]">
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-[#ebe6f2] px-4 py-3">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-neutral-200 px-4 py-3">
           <div className="min-w-[180px] flex-1">
-            <h2 className="truncate text-sm font-black text-[#211a2e]">
+            <h2 className="truncate text-sm font-black text-neutral-900">
               {selectedDocumentTitle}
             </h2>
-            <p className="mt-1 truncate text-[11px] font-bold text-[#786f82]">
+            <p className="mt-1 truncate text-[11px] font-bold text-neutral-600">
               {selectedDocument ? statusLabel(selectedDocument.status) : "No PDF selected"}
               {pageCount ? ` - ${pageCount} pages` : ""}
             </p>
           </div>
 
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <div className="inline-flex h-9 items-center rounded-md border border-[#e8e3ee] bg-[#fbfafc]">
+            <div className="inline-flex h-9 items-center overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50">
               <button
                 type="button"
                 disabled={!selectedDocument || !pageNumber || pageNumber <= 1}
                 onClick={() =>
                   pageNumber ? goToPage(pageNumber - 1).catch(() => undefined) : undefined
                 }
-                className="grid h-9 w-9 place-items-center text-[#52475f] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                className="grid h-9 w-9 place-items-center text-neutral-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Previous page"
               >
                 <ChevronLeft size={15} />
@@ -1285,9 +1289,9 @@ export function PdfReader() {
                 onKeyDown={handlePageInputKeyDown}
                 disabled={!selectedDocument || !pageCount}
                 aria-label="Page number"
-                className="h-7 w-10 rounded-md border border-transparent bg-white text-center text-xs font-black text-[#292334] outline-none focus:border-[#9b7bd2] focus:ring-2 focus:ring-[#e4d9f5]"
+                className="h-7 w-10 rounded-md border border-transparent bg-white text-center text-xs font-black text-neutral-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
               />
-              <span className="px-1 text-xs font-black text-[#786f82]">
+              <span className="px-1 text-xs font-black text-neutral-600">
                 / {pageCount || "-"}
               </span>
               <button
@@ -1296,14 +1300,14 @@ export function PdfReader() {
                 onClick={() =>
                   pageNumber ? goToPage(pageNumber + 1).catch(() => undefined) : undefined
                 }
-                className="grid h-9 w-9 place-items-center text-[#52475f] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                className="grid h-9 w-9 place-items-center text-neutral-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Next page"
               >
                 <ChevronRight size={15} />
               </button>
             </div>
 
-            <div className="inline-flex h-9 items-center rounded-md border border-[#e8e3ee] bg-[#fbfafc]">
+            <div className="inline-flex h-9 items-center overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50">
               <button
                 type="button"
                 disabled={scale <= MIN_SCALE}
@@ -1312,12 +1316,12 @@ export function PdfReader() {
                     Number(Math.max(MIN_SCALE, value - SCALE_STEP).toFixed(2)),
                   )
                 }
-                className="grid h-9 w-9 place-items-center text-[#52475f] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                className="grid h-9 w-9 place-items-center text-neutral-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Zoom out"
               >
                 <Minus size={15} />
               </button>
-              <span className="w-11 text-center text-xs font-black text-[#52475f]">
+              <span className="w-11 text-center text-xs font-black text-neutral-700">
                 {Math.round(scale * 100)}%
               </span>
               <button
@@ -1328,7 +1332,7 @@ export function PdfReader() {
                     Number(Math.min(MAX_SCALE, value + SCALE_STEP).toFixed(2)),
                   )
                 }
-                className="grid h-9 w-9 place-items-center text-[#52475f] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                className="grid h-9 w-9 place-items-center text-neutral-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Zoom in"
               >
                 <Plus size={15} />
@@ -1339,19 +1343,21 @@ export function PdfReader() {
               <a
                 href={`/api/documents/${selectedId}/file`}
                 download={selectedDocument.fileName}
-                className="grid h-9 w-9 place-items-center rounded-md border border-[#e8e3ee] bg-white text-[#52475f] transition hover:bg-[#fbfafc] focus:outline-none focus:ring-2 focus:ring-[#d9caef]"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 text-xs font-bold text-neutral-700 transition hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-brand-200"
                 aria-label="Download PDF"
               >
                 <Download size={15} />
+                <span className="hidden sm:inline">Download</span>
               </a>
             ) : (
               <button
                 type="button"
                 disabled
-                className="grid h-9 w-9 place-items-center rounded-md border border-[#e8e3ee] bg-white text-[#52475f] opacity-40"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 text-xs font-bold text-neutral-700 opacity-40"
                 aria-label="Download PDF"
               >
                 <Download size={15} />
+                <span className="hidden sm:inline">Download</span>
               </button>
             )}
 
@@ -1359,12 +1365,12 @@ export function PdfReader() {
         </div>
 
         {selectedDocument?.status === "failed" && selectedDocument.errorMessage && (
-          <div className="mx-4 mt-3 flex items-start gap-2 rounded-md bg-[#ffeceb] px-4 py-3 text-sm font-bold text-[#8f3f3a]">
+          <div className="mx-4 mt-3 flex items-start gap-2 rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-bold text-danger-700">
             <AlertCircle size={17} className="mt-0.5 shrink-0" />
             <div className="min-w-0">
               <p>{selectedDocument.errorMessage}</p>
               {selectedDocumentErrorReference && (
-                <p className="mt-1 font-mono text-xs text-[#9c5752]">
+                <p className="mt-1 font-mono text-xs text-danger-600">
                   {selectedDocumentErrorReference}
                 </p>
               )}
@@ -1375,7 +1381,7 @@ export function PdfReader() {
         {error && (
           <div
             data-testid="pdf-reader-error"
-            className="mx-4 mt-3 flex items-start gap-2 rounded-md bg-[#ffeceb] px-4 py-3 text-sm font-bold text-[#8f3f3a]"
+            className="mx-4 mt-3 flex items-start gap-2 rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-bold text-danger-700"
           >
             <AlertCircle size={17} className="mt-0.5 shrink-0" />
             <p>{error}</p>
@@ -1384,11 +1390,12 @@ export function PdfReader() {
 
         <div
           data-testid="pdf-viewer"
-          className="relative flex-1 overflow-auto bg-[#f5f3f7] px-4 py-5"
+          className="relative flex-1 overflow-auto bg-[#f4f4f7] px-4 py-5"
         >
           {!selectedDocument && (
-            <div className="grid min-h-[520px] place-items-center rounded-md border border-dashed border-[#cec3d9] bg-white/70 text-sm font-bold text-[#76667f]">
-              Select a PDF
+            <div className="flex flex-col items-center justify-center gap-3 min-h-[520px] rounded-xl border-2 border-dashed border-neutral-300 bg-white/60 text-sm font-bold text-neutral-600">
+              <FileText size={32} className="text-neutral-300" />
+              <span>Select a PDF to start reading</span>
             </div>
           )}
 
@@ -1397,7 +1404,7 @@ export function PdfReader() {
               <canvas
                 ref={canvasRef}
                 data-testid="pdf-page-canvas"
-                className={`bg-white shadow-xl shadow-[#c9c0d3]/35 ${
+                className={`rounded-sm bg-white shadow-lg shadow-[rgba(44,35,62,0.1)] ${
                   pdfLoading || pdfError ? "invisible" : "visible"
                 }`}
               />
@@ -1405,8 +1412,8 @@ export function PdfReader() {
           )}
 
           {(pdfLoading || pdfRendering) && selectedDocument && (
-            <div className="pointer-events-none absolute inset-0 grid place-items-center bg-[#f5f3f7]/70">
-              <p className="inline-flex items-center gap-2 rounded-md bg-white px-4 py-3 text-sm font-black text-[#554665] shadow-sm">
+            <div className="pointer-events-none absolute inset-0 grid place-items-center bg-[#f4f4f7]/70">
+              <p className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-3 text-sm font-black text-neutral-700 shadow-md">
                 <Loader2 size={16} className="animate-spin" />
                 {pdfLoading ? "Loading PDF" : "Rendering page"}
               </p>
@@ -1414,7 +1421,7 @@ export function PdfReader() {
           )}
 
           {pdfError && selectedDocument && (
-            <div className="absolute inset-4 grid place-items-center rounded-md border border-[#f3c6c2] bg-[#ffeceb] p-5 text-center text-sm font-bold text-[#8f3f3a]">
+            <div className="absolute inset-4 grid place-items-center rounded-xl border border-danger-200 bg-danger-50 p-5 text-center text-sm font-bold text-danger-700">
               <span className="inline-flex items-start gap-2">
                 <AlertCircle size={17} className="mt-0.5 shrink-0" />
                 {pdfError}
@@ -1433,16 +1440,18 @@ export function PdfReader() {
 
       <aside
         data-testid="pdf-tools-sidebar"
-        className="flex min-w-0 flex-col border-t border-[#e7e2ee] bg-[#fcfbfe] lg:max-h-[calc(100vh-92px)] lg:overflow-hidden lg:border-l lg:border-t-0"
+        className="flex min-w-0 flex-col border-t border-neutral-200 bg-neutral-50 lg:max-h-[calc(100vh-92px)] lg:overflow-hidden lg:border-l lg:border-t-0"
       >
         <div
           data-testid="pdf-toc-section"
           className="min-h-0 flex-1 p-4"
         >
-          <h2 className="text-xs font-black text-[#211a2e]">TOC (Extracted)</h2>
+          <h2 className="text-[11px] font-black uppercase tracking-wider text-neutral-800">
+            Table of Contents
+          </h2>
           <div
             data-testid="pdf-toc-list"
-            className="mt-3 max-h-72 space-y-2 overflow-auto pr-1 lg:max-h-[calc(100vh-160px)]"
+            className="mt-3 max-h-72 space-y-1 overflow-auto pr-1 lg:max-h-[calc(100vh-160px)]"
           >
             {tocTree.map((node) => {
               const section = node.section;
@@ -1465,7 +1474,7 @@ export function PdfReader() {
                         aria-expanded={isExpanded}
                         aria-controls={`toc-children-${section.id}`}
                         onClick={() => toggleTocRoot(section.id)}
-                        className="mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-md text-[#2f7654] transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[#d7f0e2]"
+                        className="mt-1 grid h-6 w-6 shrink-0 place-items-center rounded-md text-success-600 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-success-200"
                       >
                         {isExpanded ? (
                           <ChevronDown size={14} />
@@ -1483,16 +1492,19 @@ export function PdfReader() {
                       data-section-id={section.id}
                       aria-current={isActive ? "location" : undefined}
                       onClick={() => goToPage(section.pageStart).catch(() => undefined)}
-                      className={`min-h-9 min-w-0 flex-1 rounded-md px-2 py-2 text-left text-xs font-black leading-5 transition ${
+                      className={`relative min-h-9 min-w-0 flex-1 rounded-md px-2 py-2 text-left text-xs font-black leading-5 transition ${
                         isActive
-                          ? "bg-[#e9f7f0] text-[#285d45]"
+                          ? "bg-success-50 text-success-800"
                           : isActiveChapter
-                            ? "bg-[#f2fbf6] text-[#315f48]"
-                            : "text-[#211a2e] hover:bg-white"
+                            ? "bg-success-50/50 text-success-700"
+                            : "text-neutral-800 hover:bg-white"
                       }`}
                     >
+                      {isActive && (
+                        <span className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-success-500" />
+                      )}
                       <span className="block truncate">{section.title}</span>
-                      <span className="text-[10px] font-black text-[#82758b]">
+                      <span className="text-[10px] font-black text-neutral-500">
                         {pagesLabel(section.pageStart, section.pageEnd)}
                       </span>
                     </button>
@@ -1501,7 +1513,7 @@ export function PdfReader() {
                   {hasChildren && isExpanded && (
                     <div
                       id={`toc-children-${section.id}`}
-                      className="ml-9 mt-1 space-y-1 border-l border-[#cfe0d6] pl-3"
+                      className="ml-9 mt-1 space-y-1 border-l border-neutral-200 pl-3"
                     >
                       {node.children.map((child) => renderTocChildNode(child))}
                     </div>
@@ -1510,9 +1522,12 @@ export function PdfReader() {
               );
             })}
             {tocTree.length === 0 && (
-              <p className="rounded-md bg-white px-3 py-4 text-sm font-bold text-[#76667f]">
-                No sections detected yet.
-              </p>
+              <div className="flex flex-col items-center rounded-lg bg-white px-3 py-6 text-center">
+                <FileText size={24} className="text-neutral-300" />
+                <p className="mt-2 text-sm font-bold text-neutral-600">
+                  No sections detected yet.
+                </p>
+              </div>
             )}
           </div>
         </div>

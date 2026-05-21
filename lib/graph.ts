@@ -1,4 +1,4 @@
-import type { BranchType, MindNode, NodePosition, Project } from "./types";
+import type { BranchType, ChatMessage, MindNode, NodePosition, Project } from "./types";
 
 export const ROOT_POSITION: NodePosition = { x: 120, y: 120 };
 const BRANCH_GAP_X = 390;
@@ -15,6 +15,39 @@ export function getContextTitles(project: Project, nodeId: string) {
   }
 
   return titles;
+}
+
+export type ConversationMessageItem = {
+  sourceNodeId: string;
+  message: ChatMessage;
+  inherited: boolean;
+};
+
+export function getNodePath(project: Project, nodeId: string) {
+  const path: MindNode[] = [];
+  const visited = new Set<string>();
+  let current: MindNode | undefined = project.nodes[nodeId];
+
+  while (current && !visited.has(current.id)) {
+    visited.add(current.id);
+    path.unshift(current);
+    current = current.parentId ? project.nodes[current.parentId] : undefined;
+  }
+
+  return path;
+}
+
+export function getNodeConversationMessages(
+  project: Project,
+  nodeId: string,
+): ConversationMessageItem[] {
+  return getNodePath(project, nodeId).flatMap((node) =>
+    node.messages.map((message) => ({
+      sourceNodeId: node.id,
+      message,
+      inherited: node.id !== nodeId,
+    })),
+  );
 }
 
 export function getChildPosition(

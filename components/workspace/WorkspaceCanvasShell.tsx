@@ -3,26 +3,33 @@
 import Link from "next/link";
 import {
   Brain,
+  Check,
   Folder,
   Grid2X2,
+  Loader2,
   Map as MapIcon,
   MessageSquare,
   MoreHorizontal,
   NotebookPen,
   PanelLeftOpen,
   PanelRightOpen,
+  Pencil,
   RefreshCcw,
   Star,
+  X,
 } from "lucide-react";
 import {
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import { AuthPanel } from "@/components/AuthPanel";
+import { getNodeConversationMessages } from "@/lib/graph";
 import type {
   ChatAttachment,
   ChatModelSelection,
@@ -79,6 +86,7 @@ type RetryAssistantMessageHandler = (
 ) => Promise<boolean>;
 
 type UpdateNodeTitleHandler = (nodeId: string, title: string) => Promise<boolean>;
+type UpdateProjectTitleHandler = (projectId: string, title: string) => Promise<boolean>;
 
 type ProjectNotesConfig = {
   projectNotes: string;
@@ -109,6 +117,7 @@ type WorkspaceCanvasShellProps = {
   onCreateNode: CreateNodeHandler;
   onEditUserMessage: EditUserMessageHandler;
   onRetryAssistantMessage: RetryAssistantMessageHandler;
+  onUpdateProjectTitle?: UpdateProjectTitleHandler;
   onUpdateNodeTitle: UpdateNodeTitleHandler;
   onToggleNode: (nodeId: string) => void;
   onDeleteNode: (nodeId: string) => void;
@@ -281,7 +290,7 @@ function CanvasCornerToggleButton({
       aria-label={ariaLabel}
       aria-expanded="false"
       data-testid={testId}
-      className={`absolute top-4 z-20 grid h-9 w-9 place-items-center rounded-md border border-[#e6e1ef] bg-white/95 text-[#625073] shadow-sm backdrop-blur transition hover:bg-[#f7f3fb] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40 ${
+      className={`absolute top-4 z-20 grid h-9 w-9 place-items-center rounded-md border border-neutral-200 bg-white/95 text-neutral-700 shadow-sm backdrop-blur transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40 ${
         side === "left" ? "left-4" : "right-4"
       }`}
     >
@@ -301,6 +310,7 @@ export function WorkspaceCanvasShell({
   onCreateNode,
   onEditUserMessage,
   onRetryAssistantMessage,
+  onUpdateProjectTitle,
   onUpdateNodeTitle,
   onToggleNode,
   onDeleteNode,
@@ -313,6 +323,7 @@ export function WorkspaceCanvasShell({
   projectNotesConfig,
 }: WorkspaceCanvasShellProps) {
   const workspaceGridRef = useRef<HTMLDivElement | null>(null);
+  const projectTitleInputRef = useRef<HTMLInputElement | null>(null);
   const workspaceSidebarRestoreWidthRef = useRef(WORKSPACE_SIDEBAR_DEFAULT_WIDTH);
   const detailPanelRestoreWidthRef = useRef(DETAIL_PANEL_DEFAULT_WIDTH);
   const autoCollapsedSidebarForNotesRef = useRef(false);
@@ -326,12 +337,31 @@ export function WorkspaceCanvasShell({
   const [mobileMapHeight, setMobileMapHeight] = useState(MOBILE_MAP_DEFAULT_HEIGHT);
   const [mobileWorkspaceView, setMobileWorkspaceView] =
     useState<MobileWorkspaceView>("map");
+  const [isEditingProjectTitle, setIsEditingProjectTitle] = useState(false);
+  const [projectTitleEditValue, setProjectTitleEditValue] = useState("");
+  const [isProjectTitleSaving, setIsProjectTitleSaving] = useState(false);
   const [isWorkspaceSidebarCollapsed, setIsWorkspaceSidebarCollapsed] = useState(false);
   const [isNodeDetailPanelCollapsed, setIsNodeDetailPanelCollapsed] = useState(false);
   const [isProjectNotesPanelOpen, setIsProjectNotesPanelOpen] = useState(false);
 
   const hasProjectNotes = Boolean(projectNotesConfig);
   const selectedNode = selectedNodeId ? project.nodes[selectedNodeId] ?? null : null;
+  const selectedConversationMessages = useMemo(
+    () =>
+      selectedNode
+        ? getNodeConversationMessages(project, selectedNode.id)
+        : [],
+    [project, selectedNode],
+  );
+  const canEditProjectTitle = Boolean(onUpdateProjectTitle) && !dataDraftWorkspace;
+  const isProjectTitleBusy =
+    isProjectTitleSaving || Boolean(creatingNodeId || streamingNodeId);
+  const projectTitleEditTrimmed = projectTitleEditValue.trim();
+  const isProjectTitleSaveDisabled =
+    isProjectTitleBusy ||
+    !onUpdateProjectTitle ||
+    !projectTitleEditTrimmed ||
+    projectTitleEditTrimmed === project.title.trim();
   const isSelectedNodeCreating = selectedNode
     ? creatingNodeId === selectedNode.id || streamingNodeId === selectedNode.id
     : false;
@@ -365,7 +395,7 @@ export function WorkspaceCanvasShell({
     "--mobile-map-height": `${mobileMapHeight}px`,
   } as CSSProperties;
   const workspaceGridClassName =
-    "grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden rounded-b-xl border border-t-0 border-[#e5e1ec] bg-white shadow-[0_18px_60px_rgba(44,35,62,0.08)] lg:h-full lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:shadow-none";
+    "grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden rounded-b-xl border border-t-0 border-neutral-200 bg-white shadow-xl shadow-[rgba(44,35,62,0.08)] lg:h-full lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:shadow-none";
   const mobileTabsClassName = hasProjectNotes
     ? "grid grid-cols-4 gap-2 rounded-[24px] border border-white/80 bg-white/68 p-2 shadow-sm lg:hidden"
     : "grid grid-cols-3 gap-2 rounded-[24px] border border-white/80 bg-white/68 p-2 shadow-sm lg:hidden";
@@ -574,6 +604,54 @@ export function WorkspaceCanvasShell({
     [onSelectNode],
   );
 
+  const handleStartProjectTitleEdit = useCallback(() => {
+    if (!canEditProjectTitle || isProjectTitleBusy) return;
+    setProjectTitleEditValue(project.title);
+    setIsEditingProjectTitle(true);
+  }, [canEditProjectTitle, isProjectTitleBusy, project.title]);
+
+  const handleCancelProjectTitleEdit = useCallback(() => {
+    if (isProjectTitleSaving) return;
+    setIsEditingProjectTitle(false);
+    setProjectTitleEditValue("");
+  }, [isProjectTitleSaving]);
+
+  const handleSaveProjectTitleEdit = useCallback(async () => {
+    if (isProjectTitleSaveDisabled || !onUpdateProjectTitle) return;
+
+    setIsProjectTitleSaving(true);
+    try {
+      const saved = await onUpdateProjectTitle(project.id, projectTitleEditTrimmed);
+      if (saved) {
+        setIsEditingProjectTitle(false);
+        setProjectTitleEditValue("");
+      }
+    } finally {
+      setIsProjectTitleSaving(false);
+    }
+  }, [
+    isProjectTitleSaveDisabled,
+    onUpdateProjectTitle,
+    project.id,
+    projectTitleEditTrimmed,
+  ]);
+
+  const handleProjectTitleEditKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        handleCancelProjectTitleEdit();
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void handleSaveProjectTitleEdit();
+      }
+    },
+    [handleCancelProjectTitleEdit, handleSaveProjectTitleEdit],
+  );
+
   const handleSidePanelResizeStart = useCallback((side: ResizableSide, event: ResizeStartEvent) => {
     event.preventDefault();
     const isPointerResize = getResizeInputMode(event) === "pointer";
@@ -761,6 +839,18 @@ export function WorkspaceCanvasShell({
   }, [mobileMapHeight]);
 
   useEffect(() => {
+    if (!isEditingProjectTitle) return;
+    projectTitleInputRef.current?.focus();
+    projectTitleInputRef.current?.select();
+  }, [isEditingProjectTitle]);
+
+  useEffect(() => {
+    setIsEditingProjectTitle(false);
+    setProjectTitleEditValue("");
+    setIsProjectTitleSaving(false);
+  }, [project.id]);
+
+  useEffect(() => {
     if (!hasProjectNotes && mobileWorkspaceView === "notes") {
       setMobileWorkspaceView("chat");
       restoreAutoCollapsedSidebarForNotes();
@@ -842,27 +932,91 @@ export function WorkspaceCanvasShell({
       <header
         aria-label="Workspace header"
         data-testid="workspace-header"
-        className="flex min-h-14 flex-wrap items-center justify-between gap-3 rounded-t-xl border border-[#e5e1ec] bg-white/92 px-4 py-2 shadow-[0_10px_35px_rgba(44,35,62,0.06)] backdrop-blur lg:flex-nowrap lg:rounded-none lg:border-x-0 lg:border-t-0 lg:px-5 lg:shadow-none"
+        className="flex min-h-14 flex-wrap items-center justify-between gap-3 rounded-t-xl border border-neutral-200 bg-white/95 px-4 py-2 shadow-sm backdrop-blur lg:flex-nowrap lg:rounded-none lg:border-x-0 lg:border-t-0 lg:px-5 lg:shadow-none"
       >
-        <div className="flex min-w-0 items-center gap-4">
-          <div className="flex shrink-0 items-center gap-2 border-r border-[#e7e3ed] pr-4">
-            <span className="grid h-8 w-8 place-items-center rounded-md border border-[#dcd5eb] bg-[#f5f1fb] text-[#7658b3]">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          <div className="flex shrink-0 items-center gap-2 border-r border-neutral-200 pr-4">
+            <span className="grid h-8 w-8 place-items-center rounded-md border border-brand-200 bg-brand-50 text-brand-600">
               <Brain size={18} />
             </span>
-            <span className="text-base font-extrabold text-[#201a2d]">BranchMind</span>
+            <span className="text-base font-extrabold text-neutral-900">BranchMind</span>
           </div>
-          <div className="flex min-w-0 items-center gap-2">
-            <h1
-              id="workspace-title"
-              className="line-clamp-1 text-sm font-extrabold text-[#241d30] sm:text-base"
-            >
-              {project.title}
-            </h1>
-            {showProjectStar && (
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            {isEditingProjectTitle ? (
+              <form
+                className="flex min-w-0 flex-1 items-center gap-1.5 sm:max-w-[460px]"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleSaveProjectTitleEdit();
+                }}
+              >
+                <h1 id="workspace-title" className="sr-only">
+                  {project.title}
+                </h1>
+                <input
+                  ref={projectTitleInputRef}
+                  value={projectTitleEditValue}
+                  onChange={(event) => setProjectTitleEditValue(event.target.value)}
+                  onKeyDown={handleProjectTitleEditKeyDown}
+                  disabled={isProjectTitleBusy}
+                  aria-label="Project name"
+                  data-testid="project-title-edit-input"
+                  maxLength={120}
+                  className="h-9 min-w-0 flex-1 rounded-md border border-brand-200 bg-white px-3 text-sm font-extrabold text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-60 sm:text-base"
+                />
+                <button
+                  type="submit"
+                  disabled={isProjectTitleSaveDisabled}
+                  aria-label="Save project name"
+                  title="Save"
+                  data-testid="save-project-title-button"
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-success-100 text-success-700 transition hover:bg-success-200 focus:outline-none focus:ring-2 focus:ring-success-200 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  {isProjectTitleSaving ? (
+                    <Loader2 size={15} className="animate-spin" />
+                  ) : (
+                    <Check size={15} />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelProjectTitleEdit}
+                  disabled={isProjectTitleSaving}
+                  aria-label="Cancel project name edit"
+                  title="Cancel"
+                  data-testid="cancel-project-title-button"
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-neutral-200 bg-white text-neutral-600 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <X size={15} />
+                </button>
+              </form>
+            ) : (
+              <h1
+                id="workspace-title"
+                data-testid="workspace-title-text"
+                className="line-clamp-1 min-w-0 text-sm font-extrabold text-neutral-900 sm:text-base"
+              >
+                {project.title}
+              </h1>
+            )}
+            {canEditProjectTitle && !isEditingProjectTitle && (
+              <button
+                type="button"
+                onClick={handleStartProjectTitleEdit}
+                disabled={isProjectTitleBusy}
+                aria-label="Edit project name"
+                title="Edit project name"
+                data-testid="edit-project-title-button"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-neutral-600 transition hover:bg-neutral-100 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200/40 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <Pencil size={15} />
+              </button>
+            )}
+            {showProjectStar && !isEditingProjectTitle && (
               <button
                 type="button"
                 aria-label="Star project"
-                className="hidden h-8 w-8 shrink-0 place-items-center rounded-md text-[#6f647b] transition hover:bg-[#f7f4fb] hover:text-[#6d4ead] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40 sm:grid"
+                className="hidden h-8 w-8 shrink-0 place-items-center rounded-md text-neutral-600 transition hover:bg-neutral-100 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200/40 sm:grid"
               >
                 <Star size={16} />
               </button>
@@ -878,7 +1032,7 @@ export function WorkspaceCanvasShell({
             href="/projects"
             aria-label="Project list"
             data-testid="workspace-projects-link"
-            className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-bold text-[#3f3650] transition hover:bg-[#f4f1f8] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40"
+            className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-bold text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
           >
             <Folder size={16} />
             Projects
@@ -886,14 +1040,14 @@ export function WorkspaceCanvasShell({
           <button
             type="button"
             aria-label="Workspace grid"
-            className="grid h-9 w-9 place-items-center rounded-md text-[#665b73] transition hover:bg-[#f4f1f8] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40"
+            className="grid h-9 w-9 place-items-center rounded-md text-neutral-600 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
           >
             <Grid2X2 size={16} />
           </button>
           <button
             type="button"
             aria-label="More workspace actions"
-            className="grid h-9 w-9 place-items-center rounded-md text-[#665b73] transition hover:bg-[#f4f1f8] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40"
+            className="grid h-9 w-9 place-items-center rounded-md text-neutral-600 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
           >
             <MoreHorizontal size={17} />
           </button>
@@ -904,7 +1058,7 @@ export function WorkspaceCanvasShell({
         <p
           role="alert"
           data-testid="workspace-error-alert"
-          className="rounded-[18px] bg-[#ffeceb] px-4 py-3 text-sm font-bold text-[#8f3f3a]"
+          className="rounded-xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-bold text-danger-700"
         >
           {aiError}
         </p>
@@ -916,14 +1070,14 @@ export function WorkspaceCanvasShell({
           aria-live="polite"
           data-testid="project-sync-status"
           data-status="failed"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-[#ffeceb] px-4 py-3 text-sm font-bold text-[#8f3f3a]"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-bold text-danger-700"
         >
           <span>{syncFailure.message}</span>
           <button
             type="button"
             data-testid="retry-project-sync-button"
             onClick={syncFailure.onRetry}
-            className="inline-flex min-h-9 items-center gap-2 rounded-[14px] bg-white/80 px-3 text-xs font-black text-[#7a3e3a] transition hover:bg-white"
+            className="inline-flex min-h-9 items-center gap-2 rounded-xl bg-white px-3 text-xs font-black text-danger-700 transition hover:bg-danger-50"
           >
             <RefreshCcw size={15} />
             Retry
@@ -948,10 +1102,10 @@ export function WorkspaceCanvasShell({
               aria-selected={selected}
               data-testid={`workspace-mobile-view-${tab.id}`}
               onClick={() => handleSelectMobileWorkspaceView(tab.id)}
-              className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-[16px] text-xs font-black transition focus:outline-none focus:ring-4 focus:ring-[#eadcf7] ${
+              className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl text-xs font-black transition focus:outline-none focus:ring-2 focus:ring-brand-300 ${
                 selected
-                  ? "bg-[#7c5fb1] text-white shadow-md shadow-[#b99adb]/25"
-                  : "bg-white/72 text-[#62546b] hover:bg-white"
+                  ? "bg-brand-600 text-white shadow-md shadow-brand-200/30"
+                  : "bg-white/80 text-neutral-700 hover:bg-white"
               }`}
             >
               {tab.icon}
@@ -988,7 +1142,7 @@ export function WorkspaceCanvasShell({
         <section
           aria-labelledby="mind-map-section-title"
           data-testid="mind-map-canvas"
-          className={`relative h-[var(--mobile-map-height)] overflow-hidden rounded-lg border border-[#e5e1ec] bg-[#fcfbfd] shadow-sm lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none ${
+          className={`relative h-[var(--mobile-map-height)] overflow-hidden rounded-lg border border-neutral-200 bg-[#fcfbfd] shadow-sm lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none ${
             mobileWorkspaceView === "map" ? "" : "hidden lg:block"
           }`}
         >
@@ -1046,6 +1200,7 @@ export function WorkspaceCanvasShell({
           <div className={mobileWorkspaceView === "chat" ? "contents" : "hidden lg:contents"}>
             <NodeDetailPanel
               node={selectedNode}
+              conversationMessages={selectedConversationMessages}
               onCreateNode={onCreateNode}
               onEditUserMessage={onEditUserMessage}
               onRetryAssistantMessage={onRetryAssistantMessage}
