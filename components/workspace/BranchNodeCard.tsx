@@ -1,8 +1,28 @@
 "use client";
 
+import { type FormEvent, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { GitBranch, Sprout, Ribbon } from "lucide-react";
-import type { MindNode } from "@/lib/types";
+import { GitBranch, Loader2, Send, Sprout, Ribbon } from "lucide-react";
+import {
+  AttachmentMenuButton,
+  ModelSelectorButton,
+  PendingAttachmentChips,
+  useChatComposerControls,
+} from "@/components/chat/ChatComposerControls";
+import type { ChatAttachment, ChatModelSelection, MindNode } from "@/lib/types";
+
+export type InlineNodeComposerData = {
+  nodeId: string;
+  isBusy: boolean;
+  error: string | null;
+  placeholder: string;
+  submitLabel: string;
+  onSubmit: (
+    instruction: string,
+    attachments?: ChatAttachment[],
+    modelSelection?: ChatModelSelection,
+  ) => Promise<string | null>;
+};
 
 export type BranchNodeData = {
   mindNode: MindNode;
@@ -12,15 +32,25 @@ export type BranchNodeData = {
   onToggle: (nodeId: string) => void;
   isStreaming: boolean;
   creationDisabled: boolean;
+  inlineComposer?: InlineNodeComposerData;
 };
 
 export function BranchNodeCard({ data }: NodeProps) {
   const nodeData = data as BranchNodeData;
-  const { mindNode, selected, onSelect, onCreate, onToggle, isStreaming, creationDisabled } =
-    nodeData;
+  const {
+    mindNode,
+    selected,
+    onSelect,
+    onCreate,
+    onToggle,
+    isStreaming,
+    creationDisabled,
+    inlineComposer,
+  } = nodeData;
   const nodeTitleId = `branch-node-${mindNode.id}-title`;
   const nodeSummaryId = `branch-node-${mindNode.id}-summary`;
   const hasChildren = mindNode.children.length > 0;
+  const hasInlineComposer = Boolean(inlineComposer);
 
   return (
     <article
@@ -29,10 +59,19 @@ export function BranchNodeCard({ data }: NodeProps) {
       data-testid="branch-node-card"
       data-node-id={mindNode.id}
       data-selected={selected ? "true" : "false"}
-      className={`branch-node-edge-hit-area group w-[292px] rounded-2xl border bg-white p-4 text-left shadow-md transition ${
-        selected
-          ? "border-brand-400 shadow-lg ring-2 ring-brand-300"
-          : "border-white/90 shadow-[rgba(44,35,62,0.08)] hover:-translate-y-1 hover:shadow-lg"
+      data-inline-composer={hasInlineComposer ? "true" : undefined}
+      className={`branch-node-edge-hit-area group bg-white text-left transition ${
+        hasInlineComposer
+          ? `w-[400px] max-w-[calc(100vw-48px)] rounded-[30px] border-2 p-5 shadow-[0_18px_44px_rgba(87,67,122,0.12)] ${
+              selected
+                ? "border-brand-300 ring-2 ring-brand-200"
+                : "border-white/90 hover:shadow-[0_20px_48px_rgba(87,67,122,0.16)]"
+            }`
+          : `w-[292px] rounded-2xl border p-4 shadow-md ${
+              selected
+                ? "border-brand-400 shadow-lg ring-2 ring-brand-300"
+                : "border-white/90 shadow-[rgba(44,35,62,0.08)] hover:-translate-y-1 hover:shadow-lg"
+            }`
       }`}
     >
       <Handle
@@ -80,7 +119,9 @@ export function BranchNodeCard({ data }: NodeProps) {
           aria-pressed={selected}
           data-testid="open-node-button"
           data-node-id={mindNode.id}
-          className="block w-full rounded-[18px] text-left outline-none transition focus-visible:ring-4 focus-visible:ring-[#eadcf7]"
+          className={`block w-full text-left outline-none transition focus-visible:ring-4 focus-visible:ring-[#eadcf7] ${
+            hasInlineComposer ? "rounded-[22px]" : "rounded-[18px]"
+          }`}
         >
           <span className="flex items-start justify-between gap-3">
             <span>
@@ -93,7 +134,9 @@ export function BranchNodeCard({ data }: NodeProps) {
               </span>
               <span
                 id={nodeTitleId}
-                className="mt-1 line-clamp-2 block text-base font-black text-neutral-900"
+                className={`mt-1 line-clamp-2 block font-black text-neutral-900 ${
+                  hasInlineComposer ? "text-lg" : "text-base"
+                }`}
               >
                 {mindNode.title}
               </span>
@@ -106,14 +149,23 @@ export function BranchNodeCard({ data }: NodeProps) {
             </span>
           </span>
 
-          <span
-            id={nodeSummaryId}
-            className="mt-3 line-clamp-3 block text-sm leading-6 text-neutral-600"
-          >
-            {mindNode.summary}
-          </span>
+          {hasInlineComposer ? (
+            <span id={nodeSummaryId} className="sr-only">
+              {mindNode.summary}
+            </span>
+          ) : (
+            <span
+              id={nodeSummaryId}
+              className="mt-3 line-clamp-3 block text-sm leading-6 text-neutral-600"
+            >
+              {mindNode.summary}
+            </span>
+          )}
         </button>
 
+        {inlineComposer && <InlineNodeComposer composer={inlineComposer} />}
+
+        {!hasInlineComposer && (
         <div className="mt-4 hidden items-center gap-2 sm:flex">
           <button
             type="button"
@@ -171,7 +223,107 @@ export function BranchNodeCard({ data }: NodeProps) {
             <Ribbon size={17} />
           </button>
         </div>
+        )}
       </div>
     </article>
+  );
+}
+
+function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) {
+  const [input, setInput] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const composerControls = useChatComposerControls({ isBusy: composer.isBusy });
+  const displayError = composerControls.attachmentError ?? (submitted ? composer.error : null);
+  const isComposerBusy = composerControls.controlsBusy;
+  const errorId = `inline-node-composer-${composer.nodeId}-error`;
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const trimmed = input.trim();
+    if (!trimmed || isComposerBusy) return;
+
+    setSubmitted(true);
+    const preparedAttachments = await composerControls.prepareAttachmentsForSend();
+    if (!preparedAttachments) return;
+
+    const projectId = await composer.onSubmit(
+      trimmed,
+      preparedAttachments,
+      composerControls.selectedModel,
+    );
+
+    if (projectId) {
+      setInput("");
+      setSubmitted(false);
+      composerControls.resetAttachments();
+    }
+  }
+
+  return (
+    <form
+      aria-label="Message composer"
+      aria-busy={isComposerBusy}
+      aria-describedby={displayError ? errorId : undefined}
+      data-testid="message-composer"
+      onSubmit={handleSubmit}
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+      className="nodrag nopan mt-5 space-y-3"
+    >
+      <PendingAttachmentChips
+        attachments={composerControls.pendingAttachments}
+        disabled={isComposerBusy}
+        onRemove={composerControls.removePendingAttachment}
+      />
+      <div className="relative rounded-[22px] border border-neutral-200/80 bg-[#fbfafc] shadow-sm transition focus-within:border-brand-300 focus-within:bg-white focus-within:shadow-md focus-within:shadow-brand-100/25 focus-within:ring-4 focus-within:ring-brand-100/35">
+        <textarea
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          disabled={isComposerBusy}
+          aria-label="Message instruction"
+          aria-describedby={displayError ? errorId : undefined}
+          data-testid="message-instruction-input"
+          placeholder={composer.placeholder}
+          rows={3}
+          className="w-full resize-none bg-transparent px-4 pt-4 pb-16 text-sm leading-6 text-neutral-900 outline-none placeholder:text-neutral-500 disabled:cursor-not-allowed disabled:opacity-65"
+        />
+        <div className="absolute bottom-3 left-3 flex items-center gap-2">
+          <AttachmentMenuButton controls={composerControls} placement="below" />
+          <ModelSelectorButton controls={composerControls} placement="below" />
+        </div>
+        <div className="absolute bottom-3 right-3">
+          <button
+            type="submit"
+            disabled={isComposerBusy || !input.trim()}
+            aria-label="Send message"
+            data-testid="send-message-button"
+            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {composerControls.isPreparingAttachments || composer.isBusy ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Send size={14} />
+            )}
+            {composerControls.isPreparingAttachments
+              ? "Preparing..."
+              : composer.isBusy
+                ? "Creating..."
+                : composer.submitLabel}
+          </button>
+        </div>
+      </div>
+      {displayError && (
+        <p
+          id={errorId}
+          role="alert"
+          data-testid="message-error-alert"
+          className="rounded-xl border border-danger-200 bg-danger-50 px-3 py-2 text-sm font-bold text-danger-700"
+        >
+          {displayError}
+        </p>
+      )}
+    </form>
   );
 }

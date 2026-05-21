@@ -122,11 +122,7 @@ function ComposerProjectLauncher() {
         className="rounded-[22px] border border-white/90 bg-white/88 p-3 text-left shadow-xl shadow-[#d6c7e8]/30 backdrop-blur md:rounded-[28px] md:p-5 md:shadow-2xl"
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <AttachmentMenuButton controls={composerControls} placement="below" />
-            <ModelSelectorButton controls={composerControls} placement="below" />
-          </div>
-          <span className="rounded-full bg-[#e5f6ee] px-3 py-2 text-xs font-black text-[#3d7558]">
+          <span className="rounded-full bg-[#e5f6ee] px-3 py-1.5 text-[11px] font-black text-[#3d7558]">
             Private workspace
           </span>
         </div>
@@ -138,54 +134,56 @@ function ComposerProjectLauncher() {
           />
         </div>
 
-        <label className="sr-only" htmlFor={topicInputId}>
-          Topic
-        </label>
-        <textarea
-          id={topicInputId}
-          value={topic}
-          onChange={(event) => setTopic(event.target.value)}
-          disabled={isSubmitting}
-          aria-invalid={Boolean(displayError)}
-          aria-describedby={displayError ? errorId : undefined}
-          data-testid="project-topic-input"
-          placeholder="Start with a research question..."
-          rows={1}
-          className="min-h-11 w-full resize-none rounded-[18px] border border-transparent bg-transparent px-1 py-1 text-base leading-6 text-[#332b38] outline-none transition placeholder:text-[#8a7f91] disabled:cursor-not-allowed disabled:opacity-70 focus:border-transparent md:mt-5 md:min-h-28 md:text-lg md:leading-8"
-        />
-
-        <div className="mt-2 flex items-center justify-between gap-2 md:mt-4 md:items-end">
-          <div className="min-w-0 md:hidden" />
-          <div className="hidden flex-wrap gap-2 md:flex">
-            {suggestionTopics.map((suggestion) => (
-              <button
-                key={suggestion}
-                type="button"
-                disabled={isSubmitting}
-                onClick={() => setTopic(suggestion)}
-                className="rounded-[16px] border border-[#ebe4f2] bg-white/75 px-3 py-2 text-sm font-bold text-[#5f5368] shadow-sm transition hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
-              >
-                {suggestion}
-              </button>
-            ))}
+        <div className="relative mt-3 rounded-[20px] border border-[#e8e0ef] bg-[#faf8fc] shadow-sm transition focus-within:border-[#c4aed8] focus-within:bg-white focus-within:shadow-lg focus-within:shadow-[#d6c7e8]/20 focus-within:ring-4 focus-within:ring-[#eadcf7]/40">
+          <label className="sr-only" htmlFor={topicInputId}>
+            Topic
+          </label>
+          <textarea
+            id={topicInputId}
+            value={topic}
+            onChange={(event) => setTopic(event.target.value)}
+            disabled={isSubmitting}
+            aria-invalid={Boolean(displayError)}
+            aria-describedby={displayError ? errorId : undefined}
+            data-testid="project-topic-input"
+            placeholder="Start with a research question..."
+            rows={1}
+            className="min-h-11 w-full resize-none bg-transparent px-4 pt-4 pb-16 text-base leading-6 text-[#332b38] outline-none transition placeholder:text-[#9a8faa] disabled:cursor-not-allowed disabled:opacity-70 md:min-h-28 md:text-lg md:leading-8"
+          />
+          <div className="absolute bottom-3 left-3 flex items-center gap-2">
+            <AttachmentMenuButton controls={composerControls} />
+            <ModelSelectorButton controls={composerControls} />
           </div>
-          <button
-            type="submit"
-            disabled={isSubmitting || !topic.trim()}
-            aria-label="Create new project"
-            data-testid="create-project-button"
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#7c5fb1] font-bold text-white shadow-lg shadow-[#b99adb]/25 transition hover:-translate-y-0.5 hover:bg-[#6e53a2] disabled:cursor-not-allowed disabled:opacity-65 disabled:hover:translate-y-0 md:inline-flex md:min-h-12 md:w-auto md:min-w-44 md:gap-2 md:rounded-[20px] md:px-5"
-          >
-            {isSubmitting ? (
-              <Loader2 size={18} className="hidden animate-spin md:block" />
-            ) : (
-              <Sparkles size={18} className="hidden md:block" />
-            )}
-            <span className="sr-only md:not-sr-only">
-              {isSubmitting ? "Creating project..." : "New Project"}
-            </span>
-            <ArrowRight size={18} />
-          </button>
+          <div className="absolute bottom-3 right-3">
+            <button
+              type="submit"
+              disabled={isSubmitting || !topic.trim()}
+              aria-label="Create new project"
+              data-testid="create-project-button"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#7c5fb1] px-4 text-sm font-black text-white shadow-sm transition hover:bg-[#6e53a2] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSubmitting ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Sparkles size={14} />
+              )}
+              <span>{isSubmitting ? "Creating..." : "New Project"}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 hidden flex-wrap gap-2 md:flex">
+          {suggestionTopics.map((suggestion) => (
+            <button
+              key={suggestion}
+              type="button"
+              disabled={isSubmitting}
+              onClick={() => setTopic(suggestion)}
+              className="rounded-[16px] border border-[#ebe4f2] bg-white/75 px-3 py-2 text-sm font-bold text-[#5f5368] shadow-sm transition hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+            >
+              {suggestion}
+            </button>
+          ))}
         </div>
       </form>
       {isSubmitting && (

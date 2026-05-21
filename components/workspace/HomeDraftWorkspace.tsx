@@ -113,6 +113,16 @@ export function HomeDraftWorkspace() {
       dataDraftWorkspace
       disableNodeCreationActions
       showProjectStar={false}
+      initialWorkspaceSidebarCollapsed
+      initialNodeDetailPanelCollapsed
+      inlineNodeComposer={{
+        nodeId: DRAFT_ROOT_NODE_ID,
+        isBusy: creatingProject,
+        error: aiError,
+        onSubmit: handleStartProject,
+        placeholder: "Start with a research question...",
+        submitLabel: "Start",
+      }}
       nodeDetailOptions={{
         initialSubmit: true,
         onStartProject: handleStartProject,

@@ -325,7 +325,12 @@ test("home opens directly into a draft workspace", async ({ page }) => {
   await expect(page.getByTestId("workspace-header")).toContainText("New workspace");
   await expect(page.getByTestId("branch-node-card")).toHaveCount(1);
   await expect(page.getByTestId("branch-node-card")).toContainText("New node");
-  await expect(page.getByTestId("message-composer")).toBeVisible();
+  await expect(page.getByTestId("workspace-sidebar")).toHaveCount(0);
+  await expect(page.getByTestId("node-detail-panel")).toHaveCount(0);
+  await expect(page.getByTestId("message-composer")).toHaveCount(1);
+  await expect(
+    page.getByTestId("branch-node-card").getByTestId("message-composer"),
+  ).toBeVisible();
   await expect(page.getByTestId("message-branch-mode")).toHaveCount(0);
   await expect(page.getByTestId("node-detail-notes-button")).toHaveCount(0);
   await expect(page.getByTestId("message-instruction-input")).toHaveAttribute(
@@ -334,24 +339,26 @@ test("home opens directly into a draft workspace", async ({ page }) => {
   );
   await expect(page.getByTestId("send-message-button")).toContainText("Start");
   const mindMapCanvas = page.getByTestId("mind-map-canvas");
-  const mapWidthBeforeSidebarCollapse = await getElementWidth(mindMapCanvas);
+  const mapWidthWithPanelsCollapsed = await getElementWidth(mindMapCanvas);
 
-  await page.getByTestId("collapse-workspace-sidebar-button").click();
-  await expect(page.getByTestId("workspace-sidebar")).toHaveCount(0);
   await expect(mindMapCanvas.getByTestId("expand-workspace-sidebar-button")).toBeVisible();
-  await expect
-    .poll(() => getElementWidth(mindMapCanvas))
-    .toBeGreaterThan(mapWidthBeforeSidebarCollapse + 120);
+  await expect(mindMapCanvas.getByTestId("expand-node-detail-panel-button")).toBeVisible();
 
   await mindMapCanvas.getByTestId("expand-workspace-sidebar-button").click();
   await expect(page.getByTestId("workspace-sidebar")).toBeVisible();
+  await expect
+    .poll(() => getElementWidth(mindMapCanvas))
+    .toBeLessThan(mapWidthWithPanelsCollapsed - 120);
 
-  await page.getByTestId("collapse-node-detail-panel-button").click();
-  await expect(page.getByTestId("node-detail-panel")).toHaveCount(0);
-  await expect(mindMapCanvas.getByTestId("expand-node-detail-panel-button")).toBeVisible();
+  await page.getByTestId("collapse-workspace-sidebar-button").click();
+  await expect(page.getByTestId("workspace-sidebar")).toHaveCount(0);
 
   await mindMapCanvas.getByTestId("expand-node-detail-panel-button").click();
   await expect(page.getByTestId("node-detail-panel")).toBeVisible();
+  await expect(
+    page.getByTestId("node-detail-panel").getByTestId("message-composer"),
+  ).toHaveCount(0);
+  await expect(page.getByTestId("message-composer")).toHaveCount(1);
 
   await page.getByTestId("workspace-projects-link").click();
 
@@ -376,10 +383,15 @@ test("home draft workspace sidebars resize and snap like workspace", async ({
   const workspaceSidebar = page.getByTestId("workspace-sidebar");
   const nodeDetailPanel = page.getByTestId("node-detail-panel");
 
+  await expect(workspaceSidebar).toHaveCount(0);
+  await expect(nodeDetailPanel).toHaveCount(0);
+  await mindMapCanvas.getByTestId("expand-workspace-sidebar-button").click();
+  await mindMapCanvas.getByTestId("expand-node-detail-panel-button").click();
   await expect(workspaceSidebar).toBeVisible();
   await expect(nodeDetailPanel).toBeVisible();
   await expect(page.getByTestId("resize-workspace-sidebar")).toBeVisible();
   await expect(page.getByTestId("resize-node-details-panel")).toBeVisible();
+  await expect(nodeDetailPanel.getByTestId("message-composer")).toHaveCount(0);
 
   await dragResizeHandle(page, page.getByTestId("resize-workspace-sidebar"), 430);
   await expect.poll(() => getElementWidth(workspaceSidebar)).toBeGreaterThan(560);
@@ -1494,9 +1506,10 @@ test("shows signed-in account menu state", async ({ page }) => {
   await expect(page.locator('[data-testid="sign-out-button"]:visible')).toBeVisible();
 });
 
-test("confirms project deletion without opening the workspace", async ({ page }) => {
+test("renames and confirms project deletion without opening the workspace", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   const sourceProject = makeWorkspaceProject(`delete-confirm-${makeSeed()}`);
+  const editedTitle = "Project list renamed workspace";
   let projectIdToDelete: string | null = null;
 
   try {
@@ -1504,17 +1517,42 @@ test("confirms project deletion without opening the workspace", async ({ page })
     projectIdToDelete = project.id;
 
     await page.goto("/projects");
-    const projectCard = page
-      .getByTestId("project-card")
-      .filter({ hasText: project.title });
+    const projectCard = page.locator(
+      `[data-testid="project-card"][data-project-id="${project.id}"]`,
+    );
+    const editButton = projectCard.getByTestId("edit-project-name-button");
     const deleteButton = projectCard.getByTestId("delete-project-button");
 
     await expect(projectCard).toBeVisible();
-    await deleteButton.locator("svg").click();
+    await editButton.click();
+    await expect(page).toHaveURL(/\/projects$/);
+    await expect(projectCard.getByTestId("project-name-edit-input")).toHaveValue(
+      project.title,
+    );
+    await projectCard.getByTestId("project-name-edit-input").fill("Canceled rename");
+    await projectCard.getByTestId("cancel-project-name-button").click();
+    await expect(projectCard.getByTestId("project-name-edit-input")).toHaveCount(0);
+    await expect(projectCard).toContainText(project.title);
+
+    await editButton.click();
+    await projectCard.getByTestId("project-name-edit-input").fill(editedTitle);
+    await projectCard.getByTestId("save-project-name-button").click();
+    await expect(projectCard.getByTestId("project-name-edit-input")).toHaveCount(0);
+    await expect(projectCard).toContainText(editedTitle);
+    await expect(page).toHaveURL(/\/projects$/);
+
+    const persisted = await getPersistedProject(page, project.id);
+    expect(persisted.title).toBe(editedTitle);
+    expect(persisted.nodes[persisted.rootNodeId]).toMatchObject({
+      title: "Seeded root node",
+      titleManuallyEdited: false,
+    });
+
+    await deleteButton.click();
     await expect(page).toHaveURL(/\/projects$/);
     await expect(page.getByTestId("delete-project-dialog")).toBeVisible();
     await expect(page.getByTestId("delete-project-dialog")).toContainText(
-      project.title,
+      editedTitle,
     );
 
     await page.getByTestId("cancel-delete-project-button").click();
@@ -1522,7 +1560,7 @@ test("confirms project deletion without opening the workspace", async ({ page })
     await expect(page).toHaveURL(/\/projects$/);
     await expect(projectCard).toBeVisible();
 
-    await deleteButton.locator("svg").click();
+    await deleteButton.click();
     await expect(page.getByTestId("delete-project-dialog")).toBeVisible();
     await page.getByTestId("confirm-delete-project-button").click();
 

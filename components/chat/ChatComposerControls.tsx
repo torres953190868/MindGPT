@@ -810,9 +810,9 @@ export function AttachmentMenuButton({
           aria-expanded={controls.isAttachmentMenuOpen}
           title="Add files or knowledge"
           data-testid="add-message-attachment-button"
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-[16px] border border-[#dcccea] bg-gradient-to-b from-white to-[#f7f0ff] text-[#6c538d] shadow-[0_8px_20px_rgba(112,84,148,0.12),inset_0_1px_0_rgba(255,255,255,0.9)] ring-1 ring-white/70 transition hover:border-[#b696d4] hover:from-white hover:to-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7] disabled:cursor-not-allowed disabled:opacity-50"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-[14px] border border-[#dcccea] bg-gradient-to-b from-white to-[#f7f0ff] text-[#6c538d] shadow-sm ring-1 ring-white/70 transition hover:border-[#b696d4] hover:from-white hover:to-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <Plus size={18} />
+          <Plus size={16} />
         </button>
         {controls.isAttachmentMenuOpen && (
           <div
@@ -969,12 +969,12 @@ export function ModelSelectorButton({
         aria-haspopup="listbox"
         aria-expanded={controls.isModelMenuOpen}
         data-testid="chat-model-selector-button"
-        className="inline-flex h-11 w-[128px] min-w-0 items-center justify-center gap-2 rounded-[16px] border border-[#dcccea] bg-white/82 px-3 text-sm font-black text-[#4c4057] shadow-[0_8px_20px_rgba(112,84,148,0.12),inset_0_1px_0_rgba(255,255,255,0.9)] transition hover:border-[#b696d4] hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7] disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex h-9 min-w-[90px] max-w-[150px] items-center justify-center gap-1.5 rounded-[14px] border border-[#dcccea] bg-white/82 px-2.5 text-xs font-black text-[#4c4057] shadow-sm transition hover:border-[#b696d4] hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7] disabled:cursor-not-allowed disabled:opacity-50"
       >
-        <BrainCircuit size={16} className="shrink-0 text-[#7c5fb1]" />
+        <BrainCircuit size={14} className="shrink-0 text-[#7c5fb1]" />
         <span className="min-w-0 truncate">{controls.selectedModelLabel}</span>
         <ChevronDown
-          size={15}
+          size={13}
           className={`shrink-0 text-[#8f7d9a] transition ${
             controls.isModelMenuOpen ? "rotate-180" : ""
           }`}

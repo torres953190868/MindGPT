@@ -36,6 +36,7 @@ import type {
   NodePosition,
   Project,
 } from "@/lib/types";
+import type { InlineNodeComposerData } from "./BranchNodeCard";
 import { MindMap } from "./MindMap";
 import { NodeDetailPanel } from "./NodeDetailPanel";
 import { ProjectNotesPanel } from "./ProjectNotesPanel";
@@ -125,6 +126,9 @@ type WorkspaceCanvasShellProps = {
   dataDraftWorkspace?: boolean;
   disableNodeCreationActions?: boolean;
   showProjectStar?: boolean;
+  initialWorkspaceSidebarCollapsed?: boolean;
+  initialNodeDetailPanelCollapsed?: boolean;
+  inlineNodeComposer?: InlineNodeComposerData;
   syncFailure?: {
     message: string;
     onRetry: () => void;
@@ -318,6 +322,9 @@ export function WorkspaceCanvasShell({
   dataDraftWorkspace = false,
   disableNodeCreationActions = false,
   showProjectStar = true,
+  initialWorkspaceSidebarCollapsed = false,
+  initialNodeDetailPanelCollapsed = false,
+  inlineNodeComposer,
   syncFailure = null,
   nodeDetailOptions,
   projectNotesConfig,
@@ -340,8 +347,12 @@ export function WorkspaceCanvasShell({
   const [isEditingProjectTitle, setIsEditingProjectTitle] = useState(false);
   const [projectTitleEditValue, setProjectTitleEditValue] = useState("");
   const [isProjectTitleSaving, setIsProjectTitleSaving] = useState(false);
-  const [isWorkspaceSidebarCollapsed, setIsWorkspaceSidebarCollapsed] = useState(false);
-  const [isNodeDetailPanelCollapsed, setIsNodeDetailPanelCollapsed] = useState(false);
+  const [isWorkspaceSidebarCollapsed, setIsWorkspaceSidebarCollapsed] = useState(
+    initialWorkspaceSidebarCollapsed,
+  );
+  const [isNodeDetailPanelCollapsed, setIsNodeDetailPanelCollapsed] = useState(
+    initialNodeDetailPanelCollapsed,
+  );
   const [isProjectNotesPanelOpen, setIsProjectNotesPanelOpen] = useState(false);
 
   const hasProjectNotes = Boolean(projectNotesConfig);
@@ -1178,6 +1189,7 @@ export function WorkspaceCanvasShell({
             onMoveNode={onMoveNode}
             creatingNodeId={disableNodeCreationActions ? project.rootNodeId : creatingNodeId}
             streamingNodeId={streamingNodeId}
+            inlineNodeComposer={inlineNodeComposer}
           />
         </section>
         {!isNodeDetailPanelCollapsed && (
@@ -1197,7 +1209,13 @@ export function WorkspaceCanvasShell({
           />
         )}
         {!isNodeDetailPanelCollapsed && (
-          <div className={mobileWorkspaceView === "chat" ? "contents" : "hidden lg:contents"}>
+          <div
+            className={
+              mobileWorkspaceView === "chat"
+                ? "h-[calc(100svh-12rem)] min-h-0 min-w-0 overflow-hidden lg:contents"
+                : "hidden lg:contents"
+            }
+          >
             <NodeDetailPanel
               node={selectedNode}
               conversationMessages={selectedConversationMessages}
@@ -1218,6 +1236,7 @@ export function WorkspaceCanvasShell({
                 hasProjectNotes && (nodeDetailOptions?.showNotesAction ?? true)
               }
               showCollapseButton={nodeDetailOptions?.showCollapseButton ?? true}
+              showComposer={inlineNodeComposer?.nodeId !== selectedNode?.id}
               composerPlaceholder={nodeDetailOptions?.composerPlaceholder}
               submitLabel={nodeDetailOptions?.submitLabel}
             />

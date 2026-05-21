@@ -83,6 +83,7 @@ type NodeDetailPanelProps = {
   ) => Promise<string | null>;
   showNotesAction?: boolean;
   showCollapseButton?: boolean;
+  showComposer?: boolean;
   composerPlaceholder?: string;
   submitLabel?: string;
 };
@@ -216,6 +217,7 @@ export function NodeDetailPanel({
   onStartProject,
   showNotesAction = true,
   showCollapseButton = true,
+  showComposer = true,
   composerPlaceholder = "Ask the next question...",
   submitLabel = "Send",
 }: NodeDetailPanelProps) {
@@ -458,7 +460,7 @@ export function NodeDetailPanel({
       <aside
         aria-label="Node details"
         data-testid="node-detail-panel"
-        className="flex min-h-0 w-full max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-neutral-100 bg-white/90 p-4 shadow-lg lg:h-full lg:max-h-[calc(100vh-6rem)] lg:self-start lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
+        className="flex h-full min-h-0 w-full max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-neutral-100 bg-white/90 p-4 shadow-lg lg:max-h-full lg:self-start lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
       >
         {showCollapseButton && (
           <button
@@ -485,7 +487,11 @@ export function NodeDetailPanel({
     <aside
       aria-labelledby={titleId}
       data-testid="node-detail-panel"
-      className="grid min-h-0 w-full max-h-[calc(100vh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:h-full lg:max-h-[calc(100vh-6rem)] lg:self-start lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
+      className={`grid h-full min-h-0 w-full max-h-[calc(100vh-2rem)] overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:max-h-full lg:self-start lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none ${
+        showComposer
+          ? "grid-rows-[auto_minmax(0,1fr)_auto]"
+          : "grid-rows-[auto_minmax(0,1fr)]"
+      }`}
     >
         <div className="shrink-0 space-y-3 border-b border-neutral-200 pb-4">
         <div className="flex items-start justify-between gap-3">
@@ -761,6 +767,7 @@ export function NodeDetailPanel({
         )}
       </section>
 
+      {showComposer && (
         <form
         aria-label="Message composer"
         aria-busy={isComposerBusy}
@@ -839,11 +846,7 @@ export function NodeDetailPanel({
           disabled={isComposerBusy}
           onRemove={composerControls.removePendingAttachment}
         />
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <AttachmentMenuButton controls={composerControls} />
-            <ModelSelectorButton controls={composerControls} />
-          </div>
+        <div className="relative rounded-[20px] border border-neutral-200/80 bg-white shadow-sm transition focus-within:border-brand-300 focus-within:shadow-md focus-within:shadow-brand-100/20 focus-within:ring-4 focus-within:ring-brand-100/30">
           <textarea
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -853,29 +856,35 @@ export function NodeDetailPanel({
             data-testid="message-instruction-input"
             placeholder={composerPlaceholder}
             rows={3}
-            className="w-full resize-none rounded-xl border border-neutral-200 bg-white p-3 text-sm text-neutral-900 outline-none shadow-sm placeholder:text-neutral-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65"
+            className="w-full resize-none bg-transparent px-4 pt-4 pb-16 text-sm leading-6 text-neutral-900 outline-none placeholder:text-neutral-400 transition disabled:cursor-not-allowed disabled:opacity-65"
           />
+          <div className="absolute bottom-3 left-3 flex items-center gap-2">
+            <AttachmentMenuButton controls={composerControls} />
+            <ModelSelectorButton controls={composerControls} />
+          </div>
+          <div className="absolute bottom-3 right-3">
+            <button
+              type="submit"
+              disabled={isComposerBusy || !input.trim()}
+              aria-label="Send message"
+              data-testid="send-message-button"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {composerControls.isPreparingAttachments ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Send size={14} />
+              )}
+              {composerControls.isPreparingAttachments
+                ? "Preparing..."
+                : isCreating
+                  ? isInitialSubmit
+                    ? "Creating..."
+                    : "Streaming..."
+                  : submitLabel}
+            </button>
+          </div>
         </div>
-        <button
-          type="submit"
-          disabled={isComposerBusy || !input.trim()}
-          aria-label="Send message"
-          data-testid="send-message-button"
-          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 font-black text-white shadow-md shadow-brand-200/50 transition hover:-translate-y-0.5 hover:bg-brand-700 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-65"
-        >
-          {composerControls.isPreparingAttachments ? (
-            <Loader2 size={17} className="animate-spin" />
-          ) : (
-            <Send size={17} />
-          )}
-          {composerControls.isPreparingAttachments
-            ? "Preparing PDF..."
-            : isCreating
-              ? isInitialSubmit
-                ? "Creating..."
-                : "Streaming..."
-              : submitLabel}
-        </button>
         {isComposerBusy && (
           <p id={statusId} role="status" data-testid="message-send-status" className="sr-only">
             {composerControls.isPreparingAttachments
@@ -896,6 +905,7 @@ export function NodeDetailPanel({
           </p>
         )}
       </form>
+      )}
     </aside>
   );
 }

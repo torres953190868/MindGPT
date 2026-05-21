@@ -2,6 +2,7 @@
 
 import {
   type ChangeEvent,
+  type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   useEffect,
@@ -14,6 +15,7 @@ import { useRouter } from "next/navigation";
 import {
   Brain,
   ChevronDown,
+  Check,
   Clock3,
   Download,
   ExternalLink,
@@ -23,7 +25,8 @@ import {
   HelpCircle,
   Home,
   LayoutTemplate,
-  MoreHorizontal,
+  Loader2,
+  Pencil,
   Plus,
   Search,
   Settings,
@@ -31,6 +34,7 @@ import {
   Star,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import { AuthPanel } from "@/components/AuthPanel";
 import { downloadProjectJson, importProjectJsonFile } from "@/lib/project-export";
@@ -57,34 +61,24 @@ function formatNodeCount(count: number) {
   return `${count} ${count === 1 ? "node" : "nodes"}`;
 }
 
-function getProjectAvatar(title: string) {
-  const palettes = [
-    { bg: "bg-brand-100", text: "text-brand-700" },
-    { bg: "bg-success-100", text: "text-success-700" },
-    { bg: "bg-danger-100", text: "text-danger-700" },
-    { bg: "bg-[#fff0b8]", text: "text-[#755816]" },
-    { bg: "bg-[#e0f2fe]", text: "text-[#0369a1]" },
-    { bg: "bg-[#fce7f3]", text: "text-[#be185d]" },
-  ] as const;
-  const index =
-    title.charCodeAt(0) + (title.charCodeAt(1) ?? 0) + (title.charCodeAt(2) ?? 0);
-  const palette = palettes[index % palettes.length];
-  const initial = title.charAt(0).toUpperCase();
-  return { palette, initial };
-}
-
 export function ProjectCardList() {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [editingProject, setEditingProject] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
+  const [isSavingProjectName, setIsSavingProjectName] = useState(false);
   const [projectPendingDeletion, setProjectPendingDeletion] = useState<{
     id: string;
     title: string;
   } | null>(null);
   const [isDeletingProject, setIsDeletingProject] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const editInputRef = useRef<HTMLInputElement>(null);
   const deleteCancelButtonRef = useRef<HTMLButtonElement>(null);
   const hydrate = useBranchMindStore((state) => state.hydrate);
   const hydrated = useBranchMindStore((state) => state.hydrated);
@@ -92,6 +86,8 @@ export function ProjectCardList() {
   const aiError = useBranchMindStore((state) => state.aiError);
   const clearAiError = useBranchMindStore((state) => state.clearAiError);
   const deleteProject = useBranchMindStore((state) => state.deleteProject);
+  const updateProjectTitle = useBranchMindStore((state) => state.updateProjectTitle);
+  const editingProjectId = editingProject?.id ?? null;
   const [starredProjectIds, setStarredProjectIds] = useState<Set<string>>(() => {
     try {
       const raw = localStorage.getItem("branchmind-starred-projects");
@@ -148,6 +144,12 @@ export function ProjectCardList() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isDeletingProject, projectPendingDeletion]);
 
+  useEffect(() => {
+    if (!editingProjectId) return;
+    editInputRef.current?.focus();
+    editInputRef.current?.select();
+  }, [editingProjectId]);
+
   const visibleProjects = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return projects;
@@ -161,6 +163,59 @@ export function ProjectCardList() {
   function closeDeleteDialog() {
     if (isDeletingProject) return;
     setProjectPendingDeletion(null);
+  }
+
+  function startEditingProject(
+    event: ReactMouseEvent<HTMLButtonElement>,
+    projectId: string,
+    projectTitle: string,
+  ) {
+    event.stopPropagation();
+    if (isSavingProjectName) return;
+    clearAiError();
+    setEditingProject({ id: projectId, title: projectTitle });
+  }
+
+  function cancelEditingProject() {
+    if (isSavingProjectName) return;
+    setEditingProject(null);
+  }
+
+  async function saveProjectName(projectId: string, currentTitle: string) {
+    if (!editingProject || editingProject.id !== projectId || isSavingProjectName) {
+      return;
+    }
+
+    const nextTitle = editingProject.title.trim();
+    if (!nextTitle) return;
+    if (nextTitle === currentTitle) {
+      setEditingProject(null);
+      return;
+    }
+
+    setIsSavingProjectName(true);
+    try {
+      const saved = await updateProjectTitle(projectId, nextTitle);
+      if (saved) setEditingProject(null);
+    } finally {
+      setIsSavingProjectName(false);
+    }
+  }
+
+  function handleProjectNameFormSubmit(
+    event: FormEvent<HTMLFormElement>,
+    projectId: string,
+    currentTitle: string,
+  ) {
+    event.preventDefault();
+    void saveProjectName(projectId, currentTitle);
+  }
+
+  function handleProjectNameKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelEditingProject();
+    }
   }
 
   function handleDeleteProject(
@@ -206,6 +261,7 @@ export function ProjectCardList() {
     event: ReactMouseEvent<HTMLTableRowElement>,
     projectId: string,
   ) {
+    if (editingProjectId === projectId) return;
     if (
       event.target instanceof Element &&
       event.target.closest("[data-project-row-action='true']")
@@ -221,6 +277,7 @@ export function ProjectCardList() {
     projectId: string,
   ) {
     if (event.key !== "Enter") return;
+    if (editingProjectId === projectId) return;
     if (
       event.target instanceof Element &&
       event.target.closest("[data-project-row-action='true']")
@@ -644,6 +701,10 @@ export function ProjectCardList() {
                   <tbody className="divide-y divide-[#ebe7f1]">
                     {visibleProjects.map((project) => {
                       const nodeCount = Object.keys(project.nodes).length;
+                      const isEditingProject = editingProjectId === project.id;
+                      const editedProjectName = isEditingProject && editingProject
+                        ? editingProject.title
+                        : project.title;
 
                       return (
                         <tr
@@ -683,27 +744,74 @@ export function ProjectCardList() {
                                   }
                                 />
                               </button>
-                              {(() => {
-                                const { palette, initial } = getProjectAvatar(
-                                  project.title,
-                                );
-                                return (
-                                  <span
-                                    className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-extrabold ${palette.bg} ${palette.text}`}
+                              {isEditingProject ? (
+                                <form
+                                  onSubmit={(event) =>
+                                    handleProjectNameFormSubmit(
+                                      event,
+                                      project.id,
+                                      project.title,
+                                    )
+                                  }
+                                  data-project-row-action="true"
+                                  className="flex min-w-0 flex-1 items-center gap-2"
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <input
+                                      ref={editInputRef}
+                                      value={editedProjectName}
+                                      onChange={(event) =>
+                                        setEditingProject({
+                                          id: project.id,
+                                          title: event.target.value,
+                                        })
+                                      }
+                                      onKeyDown={handleProjectNameKeyDown}
+                                      disabled={isSavingProjectName}
+                                      aria-label={`Project name for ${project.title}`}
+                                      data-testid="project-name-edit-input"
+                                      className="h-9 w-full rounded-md border border-brand-200 bg-white px-3 text-sm font-extrabold text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-60"
+                                    />
+                                    <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-bold text-neutral-600">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-success-400" />
+                                      {formatNodeCount(nodeCount)}
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="submit"
+                                    disabled={!editedProjectName.trim() || isSavingProjectName}
+                                    aria-label={`Save project name for ${project.title}`}
+                                    data-testid="save-project-name-button"
+                                    className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-success-600 text-white transition hover:bg-success-700 focus:outline-none focus:ring-2 focus:ring-success-200 disabled:cursor-not-allowed disabled:opacity-45"
                                   >
-                                    {initial}
-                                  </span>
-                                );
-                              })()}
-                              <div className="min-w-0">
-                                <h2 className="truncate text-sm font-extrabold text-neutral-900">
-                                  {project.title}
-                                </h2>
-                                <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-bold text-neutral-600">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-success-400" />
-                                  {formatNodeCount(nodeCount)}
-                                </p>
-                              </div>
+                                    {isSavingProjectName ? (
+                                      <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                      <Check size={15} />
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={cancelEditingProject}
+                                    disabled={isSavingProjectName}
+                                    aria-label={`Cancel project name edit for ${project.title}`}
+                                    data-testid="cancel-project-name-button"
+                                    className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-neutral-300 bg-white text-neutral-700 transition hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-45"
+                                  >
+                                    <X size={15} />
+                                  </button>
+                                </form>
+                              ) : (
+                                <div className="min-w-0 flex-1">
+                                  <h2 className="truncate text-sm font-extrabold text-neutral-900">
+                                    {project.title}
+                                  </h2>
+                                  <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-bold text-neutral-600">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-success-400" />
+                                    {formatNodeCount(nodeCount)}
+                                  </p>
+                                </div>
+                              )}
                             </div>
                           </td>
                           <td className="px-4 py-4 font-bold text-neutral-800">
@@ -717,7 +825,7 @@ export function ProjectCardList() {
                           </td>
                           <td className="px-4 py-4">
                             <div
-                              className="flex items-center justify-end gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100"
+                              className="flex items-center justify-end gap-1"
                               role="group"
                               aria-label={`${project.title} actions`}
                             >
@@ -745,6 +853,19 @@ export function ProjectCardList() {
                               <button
                                 type="button"
                                 onClick={(event) =>
+                                  startEditingProject(event, project.id, project.title)
+                                }
+                                aria-label={`Edit ${project.title} name`}
+                                data-project-row-action="true"
+                                data-project-id={project.id}
+                                data-testid="edit-project-name-button"
+                                className="grid h-8 w-8 place-items-center rounded-md text-neutral-700 transition hover:bg-brand-50 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-45"
+                              >
+                                <Pencil size={15} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(event) =>
                                   handleDeleteProject(event, project.id, project.title)
                                 }
                                 aria-label={`Delete ${project.title}`}
@@ -754,15 +875,6 @@ export function ProjectCardList() {
                                 className="grid h-8 w-8 place-items-center rounded-md text-neutral-700 transition hover:bg-danger-50 hover:text-danger-600 focus:outline-none focus:ring-2 focus:ring-danger-200"
                               >
                                 <Trash2 size={15} />
-                              </button>
-                              <button
-                                type="button"
-                                disabled
-                                aria-label={`More actions for ${project.title}`}
-                                data-project-row-action="true"
-                                className="grid h-8 w-8 cursor-not-allowed place-items-center rounded-md text-neutral-600 opacity-50"
-                              >
-                                <MoreHorizontal size={16} />
                               </button>
                             </div>
                           </td>

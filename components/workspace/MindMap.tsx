@@ -14,7 +14,11 @@ import {
 } from "@xyflow/react";
 import { getVisibleNodeIds } from "@/lib/graph";
 import type { Project } from "@/lib/types";
-import { BranchNodeCard, type BranchNodeData } from "./BranchNodeCard";
+import {
+  BranchNodeCard,
+  type BranchNodeData,
+  type InlineNodeComposerData,
+} from "./BranchNodeCard";
 
 const nodeTypes: NodeTypes = {
   branchNode: BranchNodeCard,
@@ -29,6 +33,7 @@ type MindMapProps = {
   onMoveNode: (nodeId: string, position: { x: number; y: number }) => void;
   creatingNodeId: string | null;
   streamingNodeId: string | null;
+  inlineNodeComposer?: InlineNodeComposerData;
 };
 
 export function MindMap({
@@ -40,6 +45,7 @@ export function MindMap({
   onMoveNode,
   creatingNodeId,
   streamingNodeId,
+  inlineNodeComposer,
 }: MindMapProps) {
   const visibleNodeIds = useMemo(() => getVisibleNodeIds(project), [project]);
 
@@ -60,10 +66,13 @@ export function MindMap({
           onToggle: onToggleNode,
           isStreaming: streamingNodeId === node.id,
           creationDisabled: Boolean(creatingNodeId),
+          inlineComposer:
+            inlineNodeComposer?.nodeId === node.id ? inlineNodeComposer : undefined,
         },
       }));
   }, [
     creatingNodeId,
+    inlineNodeComposer,
     onCreateNode,
     onSelectNode,
     onToggleNode,
@@ -99,6 +108,12 @@ export function MindMap({
 
   const [nodes, setNodes] = useState(graphNodes);
   const dragDisabled = Boolean(creatingNodeId || streamingNodeId);
+  const fitViewOptions = useMemo(
+    () => ({
+      maxZoom: inlineNodeComposer ? 1 : 1.7,
+    }),
+    [inlineNodeComposer],
+  );
 
   useEffect(() => {
     setNodes(graphNodes);
@@ -155,6 +170,7 @@ export function MindMap({
         onNodesChange={handleNodesChange}
         onNodeDragStop={handleNodeDragStop}
         fitView
+        fitViewOptions={fitViewOptions}
         minZoom={0.25}
         maxZoom={1.7}
         className="branchmind-grid h-full rounded-[28px] lg:rounded-none"
