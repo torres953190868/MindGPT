@@ -1,5 +1,9 @@
 create extension if not exists vector;
 
+insert into storage.buckets (id, name, public)
+values ('branchmind-rag-files', 'branchmind-rag-files', false)
+on conflict (id) do nothing;
+
 create table if not exists public.documents (
   id text primary key,
   user_id text,

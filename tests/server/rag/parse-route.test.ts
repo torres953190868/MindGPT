@@ -4,11 +4,17 @@ import { RagError } from "@/lib/server/rag/errors";
 import { parseDocumentForOwner } from "@/lib/server/rag/indexer";
 import type { RagDocument } from "@/lib/server/rag/types";
 
+const checkRateLimitAsyncMock = vi.hoisted(() => vi.fn());
+
 vi.mock("@/lib/server/auth", () => ({
   getBranchMindAuthContext: vi.fn(async () => ({
     principal: { id: "user_parse_route", email: null, authMode: "local" },
     session: { id: "user_parse_route", isNew: false },
   })),
+}));
+
+vi.mock("@/lib/server/rate-limit", () => ({
+  checkRateLimitAsync: checkRateLimitAsyncMock,
 }));
 
 vi.mock("@/lib/server/rag/indexer", () => ({
@@ -28,6 +34,11 @@ function createParseRequest(requestId = "req_parse_route") {
 describe("document parse route", () => {
   beforeEach(() => {
     vi.mocked(parseDocumentForOwner).mockReset();
+    checkRateLimitAsyncMock.mockReset();
+    checkRateLimitAsyncMock.mockResolvedValue({
+      allowed: true,
+      retryAfterSeconds: 0,
+    });
   });
 
   it("parses an owned document and returns the request id", async () => {

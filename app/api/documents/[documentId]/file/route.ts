@@ -1,12 +1,10 @@
-import { createReadStream } from "node:fs";
-import { Readable } from "node:stream";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getBranchMindAuthContext } from "@/lib/server/auth";
 import { safeErrorWithSession } from "@/lib/server/http";
 import { getOrCreateRequestId, withRequestIdHeader } from "@/lib/server/request";
 import { commitSessionCookie, getOrCreateSession } from "@/lib/server/session";
-import { getDocumentFileStreamInfoForOwner } from "@/lib/server/rag/service";
+import { getDocumentFileForOwner } from "@/lib/server/rag/service";
 
 export const runtime = "nodejs";
 
@@ -79,11 +77,9 @@ function parseByteRange(rangeHeader: string | null, byteLength: number) {
   } satisfies ByteRange;
 }
 
-function createPdfStreamBody(filePath: string, range?: ByteRange) {
-  const stream = range
-    ? createReadStream(filePath, { start: range.start, end: range.end })
-    : createReadStream(filePath);
-  return Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>;
+function createPdfBody(bytes: Uint8Array, range?: ByteRange) {
+  const responseBytes = range ? bytes.slice(range.start, range.end + 1) : bytes;
+  return responseBytes.slice().buffer as ArrayBuffer;
 }
 
 export async function GET(request: NextRequest, context: FileRouteContext) {
@@ -93,10 +89,11 @@ export async function GET(request: NextRequest, context: FileRouteContext) {
   try {
     const { principal, session } = await getBranchMindAuthContext(request);
     const { documentId } = await context.params;
-    const { document, filePath, byteLength } = await getDocumentFileStreamInfoForOwner(
+    const { document, bytes } = await getDocumentFileForOwner(
       principal.id,
       documentId,
     );
+    const byteLength = bytes.byteLength;
 
     const contentType = document.mimeType || "application/pdf";
     const headers = withRequestIdHeader(
@@ -128,7 +125,7 @@ export async function GET(request: NextRequest, context: FileRouteContext) {
         "Content-Range",
         `bytes ${range.start}-${range.end}/${byteLength}`,
       );
-      const response = new NextResponse(createPdfStreamBody(filePath, range), {
+      const response = new NextResponse(createPdfBody(bytes, range), {
         status: 206,
         headers: rangeHeaders,
       });
@@ -137,7 +134,7 @@ export async function GET(request: NextRequest, context: FileRouteContext) {
 
     const fullHeaders = new Headers(headers);
     fullHeaders.set("Content-Length", String(byteLength));
-    const response = new NextResponse(createPdfStreamBody(filePath), {
+    const response = new NextResponse(createPdfBody(bytes), {
       headers: fullHeaders,
     });
 

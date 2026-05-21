@@ -42,13 +42,18 @@ create table branchmind_user_plans (
  alter table branchmind_user_usage enable row level security;
  alter table branchmind_plan_limits enable row level security;
 
+-- Direct clients may read their own plan and usage, but all mutations must
+-- go through server-side service role code.
+ revoke insert, update, delete on branchmind_user_plans from anon, authenticated;
+ revoke insert, update, delete on branchmind_user_usage from anon, authenticated;
+ revoke insert, update, delete on branchmind_plan_limits from anon, authenticated;
+ grant select on branchmind_user_plans to authenticated;
+ grant select on branchmind_user_usage to authenticated;
+ grant select on branchmind_plan_limits to anon, authenticated;
+
 -- RLS policies
  create policy "Users can view own plan"
    on branchmind_user_plans for select
-   using (auth.uid() = user_id);
-
- create policy "Users can update own plan"
-   on branchmind_user_plans for update
    using (auth.uid() = user_id);
 
  create policy "Users can view own usage"

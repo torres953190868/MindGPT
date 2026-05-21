@@ -90,6 +90,7 @@ export type RagRepository = {
 const DATA_DIR = path.join(process.cwd(), "data");
 const DATA_FILE = path.join(DATA_DIR, "branchmind-rag.json");
 const RAG_FILES_DIR = path.join(DATA_DIR, "rag-files");
+const SUPABASE_RAG_FILES_BUCKET = "branchmind-rag-files";
 let writeQueue: Promise<unknown> = Promise.resolve();
 
 function emptyDataFile(): RagDataFile {
@@ -125,6 +126,50 @@ function assertNoError(
     expose: true,
     status: 500,
   });
+}
+
+function getStorageErrorStatus(error: unknown) {
+  if (!error || typeof error !== "object") return null;
+  const value = (error as { status?: unknown; statusCode?: unknown }).status
+    ?? (error as { status?: unknown; statusCode?: unknown }).statusCode;
+  const status = Number(value);
+  return Number.isInteger(status) ? status : null;
+}
+
+function getStorageErrorMessage(error: unknown) {
+  if (!error || typeof error !== "object") return "Unknown storage error";
+  const message = (error as { message?: unknown }).message;
+  return typeof message === "string" && message.trim()
+    ? message
+    : "Unknown storage error";
+}
+
+function isStorageNotFoundError(error: unknown) {
+  return (
+    getStorageErrorStatus(error) === 404 ||
+    /not found|does not exist/i.test(getStorageErrorMessage(error))
+  );
+}
+
+function assertNoStorageError(error: unknown, operation: string) {
+  if (!error) return;
+
+  throw new RagError(
+    `Supabase Storage ${operation} failed: ${getStorageErrorMessage(error)}.`,
+    {
+      code: "RAG_SUPABASE_STORAGE_ERROR",
+      expose: true,
+      status: 500,
+    },
+  );
+}
+
+function getSupabaseRagStorage() {
+  return getSupabaseAdminClient().storage.from(SUPABASE_RAG_FILES_BUCKET);
+}
+
+function createSupabaseStoragePath(userId: string, documentId: string) {
+  return `users/${encodeURIComponent(userId)}/${documentId}.pdf`;
 }
 
 function notFound(): never {
@@ -626,12 +671,20 @@ class SupabaseRagRepository implements RagRepository {
   async createUploadedDocument(upload: RagUpload) {
     const id = createId("doc");
     const createdAt = now();
+    const storagePath = createSupabaseStoragePath(upload.userId ?? "anonymous", id);
+    const storage = getSupabaseRagStorage();
+    const uploadResult = await storage.upload(storagePath, upload.bytes, {
+      contentType: upload.mimeType,
+      upsert: false,
+    });
+    assertNoStorageError(uploadResult.error, "upload document file");
+
     const row: DocumentInsert = {
       id,
       user_id: upload.userId,
       file_name: upload.fileName,
       file_url: null,
-      storage_path: null,
+      storage_path: storagePath,
       mime_type: upload.mimeType,
       page_count: 0,
       title: null,
@@ -652,19 +705,12 @@ class SupabaseRagRepository implements RagRepository {
       .insert(row)
       .select("*")
       .single();
-    assertNoError(error, "create document");
+    if (error) {
+      await storage.remove([storagePath]);
+      assertNoError(error, "create document");
+    }
 
-    const storagePath = path.join(RAG_FILES_DIR, `${id}.pdf`);
-    await mkdir(RAG_FILES_DIR, { recursive: true });
-    await writeFile(storagePath, upload.bytes);
-
-    const updateStorage = await getSupabaseAdminClient()
-      .from("documents")
-      .update({ storage_path: storagePath, updated_at: now() })
-      .eq("id", id);
-    assertNoError(updateStorage.error, "update document storage path");
-
-    return { ...toDocument(requireRow(data, "create document")), storagePath };
+    return toDocument(requireRow(data, "create document"));
   }
 
   async listDocuments(userId: string) {
@@ -712,22 +758,29 @@ class SupabaseRagRepository implements RagRepository {
       .delete()
       .eq("id", document.id);
     assertNoError(error, "delete document");
-    await deleteDocumentFile(document);
+    if (document.storagePath) {
+      const removeResult = await getSupabaseRagStorage().remove([document.storagePath]);
+      if (removeResult.error && !isStorageNotFoundError(removeResult.error)) {
+        assertNoStorageError(removeResult.error, "delete document file");
+      }
+    }
   }
 
-  getDocumentFilePath(document: RagDocument) {
-    return requireFilePath(document);
+  getDocumentFilePath() {
+    return null;
   }
 
   async readDocumentFile(document: RagDocument) {
-    const filePath = requireFilePath(document);
-    if (!filePath) return null;
-    try {
-      return new Uint8Array(await readFile(filePath));
-    } catch (error) {
-      if (isNodeError(error) && error.code === "ENOENT") return null;
-      throw error;
+    if (!document.storagePath) return null;
+    const { data, error } = await getSupabaseRagStorage().download(
+      document.storagePath,
+    );
+    if (error) {
+      if (isStorageNotFoundError(error)) return null;
+      assertNoStorageError(error, "download document file");
     }
+    if (!data) return null;
+    return new Uint8Array(await data.arrayBuffer());
   }
 
   async setDocumentStatus(

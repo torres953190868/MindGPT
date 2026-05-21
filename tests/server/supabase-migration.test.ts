@@ -17,10 +17,21 @@ const messageAttachmentsMigration = readFileSync(
   ),
   "utf8",
 );
+const ragFoundationMigration = readFileSync(
+  join(process.cwd(), "supabase/migrations/20260514010000_pdf_rag_foundation.sql"),
+  "utf8",
+);
 const nodeManualTitlesMigration = readFileSync(
   join(
     process.cwd(),
     "supabase/migrations/20260519010000_branchmind_node_manual_titles.sql",
+  ),
+  "utf8",
+);
+const userPlansMigration = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/20260521000000_branchmind_user_plans.sql",
   ),
   "utf8",
 );
@@ -55,9 +66,33 @@ describe("Supabase foundation migration", () => {
     );
   });
 
+  it("creates a private Supabase Storage bucket for RAG PDF files", () => {
+    expect(ragFoundationMigration).toContain("insert into storage.buckets");
+    expect(ragFoundationMigration).toContain("'branchmind-rag-files'");
+    expect(ragFoundationMigration).toContain("false");
+  });
+
   it("adds node manual title persistence", () => {
     expect(nodeManualTitlesMigration).toContain(
       "add column if not exists title_manually_edited boolean not null default false",
+    );
+  });
+
+  it("keeps user plan fields read-only for authenticated clients", () => {
+    expect(userPlansMigration).toContain(
+      "create policy \"Users can view own plan\"",
+    );
+    expect(userPlansMigration).toContain(
+      "grant select on branchmind_user_plans to authenticated",
+    );
+    expect(userPlansMigration).toContain(
+      "revoke insert, update, delete on branchmind_user_plans from anon, authenticated",
+    );
+    expect(userPlansMigration).not.toMatch(
+      /create policy\s+"Users can update own plan"[\s\S]*?for update/i,
+    );
+    expect(userPlansMigration).not.toMatch(
+      /on branchmind_user_plans\s+for update/i,
     );
   });
 });

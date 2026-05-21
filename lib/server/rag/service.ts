@@ -1,4 +1,3 @@
-import { stat } from "node:fs/promises";
 import type { ChatAttachment, ChatDocumentContext } from "@/lib/types";
 import { generateGroundedAnswer } from "./answer";
 import { getMaxPdfSizeBytes } from "./config";
@@ -37,10 +36,6 @@ function isPdf(fileName: string, mimeType: string) {
     mimeType.toLowerCase() === "application/pdf" ||
     fileName.toLowerCase().endsWith(".pdf")
   );
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error;
 }
 
 function throwPdfFileNotFound(): never {
@@ -153,32 +148,6 @@ export async function getDocumentFileForOwner(userId: string, documentId: string
   }
 
   return { document, bytes };
-}
-
-export async function getDocumentFileStreamInfoForOwner(
-  userId: string,
-  documentId: string,
-) {
-  const repository = getRagRepository();
-  const document = await requireOwnedDocument(userId, documentId);
-  const filePath = repository.getDocumentFilePath(document);
-  if (!filePath) throwPdfFileNotFound();
-
-  try {
-    const fileStats = await stat(filePath);
-    if (!fileStats.isFile()) throwPdfFileNotFound();
-
-    return {
-      document,
-      filePath,
-      byteLength: fileStats.size,
-    };
-  } catch (error) {
-    if (isNodeError(error) && error.code === "ENOENT") {
-      throwPdfFileNotFound();
-    }
-    throw error;
-  }
 }
 
 export async function getDocumentChunksForOwner(userId: string, documentId: string) {

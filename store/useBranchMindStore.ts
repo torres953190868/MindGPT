@@ -370,6 +370,24 @@ function clearPendingSyncRecord(projectId: string) {
   }
 }
 
+function clearPendingProjectSyncLocally(
+  set: BranchMindSet,
+  projectId: string,
+) {
+  clearPendingSyncRecord(projectId);
+  set((current) => {
+    const nextPendingSyncs = { ...current.pendingProjectSyncs };
+    delete nextPendingSyncs[projectId];
+    return {
+      pendingProjectSyncs: nextPendingSyncs,
+      pendingInitialProjectStream:
+        current.pendingInitialProjectStream?.projectId === projectId
+          ? null
+          : current.pendingInitialProjectStream,
+    };
+  });
+}
+
 function removeProjectLocally(
   set: BranchMindSet,
   get: BranchMindGet,
@@ -1096,31 +1114,45 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
 
   deleteProject: async (projectId) => {
     const pendingSync = get().pendingProjectSyncs[projectId];
-    if (pendingSync) {
-      clearPendingSyncRecord(projectId);
-      set((current) => {
-        const nextPendingSyncs = { ...current.pendingProjectSyncs };
-        delete nextPendingSyncs[projectId];
-        return { pendingProjectSyncs: nextPendingSyncs };
-      });
+    if (pendingSync && pendingSync.status !== "synced") {
+      clearPendingProjectSyncLocally(set, projectId);
       removeProjectLocally(set, get, projectId);
       return;
     }
 
     try {
-      const response = await fetch(`/api/projects/${projectId}`, { method: "DELETE" });
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
       const data = await readJson<ProjectsResponse>(response);
-      const activeProject = getActiveProject(data.projects, get().activeProjectId);
+      if (pendingSync) clearPendingSyncRecord(projectId);
 
-      set({
-        projects: data.projects,
-        activeProjectId: activeProject?.id ?? null,
-        selectedNodeId: getSelectedNodeId(activeProject, get().selectedNodeId),
+      set((current) => {
+        const activeProject = getActiveProject(data.projects, current.activeProjectId);
+        const nextPendingSyncs = pendingSync
+          ? Object.fromEntries(
+              Object.entries(current.pendingProjectSyncs).filter(
+                ([pendingProjectId]) => pendingProjectId !== projectId,
+              ),
+            )
+          : current.pendingProjectSyncs;
+
+        return {
+          projects: data.projects,
+          activeProjectId: activeProject?.id ?? null,
+          selectedNodeId: getSelectedNodeId(activeProject, current.selectedNodeId),
+          pendingProjectSyncs: nextPendingSyncs,
+          pendingInitialProjectStream:
+            current.pendingInitialProjectStream?.projectId === projectId
+              ? null
+              : current.pendingInitialProjectStream,
+        };
       });
     } catch (error) {
       if (isNotFoundError(error)) {
+        if (pendingSync) clearPendingProjectSyncLocally(set, projectId);
         removeProjectLocally(set, get, projectId);
-        void get().hydrate({ force: true });
         return;
       }
 
