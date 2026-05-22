@@ -30,26 +30,26 @@ function UsageCard({
   const barColor = percentage >= 95 ? "bg-red-500" : percentage >= 80 ? "bg-amber-500" : tone.bar;
 
   return (
-    <div className="rounded-lg border border-[#ddd4c7] bg-[#fffdf8] p-5 shadow-[0_14px_34px_rgba(52,45,35,0.05)]">
+    <div className="rounded-lg border border-neutral-200 bg-surface-elevated p-5 shadow-md">
       <div className="flex items-center gap-3">
         <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${tone.icon}`}>
           <Icon size={18} />
         </span>
         <div>
-          <p className="text-sm font-semibold text-[#5e5661]">{label}</p>
-          <p className="text-lg font-extrabold text-[#29252f]">
+          <p className="text-sm font-semibold text-neutral-700">{label}</p>
+          <p className="text-lg font-extrabold text-neutral-900">
             {used}
-            {hasLimit && <span className="text-sm font-semibold text-[#8d838d]"> / {limit}</span>}
+            {hasLimit && <span className="text-sm font-semibold text-neutral-500"> / {limit}</span>}
           </p>
         </div>
       </div>
       {hasLimit && (
         <div className="mt-3">
-          <div className="h-2 overflow-hidden rounded-full bg-[#ede6db]">
+          <div className="h-2 overflow-hidden rounded-full bg-neutral-200">
             <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${percentage}%` }} />
           </div>
           <div className="mt-1 flex justify-between">
-            <span className={`text-[11px] font-semibold ${isNearLimit ? "text-amber-600" : "text-[#8d838d]"}`}>
+            <span className={`text-[11px] font-semibold ${isNearLimit ? "text-amber-600" : "text-neutral-500"}`}>
               {percentage}% used
             </span>
             {percentage >= 95 && <span className="text-[11px] font-bold text-red-500">Limit reached</span>}
@@ -87,7 +87,7 @@ export default function UsageSettingsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 size={24} className="animate-spin text-[#766d78]" />
+        <Loader2 size={24} className="animate-spin text-neutral-600" />
       </div>
     );
   }
@@ -95,20 +95,20 @@ export default function UsageSettingsPage() {
   const usage = account?.usage;
   const usageTones = {
     projects: {
-      icon: "bg-[#ebe4f8] text-[#5a3d88] ring-1 ring-[#d8caef]",
-      bar: "bg-[#6e4ca0]",
+      icon: "bg-brand-50 text-brand-800 ring-1 ring-brand-100",
+      bar: "bg-brand-600",
     },
     nodes: {
-      icon: "bg-[#deebe4] text-[#315d4f] ring-1 ring-[#c8ded4]",
-      bar: "bg-[#315d4f]",
+      icon: "bg-success-50 text-success-700 ring-1 ring-success-100",
+      bar: "bg-success-600",
     },
     documents: {
-      icon: "bg-[#e8edf2] text-[#48637a] ring-1 ring-[#d1dae2]",
-      bar: "bg-[#48637a]",
+      icon: "bg-neutral-100 text-neutral-700 ring-1 ring-neutral-200",
+      bar: "bg-neutral-600",
     },
     messages: {
-      icon: "bg-[#f4e2df] text-[#8f3f3a] ring-1 ring-[#e8c9c4]",
-      bar: "bg-[#8f3f3a]",
+      icon: "bg-danger-50 text-danger-600 ring-1 ring-danger-100",
+      bar: "bg-danger-600",
     },
   };
 
@@ -127,34 +127,34 @@ export default function UsageSettingsPage() {
       </div>
 
       {/* History Table */}
-      <div className="rounded-lg border border-[#ddd4c7] bg-[#fffdf8] p-5 shadow-[0_18px_42px_rgba(52,45,35,0.055)]">
-        <h2 className="text-base font-extrabold text-[#29252f]">Daily Usage History</h2>
-        <p className="mt-0.5 text-sm font-semibold text-[#766d78]">Last 30 days of resource usage.</p>
+      <div className="rounded-lg border border-neutral-200 bg-surface-elevated p-5 shadow-md">
+        <h2 className="text-base font-extrabold text-neutral-900">Daily Usage History</h2>
+        <p className="mt-0.5 text-sm font-semibold text-neutral-600">Last 30 days of resource usage.</p>
 
         {history.length === 0 ? (
-          <div className="mt-4 rounded-lg bg-[#f6f1e9] py-8 text-center">
-            <p className="text-sm font-semibold text-[#8d838d]">No usage history available yet.</p>
+          <div className="mt-4 rounded-lg bg-surface-muted py-8 text-center">
+            <p className="text-sm font-semibold text-neutral-500">No usage history available yet.</p>
           </div>
         ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-[#ddd4c7]">
-                  <th className="py-2 pr-4 text-left font-semibold text-[#5e5661]">Date</th>
-                  <th className="py-2 pr-4 text-right font-semibold text-[#5e5661]">Projects</th>
-                  <th className="py-2 pr-4 text-right font-semibold text-[#5e5661]">Nodes</th>
-                  <th className="py-2 pr-4 text-right font-semibold text-[#5e5661]">PDFs</th>
-                  <th className="py-2 text-right font-semibold text-[#5e5661]">AI Msgs</th>
+                <tr className="border-b border-neutral-200">
+                  <th className="py-2 pr-4 text-left font-semibold text-neutral-700">Date</th>
+                  <th className="py-2 pr-4 text-right font-semibold text-neutral-700">Projects</th>
+                  <th className="py-2 pr-4 text-right font-semibold text-neutral-700">Nodes</th>
+                  <th className="py-2 pr-4 text-right font-semibold text-neutral-700">PDFs</th>
+                  <th className="py-2 text-right font-semibold text-neutral-700">AI Msgs</th>
                 </tr>
               </thead>
               <tbody>
                 {history.map((row) => (
-                  <tr key={row.date} className="border-b border-[#eee7de] last:border-0">
-                    <td className="py-2.5 pr-4 font-medium text-[#29252f]">{row.date}</td>
-                    <td className="py-2.5 pr-4 text-right text-[#5e5661]">{row.projectCount}</td>
-                    <td className="py-2.5 pr-4 text-right text-[#5e5661]">{row.nodeCount}</td>
-                    <td className="py-2.5 pr-4 text-right text-[#5e5661]">{row.documentCount}</td>
-                    <td className="py-2.5 text-right text-[#5e5661]">{row.aiMessageCount}</td>
+                  <tr key={row.date} className="border-b border-neutral-100 last:border-0">
+                    <td className="py-2.5 pr-4 font-medium text-neutral-900">{row.date}</td>
+                    <td className="py-2.5 pr-4 text-right text-neutral-700">{row.projectCount}</td>
+                    <td className="py-2.5 pr-4 text-right text-neutral-700">{row.nodeCount}</td>
+                    <td className="py-2.5 pr-4 text-right text-neutral-700">{row.documentCount}</td>
+                    <td className="py-2.5 text-right text-neutral-700">{row.aiMessageCount}</td>
                   </tr>
                 ))}
               </tbody>

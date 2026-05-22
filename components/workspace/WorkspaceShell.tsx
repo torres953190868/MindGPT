@@ -110,7 +110,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
         aria-label="Loading BranchMind workspace"
         aria-busy="true"
         data-testid="workspace-loading-state"
-        className="grid min-h-screen place-items-center px-5 text-lg font-black text-[#5c5065]"
+        className="grid min-h-screen place-items-center px-5 text-lg font-black text-neutral-700"
       >
         <p role="status" aria-live="polite">
           Loading BranchMind...
@@ -128,15 +128,15 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
       >
         <section
           aria-labelledby="workspace-project-not-found-title"
-          className="w-full max-w-2xl rounded-[30px] border border-white/80 bg-white/72 p-6 text-center shadow-xl shadow-[#e1d1ee]/50"
+          className="w-full max-w-2xl rounded-[30px] border border-white/80 bg-white/72 p-6 text-center shadow-xl shadow-brand-100/50"
         >
           <h1
             id="workspace-project-not-found-title"
-            className="text-3xl font-black text-[#342b3a]"
+            className="text-3xl font-black text-neutral-900"
           >
             Project not found
           </h1>
-          <p className="mt-3 text-[#665a70]">Create a new BranchMind project.</p>
+          <p className="mt-3 text-neutral-600">Create a new BranchMind project.</p>
           <div className="mt-6">
             <ProjectLauncher />
           </div>

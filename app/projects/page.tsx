@@ -5,7 +5,7 @@ export default function ProjectsPage() {
     <main
       aria-labelledby="projects-title"
       data-testid="projects-page"
-      className="branchmind-projects-surface min-h-screen p-3 text-[#241d30] md:p-4"
+      className="branchmind-projects-surface min-h-screen p-3 text-neutral-900 md:p-4"
     >
       <ProjectCardList />
     </main>

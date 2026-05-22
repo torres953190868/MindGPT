@@ -48,7 +48,7 @@ export function WorkspaceResizeHandle({
       : "hidden cursor-col-resize lg:block";
   const verticalWrapperClassName = isCompact
     ? `${verticalClassName} h-40 self-start bg-transparent`
-    : `${verticalClassName} bg-[#fcfbfd]`;
+    : `${verticalClassName} bg-surface-canvas`;
   const verticalButtonClassName = isCompact
     ? "left-0 top-3 h-32 w-full cursor-col-resize rounded-md"
     : "left-0 top-0 h-full w-full cursor-col-resize";
@@ -73,7 +73,7 @@ export function WorkspaceResizeHandle({
       }`}
     >
       {!isVertical && (
-        <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-[#e9e5f0]" />
+        <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-neutral-200" />
       )}
       <button
         type="button"
@@ -83,14 +83,14 @@ export function WorkspaceResizeHandle({
         data-testid={testId}
         onPointerDown={handlePointerDown}
         onMouseDown={handleMouseDown}
-        className={`group absolute grid place-items-center border border-transparent bg-transparent transition hover:bg-[#f6f3fb] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40 ${
+        className={`group absolute grid place-items-center border border-transparent bg-transparent transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-200/40 ${
           isVertical
             ? verticalButtonClassName
             : "left-1/2 top-1/2 h-8 w-24 -translate-x-1/2 -translate-y-1/2 cursor-row-resize rounded-md"
         }`}
       >
         <span
-          className={`rounded-full bg-[#9a83bf] transition ${
+          className={`rounded-full bg-brand-400 transition ${
             isVertical ? verticalGripClassName : "h-0.5 w-8 opacity-0 group-hover:opacity-80"
           }`}
         />

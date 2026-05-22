@@ -421,7 +421,7 @@ export function WorkspaceCanvasShell({
     transform: `translate3d(0, ${canvasIntroPanOffsetY}px, 0)`,
   } as CSSProperties;
   const workspaceGridClassName = [
-    "grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden border border-neutral-200 bg-white shadow-xl shadow-[rgba(44,35,62,0.08)] lg:h-full lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:shadow-none",
+    "grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden border border-neutral-200 bg-white shadow-xl lg:h-full lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:shadow-none",
     dataDraftWorkspace ? "rounded-xl" : "rounded-b-xl border-t-0",
   ].join(" ");
   const mobileTabsClassName = hasProjectNotes
@@ -960,7 +960,7 @@ export function WorkspaceCanvasShell({
       aria-labelledby="workspace-title"
       data-testid="workspace-shell"
       data-draft-workspace={dataDraftWorkspace ? "true" : undefined}
-      className="branchmind-workspace-surface flex min-h-screen flex-col bg-[#fbfafc] p-3 text-[#272033] lg:h-screen lg:min-h-[720px] lg:overflow-hidden lg:p-0"
+      className="branchmind-workspace-surface flex min-h-screen flex-col bg-surface-bg p-3 text-neutral-900 lg:h-screen lg:min-h-[720px] lg:overflow-hidden lg:p-0"
     >
       {dataDraftWorkspace && (
         <h1 id="workspace-title" className="sr-only">
@@ -1183,7 +1183,7 @@ export function WorkspaceCanvasShell({
         <section
           aria-labelledby="mind-map-section-title"
           data-testid="mind-map-canvas"
-          className={`relative h-[var(--mobile-map-height)] overflow-hidden rounded-lg border border-neutral-200 bg-[#fcfbfd] shadow-sm lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none ${
+          className={`relative h-[var(--mobile-map-height)] overflow-hidden rounded-lg border border-neutral-200 bg-surface-canvas shadow-sm lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none ${
             mobileWorkspaceView === "map" ? "" : "hidden lg:block"
           }`}
         >

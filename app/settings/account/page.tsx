@@ -10,10 +10,10 @@ function getInitial(email: string | null | undefined) {
 }
 
 const inputClassName =
-  "h-10 w-full rounded-lg border border-[#d9d0c2] bg-[#f8f4ed] px-4 text-sm font-semibold text-[#29252f] outline-none transition placeholder:text-[#9e958f] focus:border-[#315d4f] focus:ring-2 focus:ring-[#dbe9e2] disabled:cursor-not-allowed disabled:border-[#e2dacd] disabled:bg-[#eee9df] disabled:text-[#978f87]";
+  "h-10 w-full rounded-lg border border-neutral-200 bg-surface-muted px-4 text-sm font-semibold text-neutral-900 outline-none transition placeholder:text-neutral-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:border-neutral-200 disabled:bg-neutral-100 disabled:text-neutral-500";
 
 const primaryButtonClassName =
-  "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#28242d] px-4 text-sm font-black text-[#fffdf8] shadow-[0_12px_24px_rgba(40,36,45,0.18)] transition hover:-translate-y-0.5 hover:bg-[#1e1a24] disabled:cursor-not-allowed disabled:bg-[#d8d0c5] disabled:text-[#8a8178] disabled:shadow-none disabled:hover:translate-y-0";
+  "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-neutral-900 px-4 text-sm font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-500 disabled:shadow-none disabled:hover:translate-y-0";
 
 function SettingsCard({
   title,
@@ -25,9 +25,9 @@ function SettingsCard({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-[#ddd4c7] bg-[#fffdf8] p-5 shadow-[0_18px_42px_rgba(52,45,35,0.055)]">
-      <h2 className="text-base font-black text-[#29252f]">{title}</h2>
-      {description && <p className="mt-0.5 text-sm font-semibold text-[#766d78]">{description}</p>}
+    <section className="rounded-lg border border-neutral-200 bg-surface-elevated p-5 shadow-md">
+      <h2 className="text-base font-black text-neutral-900">{title}</h2>
+      {description && <p className="mt-0.5 text-sm font-semibold text-neutral-600">{description}</p>}
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -128,7 +128,7 @@ export default function AccountSettingsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 size={24} className="animate-spin text-[#766d78]" />
+        <Loader2 size={24} className="animate-spin text-neutral-600" />
       </div>
     );
   }
@@ -154,15 +154,15 @@ export default function AccountSettingsPage() {
       <SettingsCard title="Profile" description="Your public profile information.">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-4">
-            <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-[#deebe4] text-lg font-black text-[#315d4f] ring-1 ring-inset ring-[#c8ded4]">
+            <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-success-50 text-lg font-black text-success-700 ring-1 ring-inset ring-success-100">
               {getInitial(profileName)}
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-black text-[#29252f]">{profileName}</p>
-              <p className="mt-0.5 truncate text-sm font-semibold text-[#766d78]">{profileMeta}</p>
+              <p className="truncate text-sm font-black text-neutral-900">{profileName}</p>
+              <p className="mt-0.5 truncate text-sm font-semibold text-neutral-600">{profileMeta}</p>
             </div>
           </div>
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-[#ddd4c7] bg-[#f4efe7] px-3 py-1.5 text-xs font-black text-[#5e5661]">
+          <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-neutral-200 bg-surface-muted px-3 py-1.5 text-xs font-black text-neutral-700">
             <ShieldCheck size={14} />
             {canEditAccount ? "Cloud account" : isLocalMode ? "Local workspace" : "Signed out"}
           </span>
@@ -172,7 +172,7 @@ export default function AccountSettingsPage() {
       <SettingsCard title="Display Name" description="This is how your name appears across BranchMind.">
         <div className="space-y-3">
           <div className="relative">
-            <UserCircle size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8d838d]" />
+            <UserCircle size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
             <input
               type="text"
               value={displayName}
@@ -193,13 +193,13 @@ export default function AccountSettingsPage() {
               Save
             </button>
             {nameMessage && (
-              <p className={`text-sm font-bold ${nameMessage.includes("updated") ? "text-[#2f806b]" : "text-[#8f3f3a]"}`}>
+              <p className={`text-sm font-bold ${nameMessage.includes("updated") ? "text-success-600" : "text-danger-600"}`}>
                 {nameMessage}
               </p>
             )}
           </div>
           {!canEditAccount && (
-            <p className="text-xs font-semibold text-[#8d838d]">
+            <p className="text-xs font-semibold text-neutral-500">
               Display names are saved with a signed-in account.
             </p>
           )}
@@ -207,18 +207,18 @@ export default function AccountSettingsPage() {
       </SettingsCard>
 
       <SettingsCard title="Email Address" description="Your email is used for sign-in and notifications.">
-        <div className="flex flex-col gap-3 rounded-lg border border-[#ddd4c7] bg-[#f6f1e9] px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-surface-muted px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-[#fffdf8] text-[#716675] ring-1 ring-inset ring-[#d9d0c2]">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-elevated text-neutral-600 ring-1 ring-inset ring-neutral-200">
               <Mail size={16} />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-black text-[#29252f]">{emailTitle}</p>
-              <p className="mt-0.5 text-xs font-semibold text-[#766d78]">{emailDescription}</p>
+              <p className="truncate text-sm font-black text-neutral-900">{emailTitle}</p>
+              <p className="mt-0.5 text-xs font-semibold text-neutral-600">{emailDescription}</p>
             </div>
           </div>
           {email && (
-            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-[#deebe4] px-2.5 py-1 text-xs font-black text-[#315d4f]">
+            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-success-50 px-2.5 py-1 text-xs font-black text-success-700">
               <CheckCircle2 size={13} />
               Verified
             </span>
@@ -226,7 +226,7 @@ export default function AccountSettingsPage() {
           {isGuestMode && (
             <Link
               href="/auth/sign-in?next=/settings/account"
-              className="inline-flex min-h-9 w-fit items-center justify-center rounded-lg bg-[#28242d] px-3 text-xs font-black text-[#fffdf8] transition hover:bg-[#1e1a24] focus:outline-none focus:ring-2 focus:ring-[#28242d]/20"
+              className="inline-flex min-h-9 w-fit items-center justify-center rounded-lg bg-neutral-900 px-3 text-xs font-black text-white transition hover:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-brand-200"
             >
               Sign in
             </Link>
@@ -264,22 +264,22 @@ export default function AccountSettingsPage() {
                 Update Password
               </button>
               {passwordMessage && (
-                <p className={`text-sm font-bold ${passwordMessage.includes("successfully") ? "text-[#2f806b]" : "text-[#8f3f3a]"}`}>
+                <p className={`text-sm font-bold ${passwordMessage.includes("successfully") ? "text-success-600" : "text-danger-600"}`}>
                   {passwordMessage}
                 </p>
               )}
             </div>
           </div>
         ) : (
-          <div className="flex items-start gap-3 rounded-lg border border-[#ddd4c7] bg-[#f6f1e9] px-4 py-3.5">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-[#fffdf8] text-[#716675] ring-1 ring-inset ring-[#d9d0c2]">
+          <div className="flex items-start gap-3 rounded-lg border border-neutral-200 bg-surface-muted px-4 py-3.5">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-elevated text-neutral-600 ring-1 ring-inset ring-neutral-200">
               <KeyRound size={16} />
             </span>
             <div>
-              <p className="text-sm font-black text-[#29252f]">
+              <p className="text-sm font-black text-neutral-900">
                 {isLocalMode ? "Password is not used in this workspace" : "Sign in to update your password"}
               </p>
-              <p className="mt-0.5 text-xs font-semibold leading-5 text-[#766d78]">
+              <p className="mt-0.5 text-xs font-semibold leading-5 text-neutral-600">
                 {isLocalMode
                   ? "Local workspaces use an anonymous browser session instead of email/password auth."
                   : "Password management is available once your account session is active."}

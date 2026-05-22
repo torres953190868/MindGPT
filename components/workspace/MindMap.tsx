@@ -118,7 +118,9 @@ export function MindMap({
             targetHandle: isBranchChild ? "branch-target" : "continue-target",
             animated: selectedNodeId === node.id || selectedNodeId === childId,
             style: {
-              stroke: isBranchChild ? "#c4ade6" : "#9bd8c6",
+              stroke: isBranchChild
+                ? "var(--node-handle-branch)"
+                : "var(--node-handle-continue)",
               strokeWidth: 2,
               strokeDasharray: "6 5",
             },

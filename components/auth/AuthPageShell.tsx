@@ -222,14 +222,14 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
         <header className="flex items-center justify-between gap-3">
           <Link
             href="/"
-            className="inline-flex min-h-11 items-center gap-2 rounded-[18px] border border-white/90 bg-white/75 px-4 py-2.5 text-sm font-extrabold text-[#554665] shadow-sm transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+            className="inline-flex min-h-11 items-center gap-2 rounded-[18px] border border-white/90 bg-white/75 px-4 py-2.5 text-sm font-extrabold text-neutral-800 shadow-sm transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100"
           >
             <ArrowLeft size={17} />
             Home
           </Link>
           <Link
             href="/projects"
-            className="inline-flex min-h-11 items-center gap-2 rounded-[18px] bg-[#e5f6ee] px-4 py-2.5 text-sm font-black text-[#3d7558] shadow-sm transition hover:bg-[#d8f0e4] focus:outline-none focus:ring-4 focus:ring-[#d7f0e4]"
+            className="inline-flex min-h-11 items-center gap-2 rounded-[18px] bg-success-50 px-4 py-2.5 text-sm font-black text-success-700 shadow-sm transition hover:bg-success-100 focus:outline-none focus:ring-4 focus:ring-success-100"
           >
             <CheckCircle2 size={16} />
             Projects
@@ -237,12 +237,12 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
         </header>
 
         <section className="grid flex-1 place-items-center py-8">
-          <div className="w-full max-w-md rounded-[24px] border border-white/85 bg-white/86 p-5 shadow-2xl shadow-[#dfcfe9]/45 backdrop-blur md:p-6">
+          <div className="w-full max-w-md rounded-[24px] border border-white/85 bg-white/86 p-5 shadow-2xl shadow-brand-100/45 backdrop-blur md:p-6">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-[#74687c]">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-neutral-600">
                 {content.eyebrow}
               </p>
-              <h1 id="auth-title" className="mt-2 text-3xl font-black text-[#342b3a]">
+              <h1 id="auth-title" className="mt-2 text-3xl font-black text-neutral-900">
                 {content.title}
               </h1>
             </div>
@@ -250,12 +250,12 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
             <form onSubmit={handleSubmit} className="mt-5 space-y-3">
               {needsEmail && (
                 <label className="block">
-                  <span className="mb-1.5 block text-sm font-black text-[#554665]">Email</span>
+                  <span className="mb-1.5 block text-sm font-black text-neutral-800">Email</span>
                   <span className="relative block">
                     <Mail
                       aria-hidden="true"
                       size={17}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7b7183]"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500"
                     />
                     <input
                       type="email"
@@ -264,7 +264,7 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
                       autoComplete="email"
                       disabled={isSubmitting}
                       data-testid="auth-email-input"
-                      className="h-11 w-full rounded-[16px] border border-[#e8ddf2] bg-white pl-10 pr-3 text-sm text-[#332b38] outline-none transition placeholder:text-[#7b7183] focus:border-[#a98cc9] focus:ring-4 focus:ring-[#eadcf6]"
+                      className="h-11 w-full rounded-[16px] border border-neutral-200 bg-white pl-10 pr-3 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-500 focus:border-brand-400 focus:ring-4 focus:ring-brand-100"
                     />
                   </span>
                 </label>
@@ -272,12 +272,12 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
 
               {needsPassword && (
                 <label className="block">
-                  <span className="mb-1.5 block text-sm font-black text-[#554665]">Password</span>
+                  <span className="mb-1.5 block text-sm font-black text-neutral-800">Password</span>
                   <span className="relative block">
                     <LockKeyhole
                       aria-hidden="true"
                       size={17}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7b7183]"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500"
                     />
                     <input
                       type={showPassword ? "text" : "password"}
@@ -286,12 +286,12 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
                       autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
                       disabled={isSubmitting}
                       data-testid="auth-password-input"
-                      className="h-11 w-full rounded-[16px] border border-[#e8ddf2] bg-white pl-10 pr-12 text-sm text-[#332b38] outline-none transition placeholder:text-[#7b7183] focus:border-[#a98cc9] focus:ring-4 focus:ring-[#eadcf6]"
+                      className="h-11 w-full rounded-[16px] border border-neutral-200 bg-white pl-10 pr-12 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-500 focus:border-brand-400 focus:ring-4 focus:ring-brand-100"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword((visible) => !visible)}
-                      className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full text-[#6f6478] transition hover:bg-[#f1e8fb]"
+                      className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full text-neutral-600 transition hover:bg-brand-50"
                       aria-label={showPassword ? "Hide password" : "Show password"}
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -302,14 +302,14 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
 
               {needsConfirmation && (
                 <label className="block">
-                  <span className="mb-1.5 block text-sm font-black text-[#554665]">
+                  <span className="mb-1.5 block text-sm font-black text-neutral-800">
                     Confirm password
                   </span>
                   <span className="relative block">
                     <KeyRound
                       aria-hidden="true"
                       size={17}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7b7183]"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500"
                     />
                     <input
                       type={showPassword ? "text" : "password"}
@@ -318,7 +318,7 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
                       autoComplete="new-password"
                       disabled={isSubmitting}
                       data-testid="auth-confirm-password-input"
-                      className="h-11 w-full rounded-[16px] border border-[#e8ddf2] bg-white pl-10 pr-3 text-sm text-[#332b38] outline-none transition placeholder:text-[#7b7183] focus:border-[#a98cc9] focus:ring-4 focus:ring-[#eadcf6]"
+                      className="h-11 w-full rounded-[16px] border border-neutral-200 bg-white pl-10 pr-3 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-500 focus:border-brand-400 focus:ring-4 focus:ring-brand-100"
                     />
                   </span>
                 </label>
@@ -328,7 +328,7 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
                 type="submit"
                 disabled={isSubmitting}
                 data-testid="auth-submit-button"
-                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[16px] bg-[#f1e8fb] px-4 text-sm font-black text-[#5d427d] transition hover:bg-[#e4d5f6] disabled:cursor-not-allowed disabled:opacity-65"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[16px] bg-brand-50 px-4 text-sm font-black text-brand-800 transition hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-65"
               >
                 {isSubmitting ? <Loader2 className="animate-spin" size={16} /> : <Mail size={16} />}
                 {isSubmitting ? content.pendingLabel : content.submitLabel}
@@ -341,7 +341,7 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
                 onClick={handleGoogleSignIn}
                 disabled={isSubmitting}
                 data-testid="google-sign-in-button"
-                className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[16px] bg-[#e5f6ee] px-4 text-sm font-black text-[#3d7558] transition hover:bg-[#d8f0e4] disabled:cursor-not-allowed disabled:opacity-65"
+                className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[16px] bg-success-50 px-4 text-sm font-black text-success-700 transition hover:bg-success-100 disabled:cursor-not-allowed disabled:opacity-65"
               >
                 <Chrome size={16} />
                 Continue with Google
@@ -352,7 +352,7 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
               <div className="mt-3 text-center">
                 <Link
                   href={forgotHref}
-                  className="text-sm font-bold text-[#5d427d] underline decoration-[#cab6df] underline-offset-4"
+                  className="text-sm font-bold text-brand-800 underline decoration-brand-200 underline-offset-4"
                 >
                   Forgot password?
                 </Link>
@@ -363,7 +363,7 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
               <p
                 role="status"
                 data-testid="auth-status"
-                className="mt-3 rounded-[16px] bg-[#e5f6ee] px-3 py-2 text-sm font-bold text-[#315f47]"
+                className="mt-3 rounded-[16px] bg-success-50 px-3 py-2 text-sm font-bold text-success-700"
               >
                 {status}
               </p>
@@ -372,18 +372,18 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
               <p
                 role="alert"
                 data-testid="auth-error"
-                className="mt-3 rounded-[16px] bg-[#ffeceb] px-3 py-2 text-sm font-bold text-[#8f3f3a]"
+                className="mt-3 rounded-[16px] bg-danger-100 px-3 py-2 text-sm font-bold text-danger-600"
               >
                 {error}
               </p>
             )}
 
             {(mode === "sign-in" || mode === "sign-up") && (
-              <p className="mt-5 text-center text-sm font-semibold text-[#6f6478]">
+              <p className="mt-5 text-center text-sm font-semibold text-neutral-600">
                 {mode === "sign-up" ? "Already have an account?" : "Need an account?"}{" "}
                 <Link
                   href={alternateHref}
-                  className="font-black text-[#5d427d] underline decoration-[#cab6df] underline-offset-4"
+                  className="font-black text-brand-800 underline decoration-brand-200 underline-offset-4"
                 >
                   {mode === "sign-up" ? "Sign in" : "Create one"}
                 </Link>
@@ -391,11 +391,11 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
             )}
 
             {mode === "forgot-password" && (
-              <p className="mt-5 text-center text-sm font-semibold text-[#6f6478]">
+              <p className="mt-5 text-center text-sm font-semibold text-neutral-600">
                 Remembered it?{" "}
                 <Link
                   href={`/auth/sign-in?${new URLSearchParams({ next: nextPath }).toString()}`}
-                  className="font-black text-[#5d427d] underline decoration-[#cab6df] underline-offset-4"
+                  className="font-black text-brand-800 underline decoration-brand-200 underline-offset-4"
                 >
                   Sign in
                 </Link>

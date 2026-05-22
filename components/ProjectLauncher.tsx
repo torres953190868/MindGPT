@@ -119,10 +119,10 @@ function ComposerProjectLauncher() {
         aria-busy={isSubmitting}
         aria-describedby={displayError ? errorId : isSubmitting ? statusId : undefined}
         data-testid="create-project-form"
-        className="rounded-[22px] border border-white/90 bg-white/88 p-3 text-left shadow-xl shadow-[#d6c7e8]/30 backdrop-blur md:rounded-[28px] md:p-5 md:shadow-2xl"
+        className="rounded-[22px] border border-white/90 bg-white/88 p-3 text-left shadow-xl backdrop-blur md:rounded-[28px] md:p-5 md:shadow-2xl"
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="rounded-full bg-[#e5f6ee] px-3 py-1.5 text-[11px] font-black text-[#3d7558]">
+          <span className="rounded-full bg-success-50 px-3 py-1.5 text-[11px] font-black text-success-700">
             Private workspace
           </span>
         </div>
@@ -134,7 +134,7 @@ function ComposerProjectLauncher() {
           />
         </div>
 
-        <div className="relative mt-3 rounded-[20px] border border-[#e8e0ef] bg-[#faf8fc] shadow-sm transition focus-within:border-[#c4aed8] focus-within:bg-white focus-within:shadow-lg focus-within:shadow-[#d6c7e8]/20 focus-within:ring-4 focus-within:ring-[#eadcf7]/40">
+        <div className="relative mt-3 rounded-[20px] border border-neutral-200 bg-surface-soft shadow-sm transition focus-within:border-brand-300 focus-within:bg-white focus-within:shadow-lg focus-within:shadow-brand-100/30 focus-within:ring-4 focus-within:ring-brand-100/50">
           <label className="sr-only" htmlFor={topicInputId}>
             Topic
           </label>
@@ -148,7 +148,7 @@ function ComposerProjectLauncher() {
             data-testid="project-topic-input"
             placeholder="Start with a research question..."
             rows={1}
-            className="min-h-11 w-full resize-none bg-transparent px-4 pt-4 pb-16 text-base leading-6 text-[#332b38] outline-none transition placeholder:text-[#9a8faa] disabled:cursor-not-allowed disabled:opacity-70 md:min-h-28 md:text-lg md:leading-8"
+            className="min-h-11 w-full resize-none bg-transparent px-4 pt-4 pb-16 text-base leading-6 text-neutral-900 outline-none transition placeholder:text-neutral-500 disabled:cursor-not-allowed disabled:opacity-70 md:min-h-28 md:text-lg md:leading-8"
           />
           <div className="absolute bottom-3 left-3 flex items-center gap-2">
             <AttachmentMenuButton controls={composerControls} />
@@ -160,7 +160,7 @@ function ComposerProjectLauncher() {
               disabled={isSubmitting || !topic.trim()}
               aria-label="Create new project"
               data-testid="create-project-button"
-              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#7c5fb1] px-4 text-sm font-black text-white shadow-sm transition hover:bg-[#6e53a2] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSubmitting ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -179,7 +179,7 @@ function ComposerProjectLauncher() {
               type="button"
               disabled={isSubmitting}
               onClick={() => setTopic(suggestion)}
-              className="rounded-[16px] border border-[#ebe4f2] bg-white/75 px-3 py-2 text-sm font-bold text-[#5f5368] shadow-sm transition hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+              className="rounded-[16px] border border-neutral-200 bg-white/75 px-3 py-2 text-sm font-bold text-neutral-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
             >
               {suggestion}
             </button>
@@ -201,7 +201,7 @@ function ComposerProjectLauncher() {
           id={errorId}
           role="alert"
           data-testid="create-project-error-alert"
-          className="rounded-[18px] bg-[#ffeceb] px-4 py-3 text-sm font-bold text-[#8f3f3a]"
+          className="rounded-[18px] bg-danger-100 px-4 py-3 text-sm font-bold text-danger-600"
         >
           {displayError}
         </p>
@@ -256,14 +256,14 @@ function DefaultProjectLauncher({ compact = false }: Pick<ProjectLauncherProps, 
           aria-describedby={aiError ? errorId : undefined}
           data-testid="project-topic-input"
           placeholder="Start with a research question..."
-          className="min-h-14 flex-1 rounded-[22px] border border-white/80 bg-white/80 px-5 text-base text-[#332b38] shadow-sm outline-none transition placeholder:text-[#665a70] disabled:cursor-not-allowed disabled:opacity-70 focus:border-[#be8bd8] focus:ring-4 focus:ring-[#e9d3f5]"
+          className="min-h-14 flex-1 rounded-[22px] border border-white/80 bg-white/80 px-5 text-base text-neutral-900 shadow-sm outline-none transition placeholder:text-neutral-600 disabled:cursor-not-allowed disabled:opacity-70 focus:border-brand-400 focus:ring-4 focus:ring-brand-100"
         />
         <button
           type="submit"
           disabled={creatingProject || !topic.trim()}
           aria-label="Create new project"
           data-testid="create-project-button"
-          className="inline-flex min-h-14 items-center justify-center gap-2 rounded-[22px] bg-[#7c5fb1] px-5 font-bold text-white shadow-lg shadow-[#b99adb]/30 transition hover:-translate-y-0.5 hover:bg-[#6e53a2] disabled:cursor-not-allowed disabled:opacity-65 disabled:hover:translate-y-0"
+          className="inline-flex min-h-14 items-center justify-center gap-2 rounded-[22px] bg-brand-600 px-5 font-bold text-white shadow-lg shadow-brand-200/30 transition hover:-translate-y-0.5 hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-65 disabled:hover:translate-y-0"
         >
           {creatingProject ? (
             <Loader2 size={18} className="animate-spin" />
@@ -289,7 +289,7 @@ function DefaultProjectLauncher({ compact = false }: Pick<ProjectLauncherProps, 
           id={errorId}
           role="alert"
           data-testid="create-project-error-alert"
-          className="rounded-[18px] bg-[#ffeceb] px-4 py-3 text-sm font-bold text-[#8f3f3a]"
+          className="rounded-[18px] bg-danger-100 px-4 py-3 text-sm font-bold text-danger-600"
         >
           {aiError}
         </p>

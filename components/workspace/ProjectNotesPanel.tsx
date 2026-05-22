@@ -194,15 +194,15 @@ export function ProjectNotesPanel({
       id="project-notes-panel"
       aria-labelledby={titleId}
       data-testid="project-notes-panel"
-      className="flex h-full min-h-0 w-full max-h-full flex-col overflow-hidden rounded-[28px] border border-white/80 bg-white/78 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
+      className="flex h-full min-h-0 w-full max-h-full flex-col overflow-hidden rounded-[28px] border border-white/80 bg-white/78 p-4 shadow-lg shadow-brand-100/35 lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
     >
-      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[#eadff1] pb-4">
+      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-neutral-200 pb-4">
         <div className="min-w-0 space-y-2">
-          <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-[#74687c]">
+          <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-neutral-600">
             <NotebookPen size={15} />
             Notes
           </p>
-          <h2 id={titleId} className="text-xl font-black leading-snug text-[#332a39]">
+          <h2 id={titleId} className="text-xl font-black leading-snug text-neutral-900">
             Project notes
           </h2>
         </div>
@@ -211,7 +211,7 @@ export function ProjectNotesPanel({
           onClick={onClose}
           aria-label="Close project notes"
           data-testid="close-project-notes-button"
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/75 text-brand-700 transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100"
         >
           <PanelRightClose size={18} />
         </button>
@@ -224,7 +224,7 @@ export function ProjectNotesPanel({
             aria-live="polite"
             data-testid="project-notes-save-status"
             className={`text-xs font-black uppercase tracking-[0.14em] ${
-              notesSaveStatus === "error" ? "text-[#8f3f3a]" : "text-[#6c5b75]"
+              notesSaveStatus === "error" ? "text-danger-600" : "text-neutral-600"
             }`}
           >
             {getNotesStatusLabel(notesSaveStatus)}
@@ -235,7 +235,7 @@ export function ProjectNotesPanel({
             aria-label="Export project notes as PDF"
             data-testid="export-project-notes-pdf-button"
             title="Export project notes as PDF"
-            className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-[14px] border border-[#eadff1] bg-white/78 px-3 text-xs font-black text-[#6e4ca0] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+            className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-[14px] border border-neutral-200 bg-white/78 px-3 text-xs font-black text-brand-700 transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100"
           >
             <FileDown size={15} />
             Export PDF
@@ -248,7 +248,7 @@ export function ProjectNotesPanel({
           disabled={!canAppendLatestAiReply}
           aria-label="Add latest AI reply to project notes"
           data-testid="add-latest-ai-reply-note-button"
-          className="inline-flex h-11 w-full shrink-0 items-center justify-center gap-2 rounded-[16px] bg-[#eadcf7] text-sm font-black text-[#6e4ca0] transition hover:bg-[#dfc9f3] disabled:cursor-not-allowed disabled:opacity-65"
+          className="inline-flex h-11 w-full shrink-0 items-center justify-center gap-2 rounded-[16px] bg-brand-100 text-sm font-black text-brand-700 transition hover:bg-brand-200 disabled:cursor-not-allowed disabled:opacity-65"
         >
           <PlusCircle size={16} />
           Add latest AI reply
@@ -270,7 +270,7 @@ export function ProjectNotesPanel({
             id={notesErrorId}
             role="alert"
             data-testid="project-notes-error-alert"
-            className="shrink-0 rounded-[18px] bg-[#ffeceb] px-3 py-2 text-sm font-bold text-[#8f3f3a]"
+            className="shrink-0 rounded-[18px] bg-danger-100 px-3 py-2 text-sm font-bold text-danger-600"
           >
             {notesSaveError}
           </p>

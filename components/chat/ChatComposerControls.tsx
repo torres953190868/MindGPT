@@ -740,7 +740,7 @@ export function PendingAttachmentChips({
         <li
           key={attachment.id}
           data-testid="pending-attachment-chip"
-          className="inline-flex max-w-full items-center gap-2 rounded-full bg-white/75 px-3 py-1.5 text-xs font-bold text-[#5f5368]"
+          className="inline-flex max-w-full items-center gap-2 rounded-full bg-white/75 px-3 py-1.5 text-xs font-bold text-neutral-700"
         >
           {attachment.uploadStatus === "uploading" ||
           attachment.uploadStatus === "indexing" ? (
@@ -755,12 +755,12 @@ export function PendingAttachmentChips({
             {getAttachmentDetailLabel(attachment)}
           </span>
           {getPendingAttachmentStatusLabel(attachment) && (
-            <span className="shrink-0 text-[#6e4ca0]">
+            <span className="shrink-0 text-brand-700">
               {getPendingAttachmentStatusLabel(attachment)}
             </span>
           )}
           {attachment.uploadStatus === "failed" && attachment.errorRequestId && (
-            <span className="max-w-36 shrink truncate font-mono text-[11px] text-[#8f3f3a]">
+            <span className="max-w-36 shrink truncate font-mono text-[11px] text-danger-600">
               Ref: {attachment.errorRequestId}
             </span>
           )}
@@ -770,7 +770,7 @@ export function PendingAttachmentChips({
             disabled={disabled}
             aria-label={`Remove ${attachment.name}`}
             data-testid="remove-pending-attachment-button"
-            className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[#776c80] transition hover:bg-[#eadcf7] focus:outline-none focus:ring-2 focus:ring-[#b696d4] disabled:cursor-not-allowed disabled:opacity-50"
+            className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-neutral-600 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <X size={13} />
           </button>
@@ -815,7 +815,7 @@ export function AttachmentMenuButton({
           aria-expanded={controls.isAttachmentMenuOpen}
           title="Add files or knowledge"
           data-testid="add-message-attachment-button"
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-[14px] border border-[#dcccea] bg-gradient-to-b from-white to-[#f7f0ff] text-[#6c538d] shadow-sm ring-1 ring-white/70 transition hover:border-[#b696d4] hover:from-white hover:to-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7] disabled:cursor-not-allowed disabled:opacity-50"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-[14px] border border-brand-200 bg-gradient-to-b from-white to-brand-50 text-brand-700 shadow-sm ring-1 ring-white/70 transition hover:border-brand-400 hover:from-white hover:to-white focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Plus size={16} />
         </button>
@@ -825,7 +825,7 @@ export function AttachmentMenuButton({
             aria-label="Add attachment"
             data-testid="attachment-menu"
             onMouseLeave={() => controls.setIsKnowledgeMenuOpen(false)}
-            className={`${getMenuPlacementClass(placement)} w-80 max-w-[calc(100vw-2rem)] rounded-[20px] border border-white/80 bg-white/95 p-2 shadow-2xl shadow-[#d4c2e7]/55 backdrop-blur`}
+            className={`${getMenuPlacementClass(placement)} w-80 max-w-[calc(100vw-2rem)] rounded-[20px] border border-white/80 bg-white/95 p-2 shadow-2xl shadow-brand-100/55 backdrop-blur`}
           >
             <button
               type="button"
@@ -834,9 +834,9 @@ export function AttachmentMenuButton({
               onFocus={() => controls.setIsKnowledgeMenuOpen(false)}
               onClick={controls.openFilePicker}
               data-testid="upload-new-file-button"
-              className="flex w-full items-center gap-3 rounded-[14px] px-3 py-2 text-left text-[#4e4556] transition hover:bg-[#f7f1fc] focus:outline-none focus:ring-2 focus:ring-[#b696d4]"
+              className="flex w-full items-center gap-3 rounded-[14px] px-3 py-2 text-left text-neutral-700 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-300"
             >
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-[#eadff1] bg-white text-[#7c5fb1]">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
                 <Upload size={16} />
               </span>
               <span className="min-w-0 flex-1 truncate text-sm font-black">
@@ -862,9 +862,9 @@ export function AttachmentMenuButton({
                 aria-expanded={controls.isKnowledgeMenuOpen}
                 onClick={() => controls.setIsKnowledgeMenuOpen(true)}
                 data-testid="knowledge-menu-button"
-                className="flex w-full items-center gap-3 rounded-[14px] px-3 py-2 text-left text-[#4e4556] transition hover:bg-[#f7f1fc] focus:outline-none focus:ring-2 focus:ring-[#b696d4]"
+                className="flex w-full items-center gap-3 rounded-[14px] px-3 py-2 text-left text-neutral-700 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-300"
               >
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-[#eadff1] bg-white text-[#7c5fb1]">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
                   <BookOpen size={16} />
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm font-black">
@@ -872,7 +872,7 @@ export function AttachmentMenuButton({
                 </span>
                 <ChevronRight
                   size={15}
-                  className={`shrink-0 text-[#8f7d9a] transition ${
+                  className={`shrink-0 text-neutral-500 transition ${
                     controls.isKnowledgeMenuOpen ? "rotate-90" : ""
                   }`}
                 />
@@ -884,12 +884,12 @@ export function AttachmentMenuButton({
                   aria-label="Knowledge PDFs"
                   data-testid="knowledge-document-menu"
                   onWheel={stopFloatingMenuWheelPropagation}
-                  className="nowheel mt-1 max-h-64 overflow-auto overscroll-contain rounded-[16px] border border-[#eadff1] bg-[#fbf8ff] p-1"
+                  className="nowheel mt-1 max-h-64 overflow-auto overscroll-contain rounded-[16px] border border-neutral-200 bg-brand-50/55 p-1"
                 >
                   {controls.isLoadingKnowledgeDocuments && (
                     <p
                       role="status"
-                      className="flex items-center gap-2 rounded-[12px] px-3 py-3 text-sm font-bold text-[#76667f]"
+                      className="flex items-center gap-2 rounded-[12px] px-3 py-3 text-sm font-bold text-neutral-600"
                     >
                       <Loader2 size={15} className="animate-spin" />
                       Loading PDFs
@@ -897,7 +897,7 @@ export function AttachmentMenuButton({
                   )}
 
                   {controls.knowledgeDocumentError && (
-                    <p className="rounded-[12px] bg-[#ffeceb] px-3 py-3 text-sm font-bold text-[#8f3f3a]">
+                    <p className="rounded-[12px] bg-danger-100 px-3 py-3 text-sm font-bold text-danger-600">
                       {controls.knowledgeDocumentError}
                     </p>
                   )}
@@ -905,7 +905,7 @@ export function AttachmentMenuButton({
                   {!controls.isLoadingKnowledgeDocuments &&
                     !controls.knowledgeDocumentError &&
                     controls.indexedKnowledgeDocuments.length === 0 && (
-                      <p className="rounded-[12px] px-3 py-3 text-sm font-bold text-[#76667f]">
+                      <p className="rounded-[12px] px-3 py-3 text-sm font-bold text-neutral-600">
                         No indexed PDFs yet.
                       </p>
                     )}
@@ -932,16 +932,16 @@ export function AttachmentMenuButton({
                           disabled={!canSelect}
                           onClick={() => controls.selectKnowledgeDocument(document)}
                           data-testid="knowledge-document-option"
-                          className="flex w-full min-w-0 items-center gap-3 rounded-[12px] px-3 py-2 text-left text-[#4e4556] transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-[#b696d4] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                          className="flex w-full min-w-0 items-center gap-3 rounded-[12px] px-3 py-2 text-left text-neutral-700 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
                         >
-                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-[#eadff1] bg-white text-[#7c5fb1]">
+                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
                             <BookOpen size={16} />
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-black">
                               {title}
                             </span>
-                            <span className="block truncate text-xs font-bold text-[#86788f]">
+                            <span className="block truncate text-xs font-bold text-neutral-500">
                               {detail}
                             </span>
                           </span>
@@ -975,13 +975,13 @@ export function ModelSelectorButton({
         aria-haspopup="listbox"
         aria-expanded={controls.isModelMenuOpen}
         data-testid="chat-model-selector-button"
-        className="inline-flex h-9 min-w-[90px] max-w-[150px] items-center justify-center gap-1.5 rounded-[14px] border border-[#dcccea] bg-white/82 px-2.5 text-xs font-black text-[#4c4057] shadow-sm transition hover:border-[#b696d4] hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7] disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex h-9 min-w-[90px] max-w-[150px] items-center justify-center gap-1.5 rounded-[14px] border border-brand-200 bg-white/82 px-2.5 text-xs font-black text-neutral-800 shadow-sm transition hover:border-brand-400 hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        <BrainCircuit size={14} className="shrink-0 text-[#7c5fb1]" />
+        <BrainCircuit size={14} className="shrink-0 text-brand-600" />
         <span className="min-w-0 truncate">{controls.selectedModelLabel}</span>
         <ChevronDown
           size={13}
-          className={`shrink-0 text-[#8f7d9a] transition ${
+          className={`shrink-0 text-neutral-500 transition ${
             controls.isModelMenuOpen ? "rotate-180" : ""
           }`}
         />
@@ -992,7 +992,7 @@ export function ModelSelectorButton({
           aria-label="Chat models"
           data-testid="chat-model-menu"
           onWheel={stopFloatingMenuWheelPropagation}
-          className={`${getMenuPlacementClass(placement)} nowheel max-h-72 w-72 overflow-auto overscroll-contain rounded-[20px] border border-white/80 bg-white/95 p-2 shadow-2xl shadow-[#d4c2e7]/55 backdrop-blur`}
+          className={`${getMenuPlacementClass(placement)} nowheel max-h-72 w-72 overflow-auto overscroll-contain rounded-[20px] border border-white/80 bg-white/95 p-2 shadow-2xl shadow-brand-100/55 backdrop-blur`}
         >
           {controls.modelOptions.map((option) => {
             const isSelected = matchesModelSelection(option, controls.selectedModel);
@@ -1006,15 +1006,15 @@ export function ModelSelectorButton({
                 disabled={!option.configured || controls.controlsBusy}
                 onClick={() => controls.selectModel(option)}
                 data-testid="chat-model-option"
-                className={`flex w-full min-w-0 items-center gap-3 rounded-[14px] px-3 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-[#b696d4] disabled:cursor-not-allowed disabled:opacity-45 ${
+                className={`flex w-full min-w-0 items-center gap-3 rounded-[14px] px-3 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-45 ${
                   isSelected
-                    ? "bg-[#f1e8fb] text-[#5d427d]"
-                    : "text-[#4e4556] hover:bg-[#f7f1fc]"
+                    ? "bg-brand-50 text-brand-800"
+                    : "text-neutral-700 hover:bg-brand-50"
                 }`}
               >
                 <span
                   aria-hidden="true"
-                  className="grid h-7 w-7 shrink-0 place-items-center rounded-[10px] border border-[#eadff1] bg-white text-xs font-black text-[#7c5fb1]"
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-xs font-black text-brand-600"
                 >
                   {option.providerName.slice(0, 1)}
                 </span>
@@ -1022,7 +1022,7 @@ export function ModelSelectorButton({
                   <span className="block truncate text-sm font-black">
                     {formatModelLabel(option.model)}
                   </span>
-                  <span className="block truncate text-xs font-bold text-[#86788f]">
+                  <span className="block truncate text-xs font-bold text-neutral-500">
                     {option.providerName}
                     {!option.configured ? " - not configured" : ""}
                   </span>

@@ -66,21 +66,21 @@ export function BranchNodeCard({ data }: NodeProps) {
       data-home-composer={isHomeInlineComposer ? "true" : undefined}
       className={`branch-node-edge-hit-area group bg-white text-left transition ${
         isHomeInlineComposer
-          ? `w-[min(760px,calc(100vw-48px))] rounded-[18px] border border-neutral-200/90 p-4 shadow-[0_14px_32px_rgba(44,35,62,0.12)] sm:p-6 ${
+          ? `w-[min(760px,calc(100vw-48px))] rounded-[18px] border border-neutral-200/90 p-4 shadow-lg sm:p-6 ${
               selected
                 ? "ring-2 ring-brand-200/70"
-                : "hover:shadow-[0_16px_36px_rgba(44,35,62,0.14)]"
+                : "hover:shadow-xl"
             }`
           : hasInlineComposer
-            ? `w-[400px] max-w-[calc(100vw-48px)] rounded-[30px] border-2 p-5 shadow-[0_18px_44px_rgba(87,67,122,0.12)] ${
+            ? `w-[400px] max-w-[calc(100vw-48px)] rounded-[30px] border-2 p-5 shadow-xl ${
                 selected
                   ? "border-brand-300 ring-2 ring-brand-200"
-                  : "border-white/90 hover:shadow-[0_20px_48px_rgba(87,67,122,0.16)]"
+                  : "border-white/90 hover:shadow-2xl"
             }`
           : `w-[292px] rounded-2xl border p-4 shadow-md ${
               selected
                 ? "border-brand-400 shadow-lg ring-2 ring-brand-300"
-                : "border-white/90 shadow-[rgba(44,35,62,0.08)] hover:-translate-y-1 hover:shadow-lg"
+                : "border-white/90 hover:-translate-y-1 hover:shadow-lg"
             }`
       }`}
     >
@@ -90,25 +90,25 @@ export function BranchNodeCard({ data }: NodeProps) {
             id="branch-target"
             type="target"
             position={Position.Left}
-            className="nodrag !bg-[#a489c8]"
+            className="branchmind-handle-branch nodrag"
           />
           <Handle
             id="continue-target"
             type="target"
             position={Position.Top}
-            className="nodrag !bg-[#91caa8]"
+            className="branchmind-handle-continue nodrag"
           />
           <Handle
             id="branch-source"
             type="source"
             position={Position.Right}
-            className="nodrag !bg-[#a489c8]"
+            className="branchmind-handle-branch nodrag"
           />
           <Handle
             id="continue-source"
             type="source"
             position={Position.Bottom}
-            className="nodrag !bg-[#91caa8]"
+            className="branchmind-handle-continue nodrag"
           />
         </>
       )}
@@ -143,7 +143,7 @@ export function BranchNodeCard({ data }: NodeProps) {
             aria-pressed={selected}
             data-testid="open-node-button"
             data-node-id={mindNode.id}
-            className={`block w-full text-left outline-none transition focus-visible:ring-4 focus-visible:ring-[#eadcf7] ${
+            className={`block w-full text-left outline-none transition focus-visible:ring-4 focus-visible:ring-brand-100 ${
               hasInlineComposer ? "rounded-[22px]" : "rounded-[18px]"
             }`}
           >
@@ -376,7 +376,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
         disabled={isComposerBusy}
         onRemove={composerControls.removePendingAttachment}
       />
-      <div className="relative rounded-[22px] border border-neutral-200/80 bg-[#fbfafc] shadow-sm transition focus-within:border-brand-300 focus-within:bg-white focus-within:shadow-md focus-within:shadow-brand-100/25 focus-within:ring-4 focus-within:ring-brand-100/35">
+      <div className="relative rounded-[22px] border border-neutral-200/80 bg-surface-soft shadow-sm transition focus-within:border-brand-300 focus-within:bg-white focus-within:shadow-md focus-within:shadow-brand-100/25 focus-within:ring-4 focus-within:ring-brand-100/35">
         <textarea
           value={input}
           onChange={(event) => setInput(event.target.value)}

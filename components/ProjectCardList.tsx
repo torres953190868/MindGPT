@@ -353,13 +353,13 @@ export function ProjectCardList() {
 
   return (
     <section
-      className="mx-auto flex w-full max-w-[1500px] flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white/95 shadow-xl shadow-[rgba(44,35,62,0.08)] md:min-h-[calc(100vh-2rem)] md:flex-row"
+      className="mx-auto flex w-full max-w-[1500px] flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white/95 shadow-xl md:min-h-[calc(100vh-2rem)] md:flex-row"
       aria-labelledby="projects-title"
       data-testid="project-card-list"
     >
       {projectPendingDeletion && (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-[#241d30]/45 px-4 py-6 backdrop-blur-sm"
+          className="fixed inset-0 z-50 grid place-items-center bg-neutral-950/45 px-4 py-6 backdrop-blur-sm"
           data-testid="delete-project-dialog-backdrop"
           onClick={(event) => {
             if (event.target === event.currentTarget) closeDeleteDialog();
@@ -466,7 +466,7 @@ export function ProjectCardList() {
                 : "Open most recent project"
             }
             data-testid="open-recent-project-button"
-            className="inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40 disabled:cursor-not-allowed disabled:text-[#6f6678] disabled:opacity-70 disabled:hover:bg-transparent"
+            className="inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40 disabled:cursor-not-allowed disabled:text-neutral-500 disabled:opacity-70 disabled:hover:bg-transparent"
           >
             <Clock3 size={16} />
             Recent
@@ -474,7 +474,7 @@ export function ProjectCardList() {
           <button
             type="button"
             disabled
-            className="inline-flex min-h-10 cursor-not-allowed items-center gap-2 rounded-md px-3 text-[#6f6678] opacity-70"
+            className="inline-flex min-h-10 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-500 opacity-70"
           >
             <Star size={16} />
             Starred
@@ -482,18 +482,18 @@ export function ProjectCardList() {
           <button
             type="button"
             disabled
-            className="inline-flex min-h-10 cursor-not-allowed items-center gap-2 rounded-md px-3 text-[#6f6678] opacity-70"
+            className="inline-flex min-h-10 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-500 opacity-70"
           >
             <Share2 size={16} />
             Shared with me
           </button>
 
-          <div className="my-3 border-t border-[#ebe7f1]" />
+          <div className="my-3 border-t border-neutral-200" />
 
           <button
             type="button"
             disabled
-            className="inline-flex min-h-10 cursor-not-allowed items-center gap-2 rounded-md px-3 text-[#6f6678] opacity-70"
+            className="inline-flex min-h-10 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-500 opacity-70"
           >
             <LayoutTemplate size={16} />
             Templates
@@ -580,7 +580,7 @@ export function ProjectCardList() {
             data-testid="project-list-toolbar"
           >
             <div className="relative min-w-0 flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b8294]" size={16} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" size={16} />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
@@ -704,7 +704,7 @@ export function ProjectCardList() {
             </section>
           ) : (
             <div
-              className="overflow-hidden rounded-lg border border-[#e5e1ec] bg-white"
+              className="overflow-hidden rounded-lg border border-neutral-200 bg-white"
               data-testid="project-grid"
             >
               <div className="overflow-x-auto">
@@ -725,7 +725,7 @@ export function ProjectCardList() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#ebe7f1]">
+                  <tbody className="divide-y divide-neutral-200">
                     {visibleProjects.map((project) => {
                       const nodeCount = Object.keys(project.nodes).length;
                       const isEditingProject = editingProjectId === project.id;

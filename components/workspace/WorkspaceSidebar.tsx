@@ -272,7 +272,7 @@ export function WorkspaceSidebar({
       {footer && (
         <div
           data-testid="workspace-sidebar-footer"
-          className="mt-auto border-t border-[#ebe7f1] pt-3"
+          className="mt-auto border-t border-neutral-200 pt-3"
         >
           {footer}
         </div>

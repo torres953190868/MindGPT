@@ -170,7 +170,7 @@ function MessageAttachmentList({ attachments }: { attachments: ChatAttachment[] 
         <li
           key={attachment.id}
           data-testid="message-attachment"
-          className="inline-flex max-w-full items-center gap-2 rounded-full bg-white/70 px-3 py-1.5 text-xs font-bold text-[#5f5368]"
+          className="inline-flex max-w-full items-center gap-2 rounded-full bg-white/70 px-3 py-1.5 text-xs font-bold text-neutral-700"
         >
           {isKnowledgeAttachment(attachment) ? (
             <BookOpen size={14} className="shrink-0" />
@@ -497,7 +497,7 @@ export function NodeDetailPanel({
             <PanelRightClose size={18} />
           </button>
         )}
-        <div className="grid min-h-[128px] flex-1 place-items-center text-center text-sm font-bold text-[#665a70]">
+        <div className="grid min-h-[128px] flex-1 place-items-center text-center text-sm font-bold text-neutral-600">
           <span role="status" aria-live="polite" data-testid="node-detail-empty-state">
             Select a node
           </span>
@@ -510,7 +510,7 @@ export function NodeDetailPanel({
     <aside
       aria-labelledby={titleId}
       data-testid="node-detail-panel"
-      className={`grid h-full min-h-0 w-full max-h-[calc(100vh-2rem)] overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:max-h-full lg:self-start lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none ${
+      className={`grid h-full min-h-0 w-full max-h-[calc(100vh-2rem)] overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-brand-100/35 lg:max-h-full lg:self-start lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none ${
         showComposer
           ? "grid-rows-[auto_minmax(0,1fr)_auto]"
           : "grid-rows-[auto_minmax(0,1fr)]"
@@ -544,7 +544,7 @@ export function NodeDetailPanel({
                     aria-label="Cancel node title edit"
                     title="Cancel"
                     data-testid="cancel-node-title-edit-button"
-                    className="grid h-10 w-10 place-items-center rounded-full bg-white/75 text-[#776c80] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7] disabled:cursor-not-allowed disabled:opacity-45"
+                    className="grid h-10 w-10 place-items-center rounded-full bg-white/75 text-neutral-600 transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     <X size={16} />
                   </button>
@@ -555,7 +555,7 @@ export function NodeDetailPanel({
                     aria-label="Save node title"
                     title="Save"
                     data-testid="save-node-title-edit-button"
-                    className="grid h-10 w-10 place-items-center rounded-full bg-[#dff5ea] text-[#376f51] transition hover:bg-[#ccefdc] focus:outline-none focus:ring-4 focus:ring-[#d7f0e2] disabled:cursor-not-allowed disabled:opacity-45"
+                    className="grid h-10 w-10 place-items-center rounded-full bg-success-100 text-success-700 transition hover:bg-success-200 focus:outline-none focus:ring-4 focus:ring-success-100 disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     <Save size={16} />
                   </button>
@@ -737,7 +737,7 @@ export function NodeDetailPanel({
                       role="status"
                       aria-live="polite"
                       data-testid="message-streaming-status"
-                      className="mt-2 text-xs font-black uppercase tracking-[0.14em] text-[#6c5b75]"
+                      className="mt-2 text-xs font-black uppercase tracking-[0.14em] text-neutral-600"
                     >
                       Generating answer
                     </p>
