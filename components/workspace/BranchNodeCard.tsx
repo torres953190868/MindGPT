@@ -2,7 +2,7 @@
 
 import { type FormEvent, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { GitBranch, Loader2, Send, Sprout, Ribbon } from "lucide-react";
+import { GitBranch, Loader2, Send, Sparkles, Sprout, Ribbon } from "lucide-react";
 import {
   AttachmentMenuButton,
   ModelSelectorButton,
@@ -17,6 +17,8 @@ export type InlineNodeComposerData = {
   error: string | null;
   placeholder: string;
   submitLabel: string;
+  variant?: "default" | "home";
+  suggestions?: string[];
   onSubmit: (
     instruction: string,
     attachments?: ChatAttachment[],
@@ -51,6 +53,7 @@ export function BranchNodeCard({ data }: NodeProps) {
   const nodeSummaryId = `branch-node-${mindNode.id}-summary`;
   const hasChildren = mindNode.children.length > 0;
   const hasInlineComposer = Boolean(inlineComposer);
+  const isHomeInlineComposer = inlineComposer?.variant === "home";
 
   return (
     <article
@@ -60,12 +63,19 @@ export function BranchNodeCard({ data }: NodeProps) {
       data-node-id={mindNode.id}
       data-selected={selected ? "true" : "false"}
       data-inline-composer={hasInlineComposer ? "true" : undefined}
+      data-home-composer={isHomeInlineComposer ? "true" : undefined}
       className={`branch-node-edge-hit-area group bg-white text-left transition ${
-        hasInlineComposer
-          ? `w-[400px] max-w-[calc(100vw-48px)] rounded-[30px] border-2 p-5 shadow-[0_18px_44px_rgba(87,67,122,0.12)] ${
+        isHomeInlineComposer
+          ? `w-[min(760px,calc(100vw-48px))] rounded-[18px] border border-neutral-200/90 p-4 shadow-[0_14px_32px_rgba(44,35,62,0.12)] sm:p-6 ${
               selected
-                ? "border-brand-300 ring-2 ring-brand-200"
-                : "border-white/90 hover:shadow-[0_20px_48px_rgba(87,67,122,0.16)]"
+                ? "ring-2 ring-brand-200/70"
+                : "hover:shadow-[0_16px_36px_rgba(44,35,62,0.14)]"
+            }`
+          : hasInlineComposer
+            ? `w-[400px] max-w-[calc(100vw-48px)] rounded-[30px] border-2 p-5 shadow-[0_18px_44px_rgba(87,67,122,0.12)] ${
+                selected
+                  ? "border-brand-300 ring-2 ring-brand-200"
+                  : "border-white/90 hover:shadow-[0_20px_48px_rgba(87,67,122,0.16)]"
             }`
           : `w-[292px] rounded-2xl border p-4 shadow-md ${
               selected
@@ -74,30 +84,34 @@ export function BranchNodeCard({ data }: NodeProps) {
             }`
       }`}
     >
-      <Handle
-        id="branch-target"
-        type="target"
-        position={Position.Left}
-        className="nodrag !bg-[#a489c8]"
-      />
-      <Handle
-        id="continue-target"
-        type="target"
-        position={Position.Top}
-        className="nodrag !bg-[#91caa8]"
-      />
-      <Handle
-        id="branch-source"
-        type="source"
-        position={Position.Right}
-        className="nodrag !bg-[#a489c8]"
-      />
-      <Handle
-        id="continue-source"
-        type="source"
-        position={Position.Bottom}
-        className="nodrag !bg-[#91caa8]"
-      />
+      {!isHomeInlineComposer && (
+        <>
+          <Handle
+            id="branch-target"
+            type="target"
+            position={Position.Left}
+            className="nodrag !bg-[#a489c8]"
+          />
+          <Handle
+            id="continue-target"
+            type="target"
+            position={Position.Top}
+            className="nodrag !bg-[#91caa8]"
+          />
+          <Handle
+            id="branch-source"
+            type="source"
+            position={Position.Right}
+            className="nodrag !bg-[#a489c8]"
+          />
+          <Handle
+            id="continue-source"
+            type="source"
+            position={Position.Bottom}
+            className="nodrag !bg-[#91caa8]"
+          />
+        </>
+      )}
 
       <div
         role="presentation"
@@ -109,59 +123,70 @@ export function BranchNodeCard({ data }: NodeProps) {
         data-node-id={mindNode.id}
         className="branch-node-inner-hit-area nodrag nopan rounded-[18px]"
       >
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onSelect(mindNode.id);
-          }}
-          aria-label={`Open node ${mindNode.title}`}
-          aria-pressed={selected}
-          data-testid="open-node-button"
-          data-node-id={mindNode.id}
-          className={`block w-full text-left outline-none transition focus-visible:ring-4 focus-visible:ring-[#eadcf7] ${
-            hasInlineComposer ? "rounded-[22px]" : "rounded-[18px]"
-          }`}
-        >
-          <span className="flex items-start justify-between gap-3">
-            <span>
-              <span className="block text-xs font-black uppercase tracking-[0.16em] text-neutral-500">
-                {mindNode.branchType === "root"
-                  ? "Root"
-                  : mindNode.branchType === "branch"
-                    ? "Branch"
-                    : "Continue"}
-              </span>
-              <span
-                id={nodeTitleId}
-                className={`mt-1 line-clamp-2 block font-black text-neutral-900 ${
-                  hasInlineComposer ? "text-lg" : "text-base"
-                }`}
-              >
-                {mindNode.title}
-              </span>
+        {isHomeInlineComposer ? (
+          <>
+            <span id={nodeTitleId} className="sr-only">
+              {mindNode.title}
             </span>
-            <span
-              aria-label={`${mindNode.children.length} child nodes`}
-              className="grid h-8 min-w-8 place-items-center rounded-full bg-brand-100 px-2 text-sm font-black text-brand-700"
-            >
-              {mindNode.children.length}
-            </span>
-          </span>
-
-          {hasInlineComposer ? (
             <span id={nodeSummaryId} className="sr-only">
               {mindNode.summary}
             </span>
-          ) : (
-            <span
-              id={nodeSummaryId}
-              className="mt-3 line-clamp-3 block text-sm leading-6 text-neutral-600"
-            >
-              {mindNode.summary}
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelect(mindNode.id);
+            }}
+            aria-label={`Open node ${mindNode.title}`}
+            aria-pressed={selected}
+            data-testid="open-node-button"
+            data-node-id={mindNode.id}
+            className={`block w-full text-left outline-none transition focus-visible:ring-4 focus-visible:ring-[#eadcf7] ${
+              hasInlineComposer ? "rounded-[22px]" : "rounded-[18px]"
+            }`}
+          >
+            <span className="flex items-start justify-between gap-3">
+              <span>
+                <span className="block text-xs font-black uppercase tracking-[0.16em] text-neutral-500">
+                  {mindNode.branchType === "root"
+                    ? "Root"
+                    : mindNode.branchType === "branch"
+                      ? "Branch"
+                      : "Continue"}
+                </span>
+                <span
+                  id={nodeTitleId}
+                  className={`mt-1 line-clamp-2 block font-black text-neutral-900 ${
+                    hasInlineComposer ? "text-lg" : "text-base"
+                  }`}
+                >
+                  {mindNode.title}
+                </span>
+              </span>
+              <span
+                aria-label={`${mindNode.children.length} child nodes`}
+                className="grid h-8 min-w-8 place-items-center rounded-full bg-brand-100 px-2 text-sm font-black text-brand-700"
+              >
+                {mindNode.children.length}
+              </span>
             </span>
-          )}
-        </button>
+
+            {hasInlineComposer ? (
+              <span id={nodeSummaryId} className="sr-only">
+                {mindNode.summary}
+              </span>
+            ) : (
+              <span
+                id={nodeSummaryId}
+                className="mt-3 line-clamp-3 block text-sm leading-6 text-neutral-600"
+              >
+                {mindNode.summary}
+              </span>
+            )}
+          </button>
+        )}
 
         {inlineComposer && <InlineNodeComposer composer={inlineComposer} />}
 
@@ -236,6 +261,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
   const displayError = composerControls.attachmentError ?? (submitted ? composer.error : null);
   const isComposerBusy = composerControls.controlsBusy;
   const errorId = `inline-node-composer-${composer.nodeId}-error`;
+  const isHomeComposer = composer.variant === "home";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -259,6 +285,95 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
       setSubmitted(false);
       composerControls.resetAttachments();
     }
+  }
+
+  if (isHomeComposer) {
+    return (
+      <form
+        aria-label="Message composer"
+        aria-busy={isComposerBusy}
+        aria-describedby={displayError ? errorId : undefined}
+        data-testid="message-composer"
+        onSubmit={handleSubmit}
+        onClick={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+        className="nodrag nopan space-y-3"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <ModelSelectorButton controls={composerControls} placement="below" />
+            <AttachmentMenuButton controls={composerControls} placement="below" />
+          </div>
+          <span className="hidden text-sm font-bold text-neutral-400 sm:inline">?</span>
+        </div>
+        <PendingAttachmentChips
+          attachments={composerControls.pendingAttachments}
+          disabled={isComposerBusy}
+          onRemove={composerControls.removePendingAttachment}
+        />
+        <textarea
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          disabled={isComposerBusy}
+          aria-label="Message instruction"
+          aria-describedby={displayError ? errorId : undefined}
+          data-testid="message-instruction-input"
+          placeholder={composer.placeholder}
+          rows={2}
+          className="min-h-[86px] w-full resize-none bg-transparent px-1 py-1 text-base leading-7 text-neutral-900 outline-none placeholder:text-neutral-500 disabled:cursor-not-allowed disabled:opacity-65"
+        />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {composer.suggestions && composer.suggestions.length > 0 && (
+            <div className="flex min-w-0 flex-1 flex-wrap gap-2">
+              {composer.suggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  disabled={isComposerBusy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setInput(suggestion);
+                  }}
+                  data-testid="home-prompt-suggestion"
+                  className="inline-flex min-h-9 max-w-full items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 text-sm font-bold text-neutral-700 shadow-sm transition hover:border-brand-200 hover:bg-neutral-50 focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-55"
+                >
+                  <Sparkles size={15} className="shrink-0 text-brand-500" />
+                  <span className="truncate">{suggestion}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <button
+            type="submit"
+            disabled={isComposerBusy || !input.trim()}
+            aria-label="Send message"
+            data-testid="send-message-button"
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-brand-600 px-5 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {composerControls.isPreparingAttachments || composer.isBusy ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <Send size={15} />
+            )}
+            {composerControls.isPreparingAttachments
+              ? "Preparing..."
+              : composer.isBusy
+                ? "Creating..."
+                : composer.submitLabel}
+          </button>
+        </div>
+        {displayError && (
+          <p
+            id={errorId}
+            role="alert"
+            data-testid="message-error-alert"
+            className="rounded-xl border border-danger-200 bg-danger-50 px-3 py-2 text-sm font-bold text-danger-700"
+          >
+            {displayError}
+          </p>
+        )}
+      </form>
+    );
   }
 
   return (

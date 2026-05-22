@@ -1,6 +1,91 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="18" fill="#f7d8e5"/>
-  <path d="M18 34c0-9 7-16 16-16 7 0 13 5 13 12 0 5-3 9-8 11v5c0 2-2 4-4 4H24c-3 0-5-2-5-5v-4c0-2-1-4-1-7Z" fill="#7c5fb1"/>
-  <path d="M28 28c-2 0-4 2-4 4s2 4 4 4 4-2 4-4-2-4-4-4Zm13 4c0-2-2-4-4-4s-4 2-4 4 2 4 4 4 4-2 4-4Z" fill="#fff9fb"/>
-  <path d="M23 46h15" stroke="#fff9fb" stroke-width="4" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#2D7A4F;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#5BC68A;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#5BC68A;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#A8E6CF;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad3" x1="50%" y1="100%" x2="50%" y2="0%">
+      <stop offset="0%" style="stop-color:#1B5E3B;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2D7A4F;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- 主干 (trunk) - 从底部中心向上 -->
+  <path d="M256 420 C256 420 256 280 256 260"
+        stroke="url(#grad3)" stroke-width="28" stroke-linecap="round" fill="none"/>
+
+  <!-- 左主枝 -->
+  <path d="M256 300 C230 270 180 240 140 200"
+        stroke="url(#grad1)" stroke-width="20" stroke-linecap="round" fill="none"/>
+
+  <!-- 左上小枝 -->
+  <path d="M180 230 C165 210 140 190 115 160"
+        stroke="url(#grad1)" stroke-width="12" stroke-linecap="round" fill="none"/>
+
+  <!-- 左下小枝 -->
+  <path d="M195 245 C175 250 150 265 120 270"
+        stroke="url(#grad1)" stroke-width="12" stroke-linecap="round" fill="none"/>
+
+  <!-- 右主枝 -->
+  <path d="M256 300 C282 270 332 240 372 200"
+        stroke="url(#grad1)" stroke-width="20" stroke-linecap="round" fill="none"/>
+
+  <!-- 右上小枝 -->
+  <path d="M332 230 C347 210 372 190 397 160"
+        stroke="url(#grad1)" stroke-width="12" stroke-linecap="round" fill="none"/>
+
+  <!-- 右下小枝 -->
+  <path d="M317 245 C337 250 362 265 392 270"
+        stroke="url(#grad1)" stroke-width="12" stroke-linecap="round" fill="none"/>
+
+  <!-- 中间向上的枝 -->
+  <path d="M256 260 C256 230 256 190 256 150"
+        stroke="url(#grad1)" stroke-width="16" stroke-linecap="round" fill="none"/>
+
+  <!-- 中上左小枝 -->
+  <path d="M256 190 C240 175 218 160 195 145"
+        stroke="url(#grad2)" stroke-width="10" stroke-linecap="round" fill="none"/>
+
+  <!-- 中上右小枝 -->
+  <path d="M256 190 C272 175 294 160 317 145"
+        stroke="url(#grad2)" stroke-width="10" stroke-linecap="round" fill="none"/>
+
+  <!-- 节点圆点 (mindmap nodes) -->
+  <!-- 左侧节点 -->
+  <circle cx="115" cy="155" r="18" fill="url(#grad2)" opacity="0.95"/>
+  <circle cx="120" cy="273" r="14" fill="url(#grad2)" opacity="0.85"/>
+  <circle cx="137" cy="197" r="12" fill="url(#grad1)" opacity="0.7"/>
+
+  <!-- 右侧节点 -->
+  <circle cx="397" cy="155" r="18" fill="url(#grad2)" opacity="0.95"/>
+  <circle cx="392" cy="273" r="14" fill="url(#grad2)" opacity="0.85"/>
+  <circle cx="375" cy="197" r="12" fill="url(#grad1)" opacity="0.7"/>
+
+  <!-- 中间顶端节点 -->
+  <circle cx="256" cy="140" r="16" fill="url(#grad2)" opacity="0.95"/>
+  <circle cx="195" cy="140" r="13" fill="url(#grad2)" opacity="0.85"/>
+  <circle cx="317" cy="140" r="13" fill="url(#grad2)" opacity="0.85"/>
+
+  <!-- 对话气泡 (chat bubble) 融入根部 -->
+  <path d="M210 390
+           Q210 360 230 360
+           L282 360
+           Q302 360 302 390
+           L302 410
+           Q302 430 282 430
+           L270 430
+           L256 452
+           L250 430
+           L230 430
+           Q210 430 210 410 Z"
+        fill="url(#grad3)" opacity="0.9"/>
+
+  <!-- 气泡内的三个小圆点 (typing indicator) -->
+  <circle cx="240" cy="395" r="6" fill="#A8E6CF" opacity="0.9"/>
+  <circle cx="256" cy="395" r="6" fill="#A8E6CF" opacity="0.9"/>
+  <circle cx="272" cy="395" r="6" fill="#A8E6CF" opacity="0.9"/>
 </svg>

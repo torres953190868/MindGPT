@@ -61,6 +61,11 @@ function formatNodeCount(count: number) {
   return `${count} ${count === 1 ? "node" : "nodes"}`;
 }
 
+function getProjectUpdatedTime(updatedAt: string) {
+  const timestamp = Date.parse(updatedAt);
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
+}
+
 export function ProjectCardList() {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -156,6 +161,16 @@ export function ProjectCardList() {
     return projects.filter((project) => project.title.toLowerCase().includes(normalized));
   }, [projects, query]);
 
+  const recentProject = useMemo(() => {
+    if (projects.length === 0) return null;
+
+    return projects.reduce((recent, project) =>
+      getProjectUpdatedTime(project.updatedAt) > getProjectUpdatedTime(recent.updatedAt)
+        ? project
+        : recent,
+    );
+  }, [projects]);
+
   function openImportPicker() {
     importInputRef.current?.click();
   }
@@ -241,6 +256,11 @@ export function ProjectCardList() {
 
   function openProject(projectId: string) {
     router.push(`/workspace/${projectId}`);
+  }
+
+  function openRecentProject() {
+    if (!hydrated || !recentProject) return;
+    openProject(recentProject.id);
   }
 
   function toggleStar(event: ReactMouseEvent, projectId: string) {
@@ -438,8 +458,15 @@ export function ProjectCardList() {
           </Link>
           <button
             type="button"
-            disabled
-            className="inline-flex min-h-10 cursor-not-allowed items-center gap-2 rounded-md px-3 text-[#6f6678] opacity-70"
+            onClick={openRecentProject}
+            disabled={!hydrated || !recentProject}
+            aria-label={
+              recentProject
+                ? `Open most recent project, ${recentProject.title}`
+                : "Open most recent project"
+            }
+            data-testid="open-recent-project-button"
+            className="inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40 disabled:cursor-not-allowed disabled:text-[#6f6678] disabled:opacity-70 disabled:hover:bg-transparent"
           >
             <Clock3 size={16} />
             Recent

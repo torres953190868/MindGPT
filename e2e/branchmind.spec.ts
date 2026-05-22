@@ -219,6 +219,19 @@ async function getElementWidth(locator: Locator) {
   return locator.evaluate((element) => element.getBoundingClientRect().width);
 }
 
+async function getReactFlowViewport(locator: Locator) {
+  return locator.locator(".react-flow__viewport").evaluate((element) => {
+    const transform = window.getComputedStyle(element).transform;
+    const matrix = new DOMMatrixReadOnly(transform === "none" ? undefined : transform);
+
+    return {
+      x: matrix.m41,
+      y: matrix.m42,
+      zoom: matrix.a,
+    };
+  });
+}
+
 async function getElementBox(locator: Locator, label: string) {
   const box = await locator.boundingBox();
   if (!box) throw new Error(`Expected ${label} to be measurable.`);
@@ -321,10 +334,20 @@ test("home opens directly into a draft workspace", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByTestId("workspace-shell")).toBeVisible();
-  await expect(page.getByTestId("home-hero")).toHaveCount(0);
   await expect(page.getByTestId("workspace-header")).toContainText("New workspace");
+  await expect(page.getByTestId("home-hero")).toBeVisible();
+  await expect(page.getByTestId("home-hero")).toContainText("BranchMind");
+  await expect(page.getByTestId("home-hero-tagline")).toContainText(
+    "你可以外包思考，但是无法外包理解。",
+  );
+  await expect(page.getByTestId("home-hero-tagline")).toContainText(
+    /把复杂问题拆开|每一次追问|让灵感发散/,
+    { timeout: 6000 },
+  );
   await expect(page.getByTestId("branch-node-card")).toHaveCount(1);
-  await expect(page.getByTestId("branch-node-card")).toContainText("New node");
+  await expect(
+    page.locator('[data-testid="branch-node-card"][data-home-composer="true"]'),
+  ).toBeVisible();
   await expect(page.getByTestId("workspace-sidebar")).toHaveCount(0);
   await expect(page.getByTestId("node-detail-panel")).toHaveCount(0);
   await expect(page.getByTestId("message-composer")).toHaveCount(1);
@@ -335,11 +358,70 @@ test("home opens directly into a draft workspace", async ({ page }) => {
   await expect(page.getByTestId("node-detail-notes-button")).toHaveCount(0);
   await expect(page.getByTestId("message-instruction-input")).toHaveAttribute(
     "placeholder",
-    "Start with a research question...",
+    "输入一个研究问题，BranchMind 会把理解路径拆成可探索的分支...",
   );
+  await expect(page.getByTestId("home-prompt-suggestion")).toHaveCount(3);
   await expect(page.getByTestId("send-message-button")).toContainText("Start");
   const mindMapCanvas = page.getByTestId("mind-map-canvas");
   const mapWidthWithPanelsCollapsed = await getElementWidth(mindMapCanvas);
+  const mindMapCanvasBox = await getElementBox(mindMapCanvas, "mind map canvas");
+  const homePanLimit = mindMapCanvasBox.height / 5;
+  const homeHeroBeforeWheel = await getElementBox(page.getByTestId("home-hero"), "home hero");
+  const homeViewportBeforeWheel = await getReactFlowViewport(mindMapCanvas);
+
+  await mindMapCanvas.hover();
+  await page.mouse.wheel(0, -600);
+  await expect
+    .poll(async () => {
+      const viewport = await getReactFlowViewport(mindMapCanvas);
+      return viewport.y;
+    })
+    .toBeCloseTo(homeViewportBeforeWheel.y, 1);
+  await expect
+    .poll(async () => {
+      const homeHeroBox = await getElementBox(page.getByTestId("home-hero"), "home hero");
+      return homeHeroBox.y;
+    })
+    .toBeCloseTo(homeHeroBeforeWheel.y, 1);
+
+  await page.mouse.wheel(0, 600);
+  await expect
+    .poll(async () => {
+      const viewport = await getReactFlowViewport(mindMapCanvas);
+      return homeViewportBeforeWheel.y - viewport.y;
+    })
+    .toBeGreaterThan(24);
+  await expect
+    .poll(async () => {
+      const viewport = await getReactFlowViewport(mindMapCanvas);
+      return homeViewportBeforeWheel.y - viewport.y;
+    })
+    .toBeLessThanOrEqual(homePanLimit + 3);
+  await expect
+    .poll(async () => {
+      const homeHeroBox = await getElementBox(page.getByTestId("home-hero"), "home hero");
+      return homeHeroBeforeWheel.y - homeHeroBox.y;
+    })
+    .toBeGreaterThan(24);
+  await expect
+    .poll(async () => {
+      const homeHeroBox = await getElementBox(page.getByTestId("home-hero"), "home hero");
+      return homeHeroBeforeWheel.y - homeHeroBox.y;
+    })
+    .toBeLessThanOrEqual(homePanLimit + 3);
+  await expect
+    .poll(async () => {
+      const viewport = await getReactFlowViewport(mindMapCanvas);
+      return viewport.zoom;
+    })
+    .toBeCloseTo(homeViewportBeforeWheel.zoom, 4);
+  await page.mouse.wheel(0, 2000);
+  await expect
+    .poll(async () => {
+      const viewport = await getReactFlowViewport(mindMapCanvas);
+      return homeViewportBeforeWheel.y - viewport.y;
+    })
+    .toBeLessThanOrEqual(homePanLimit + 3);
 
   await expect(mindMapCanvas.getByTestId("expand-workspace-sidebar-button")).toBeVisible();
   await expect(mindMapCanvas.getByTestId("expand-node-detail-panel-button")).toBeVisible();
@@ -1504,6 +1586,77 @@ test("shows signed-in account menu state", async ({ page }) => {
     "learner@example.com",
   );
   await expect(page.locator('[data-testid="sign-out-button"]:visible')).toBeVisible();
+});
+
+test("opens the most recently updated project from the projects sidebar", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const olderSourceProject = makeWorkspaceProject(`recent-older-${makeSeed()}`);
+  const newerSourceProject = makeWorkspaceProject(`recent-newer-${makeSeed()}`);
+  const projectIdsToDelete: string[] = [];
+
+  try {
+    const importedOlderProject = await importProject(page, olderSourceProject);
+    const importedNewerProject = await importProject(page, newerSourceProject);
+    projectIdsToDelete.push(importedOlderProject.id, importedNewerProject.id);
+
+    const olderProject = {
+      ...importedOlderProject,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const newerProject = {
+      ...importedNewerProject,
+      updatedAt: "2026-02-01T00:00:00.000Z",
+    };
+
+    await page.route("**/api/projects", async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ projects: [olderProject, newerProject] }),
+      });
+    });
+
+    await page.goto("/projects");
+    const recentButton = page.getByTestId("open-recent-project-button");
+    await expect(recentButton).toBeEnabled();
+    await recentButton.click();
+
+    await expect(page).toHaveURL(new RegExp(`/workspace/${newerProject.id}$`));
+    await expect(page.getByTestId("workspace-shell")).toBeVisible();
+    await expect(page.getByTestId("workspace-header")).toContainText(newerProject.title);
+  } finally {
+    for (const projectId of projectIdsToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectId}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("disables the recent project shortcut when there are no projects", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.route("**/api/projects", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ projects: [] }),
+    });
+  });
+
+  await page.goto("/projects");
+
+  await expect(page.getByTestId("open-recent-project-button")).toBeDisabled();
+  await expect(page.getByTestId("project-empty-state")).toBeVisible();
 });
 
 test("renames and confirms project deletion without opening the workspace", async ({ page }) => {

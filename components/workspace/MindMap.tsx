@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type WheelEvent as ReactWheelEvent,
+} from "react";
 import { EyeOff } from "lucide-react";
 import {
   Controls,
@@ -10,7 +17,9 @@ import {
   type Node,
   type NodeChange,
   type OnNodeDrag,
+  type ReactFlowInstance,
   type NodeTypes,
+  type Viewport,
 } from "@xyflow/react";
 import { getVisibleNodeIds } from "@/lib/graph";
 import type { Project } from "@/lib/types";
@@ -23,6 +32,13 @@ import {
 const nodeTypes: NodeTypes = {
   branchNode: BranchNodeCard,
 };
+const HOME_CANVAS_PAN_RANGE_RATIO = 1 / 5;
+const HOME_CANVAS_WHEEL_PAN_SPEED = 0.5;
+const LINE_SCROLL_DELTA_MULTIPLIER = 20;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
 
 type MindMapProps = {
   project: Project;
@@ -34,6 +50,7 @@ type MindMapProps = {
   creatingNodeId: string | null;
   streamingNodeId: string | null;
   inlineNodeComposer?: InlineNodeComposerData;
+  onHomeCanvasPanOffsetChange?: (offsetY: number) => void;
 };
 
 export function MindMap({
@@ -46,7 +63,10 @@ export function MindMap({
   creatingNodeId,
   streamingNodeId,
   inlineNodeComposer,
+  onHomeCanvasPanOffsetChange,
 }: MindMapProps) {
+  const flowContainerRef = useRef<HTMLDivElement | null>(null);
+  const homeViewportBaselineYRef = useRef<number | null>(null);
   const visibleNodeIds = useMemo(() => getVisibleNodeIds(project), [project]);
 
   const graphNodes = useMemo<Node<BranchNodeData>[]>(() => {
@@ -107,7 +127,11 @@ export function MindMap({
   }, [project.nodes, selectedNodeId, visibleNodeIds]);
 
   const [nodes, setNodes] = useState(graphNodes);
+  const [reactFlowInstance, setReactFlowInstance] =
+    useState<ReactFlowInstance<Node<BranchNodeData>, Edge> | null>(null);
   const dragDisabled = Boolean(creatingNodeId || streamingNodeId);
+  const isHomeInlineComposer = inlineNodeComposer?.variant === "home";
+  const homeComposerNodeId = isHomeInlineComposer ? inlineNodeComposer?.nodeId : null;
   const fitViewOptions = useMemo(
     () => ({
       maxZoom: inlineNodeComposer ? 1 : 1.7,
@@ -115,9 +139,62 @@ export function MindMap({
     [inlineNodeComposer],
   );
 
+  const centerHomeComposer = useCallback(() => {
+    if (!reactFlowInstance || !homeComposerNodeId) return;
+
+    void reactFlowInstance
+      .fitView({
+        nodes: [{ id: homeComposerNodeId }],
+        maxZoom: 1,
+        duration: 0,
+      })
+      .then(() => {
+        homeViewportBaselineYRef.current = reactFlowInstance.getViewport().y;
+        onHomeCanvasPanOffsetChange?.(0);
+      });
+  }, [homeComposerNodeId, onHomeCanvasPanOffsetChange, reactFlowInstance]);
+
+  const getHomeCanvasPanLimit = useCallback(() => {
+    const containerHeight = flowContainerRef.current?.clientHeight ?? window.innerHeight;
+
+    return containerHeight * HOME_CANVAS_PAN_RANGE_RATIO;
+  }, []);
+
   useEffect(() => {
     setNodes(graphNodes);
   }, [graphNodes]);
+
+  useEffect(() => {
+    if (!homeComposerNodeId) return undefined;
+
+    const animationFrame = window.requestAnimationFrame(centerHomeComposer);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [centerHomeComposer, graphNodes, homeComposerNodeId]);
+
+  useEffect(() => {
+    if (!homeComposerNodeId) return undefined;
+
+    const container = flowContainerRef.current;
+    if (!container) return undefined;
+
+    let animationFrame = 0;
+    const scheduleCenter = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(centerHomeComposer);
+    };
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleCenter);
+
+    scheduleCenter();
+    observer?.observe(container);
+    window.addEventListener("resize", scheduleCenter);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      observer?.disconnect();
+      window.removeEventListener("resize", scheduleCenter);
+    };
+  }, [centerHomeComposer, homeComposerNodeId]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -132,6 +209,77 @@ export function MindMap({
       void onMoveNode(node.id, node.position);
     },
     [dragDisabled, onMoveNode],
+  );
+
+  const handleViewportChange = useCallback(
+    (viewport: Viewport) => {
+      if (!isHomeInlineComposer) return;
+
+      if (homeViewportBaselineYRef.current === null) {
+        homeViewportBaselineYRef.current = viewport.y;
+      }
+
+      const baselineY = homeViewportBaselineYRef.current;
+      const panLimit = getHomeCanvasPanLimit();
+      const rawOffsetY = viewport.y - baselineY;
+      const clampedOffsetY = clamp(rawOffsetY, -panLimit, 0);
+
+      onHomeCanvasPanOffsetChange?.(clampedOffsetY);
+
+      if (reactFlowInstance && Math.abs(rawOffsetY - clampedOffsetY) > 0.5) {
+        void reactFlowInstance.setViewport(
+          {
+            ...viewport,
+            y: baselineY + clampedOffsetY,
+          },
+          { duration: 0 },
+        );
+      }
+    },
+    [
+      getHomeCanvasPanLimit,
+      isHomeInlineComposer,
+      onHomeCanvasPanOffsetChange,
+      reactFlowInstance,
+    ],
+  );
+
+  const handleHomeWheel = useCallback(
+    (event: ReactWheelEvent<HTMLDivElement>) => {
+      if (!isHomeInlineComposer || !reactFlowInstance) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const viewport = reactFlowInstance.getViewport();
+      const baselineY = homeViewportBaselineYRef.current ?? viewport.y;
+      const deltaY =
+        event.deltaY *
+        (event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? LINE_SCROLL_DELTA_MULTIPLIER
+          : 1);
+      const nextOffsetY = clamp(
+        viewport.y - baselineY - deltaY * HOME_CANVAS_WHEEL_PAN_SPEED,
+        -getHomeCanvasPanLimit(),
+        0,
+      );
+
+      homeViewportBaselineYRef.current = baselineY;
+      onHomeCanvasPanOffsetChange?.(nextOffsetY);
+      void reactFlowInstance.setViewport(
+        {
+          ...viewport,
+          y: baselineY + nextOffsetY,
+        },
+        { duration: 0 },
+      );
+    },
+    [
+      getHomeCanvasPanLimit,
+      isHomeInlineComposer,
+      onHomeCanvasPanOffsetChange,
+      reactFlowInstance,
+    ],
   );
 
   if (graphNodes.length === 0) {
@@ -153,6 +301,7 @@ export function MindMap({
 
   return (
     <div
+      ref={flowContainerRef}
       id="mind-map"
       role="region"
       aria-label="Mind map"
@@ -166,16 +315,25 @@ export function MindMap({
         edges={graphEdges}
         nodeTypes={nodeTypes}
         nodesDraggable={!dragDisabled}
+        onInit={setReactFlowInstance}
         onNodeClick={(_, node) => onSelectNode(node.id)}
+        onViewportChange={handleViewportChange}
+        onWheel={handleHomeWheel}
         onNodesChange={handleNodesChange}
         onNodeDragStop={handleNodeDragStop}
         fitView
         fitViewOptions={fitViewOptions}
         minZoom={0.25}
         maxZoom={1.7}
+        zoomOnScroll={!isHomeInlineComposer}
+        panOnScroll={false}
         className="branchmind-grid h-full rounded-[28px] lg:rounded-none"
       >
-        <Controls className="!rounded-[18px] !border-white/80 !bg-white/80 !shadow-lg" />
+        <Controls
+          className={`!rounded-[18px] !border-white/80 !bg-white/80 !shadow-lg ${
+            isHomeInlineComposer ? "!hidden sm:!flex" : ""
+          }`}
+        />
       </ReactFlow>
     </div>
   );

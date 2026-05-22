@@ -135,6 +135,7 @@ type WorkspaceCanvasShellProps = {
   } | null;
   nodeDetailOptions?: NodeDetailOptions;
   projectNotesConfig?: ProjectNotesConfig;
+  canvasIntro?: ReactNode;
 };
 
 type SidePanelResizeBoundsOptions = {
@@ -328,6 +329,7 @@ export function WorkspaceCanvasShell({
   syncFailure = null,
   nodeDetailOptions,
   projectNotesConfig,
+  canvasIntro,
 }: WorkspaceCanvasShellProps) {
   const workspaceGridRef = useRef<HTMLDivElement | null>(null);
   const projectTitleInputRef = useRef<HTMLInputElement | null>(null);
@@ -354,6 +356,7 @@ export function WorkspaceCanvasShell({
     initialNodeDetailPanelCollapsed,
   );
   const [isProjectNotesPanelOpen, setIsProjectNotesPanelOpen] = useState(false);
+  const [canvasIntroPanOffsetY, setCanvasIntroPanOffsetY] = useState(0);
 
   const hasProjectNotes = Boolean(projectNotesConfig);
   const selectedNode = selectedNodeId ? project.nodes[selectedNodeId] ?? null : null;
@@ -404,6 +407,9 @@ export function WorkspaceCanvasShell({
     "--project-notes-panel-width": `${projectNotesPanelWidth}px`,
     "--workspace-grid-columns": desktopGridColumns,
     "--mobile-map-height": `${mobileMapHeight}px`,
+  } as CSSProperties;
+  const canvasIntroStyle = {
+    transform: `translate3d(0, ${canvasIntroPanOffsetY}px, 0)`,
   } as CSSProperties;
   const workspaceGridClassName =
     "grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden rounded-b-xl border border-t-0 border-neutral-200 bg-white shadow-xl shadow-[rgba(44,35,62,0.08)] lg:h-full lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:shadow-none";
@@ -862,6 +868,11 @@ export function WorkspaceCanvasShell({
   }, [project.id]);
 
   useEffect(() => {
+    if (canvasIntro) return;
+    setCanvasIntroPanOffsetY(0);
+  }, [canvasIntro]);
+
+  useEffect(() => {
     if (!hasProjectNotes && mobileWorkspaceView === "notes") {
       setMobileWorkspaceView("chat");
       restoreAutoCollapsedSidebarForNotes();
@@ -1160,6 +1171,14 @@ export function WorkspaceCanvasShell({
           <h2 id="mind-map-section-title" className="sr-only">
             Mind map canvas
           </h2>
+          {canvasIntro && (
+            <div
+              className="relative z-10 flex justify-center px-4 pt-6 lg:pointer-events-none lg:absolute lg:inset-x-4 lg:top-24 lg:p-0"
+              style={canvasIntroStyle}
+            >
+              {canvasIntro}
+            </div>
+          )}
           {isWorkspaceSidebarCollapsed && (
             <CanvasCornerToggleButton
               side="left"
@@ -1180,17 +1199,24 @@ export function WorkspaceCanvasShell({
               <PanelRightOpen size={18} />
             </CanvasCornerToggleButton>
           )}
-          <MindMap
-            project={project}
-            selectedNodeId={selectedNodeId}
-            onSelectNode={onSelectNode}
-            onCreateNode={onQuickCreateNode}
-            onToggleNode={onToggleNode}
-            onMoveNode={onMoveNode}
-            creatingNodeId={disableNodeCreationActions ? project.rootNodeId : creatingNodeId}
-            streamingNodeId={streamingNodeId}
-            inlineNodeComposer={inlineNodeComposer}
-          />
+          <div className={canvasIntro ? "h-[calc(100%-7.75rem)] lg:h-full" : "h-full"}>
+            <MindMap
+              project={project}
+              selectedNodeId={selectedNodeId}
+              onSelectNode={onSelectNode}
+              onCreateNode={onQuickCreateNode}
+              onToggleNode={onToggleNode}
+              onMoveNode={onMoveNode}
+              creatingNodeId={
+                disableNodeCreationActions ? project.rootNodeId : creatingNodeId
+              }
+              streamingNodeId={streamingNodeId}
+              inlineNodeComposer={inlineNodeComposer}
+              onHomeCanvasPanOffsetChange={
+                canvasIntro ? setCanvasIntroPanOffsetY : undefined
+              }
+            />
+          </div>
         </section>
         {!isNodeDetailPanelCollapsed && (
           <WorkspaceResizeHandle
