@@ -73,6 +73,13 @@ type CreateNodeHandler = (
   modelSelection?: ChatModelSelection,
 ) => Promise<string | null>;
 
+type PopulateNodeHandler = (
+  nodeId: string,
+  instruction: string,
+  attachments?: ChatAttachment[],
+  modelSelection?: ChatModelSelection,
+) => Promise<boolean>;
+
 type EditUserMessageHandler = (
   nodeId: string,
   userMessageId: string,
@@ -116,6 +123,7 @@ type WorkspaceCanvasShellProps = {
   onSelectNode: (nodeId: string) => void;
   onQuickCreateNode: (nodeId: string, mode: "continue" | "branch") => void;
   onCreateNode: CreateNodeHandler;
+  onPopulateNode: PopulateNodeHandler;
   onEditUserMessage: EditUserMessageHandler;
   onRetryAssistantMessage: RetryAssistantMessageHandler;
   onUpdateProjectTitle?: UpdateProjectTitleHandler;
@@ -313,6 +321,7 @@ export function WorkspaceCanvasShell({
   onSelectNode,
   onQuickCreateNode,
   onCreateNode,
+  onPopulateNode,
   onEditUserMessage,
   onRetryAssistantMessage,
   onUpdateProjectTitle,
@@ -1246,6 +1255,7 @@ export function WorkspaceCanvasShell({
               node={selectedNode}
               conversationMessages={selectedConversationMessages}
               onCreateNode={onCreateNode}
+              onPopulateNode={onPopulateNode}
               onEditUserMessage={onEditUserMessage}
               onRetryAssistantMessage={onRetryAssistantMessage}
               onUpdateNodeTitle={onUpdateNodeTitle}
@@ -1287,6 +1297,7 @@ export function WorkspaceCanvasShell({
           >
             <ProjectNotesPanel
               projectId={project.id}
+              projectTitle={project.title}
               projectNotes={projectNotesConfig.projectNotes}
               node={selectedNode}
               isCreating={isSelectedNodeCreating}

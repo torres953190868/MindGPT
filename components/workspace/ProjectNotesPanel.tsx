@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { NotebookPen, PanelRightClose, PlusCircle } from "lucide-react";
+import { FileDown, NotebookPen, PanelRightClose, PlusCircle } from "lucide-react";
+import { exportProjectNotesPdf } from "@/lib/client/project-notes-pdf";
 import { PROJECT_NOTES_MAX_LENGTH } from "@/lib/project-notes";
 import type { MindNode } from "@/lib/types";
 import { ProjectNotesEditor, type ProjectNotesEditorHandle } from "./ProjectNotesEditor";
 
 type ProjectNotesPanelProps = {
   projectId: string;
+  projectTitle: string;
   projectNotes: string;
   node: MindNode | null;
   isCreating: boolean;
@@ -45,6 +47,7 @@ function getNotesStatusLabel(status: NotesSaveStatus) {
 
 export function ProjectNotesPanel({
   projectId,
+  projectTitle,
   projectNotes,
   node,
   isCreating,
@@ -174,6 +177,18 @@ export function ProjectNotesPanel({
     });
   }
 
+  function handleExportPdf() {
+    const didOpenPrintDialog = exportProjectNotesPdf({
+      notesHtml: notesEditorRef.current?.getPrintableHtml() ?? "",
+      notesMarkdown: notesDraft,
+      projectTitle,
+    });
+
+    if (!didOpenPrintDialog) {
+      setNotesSaveError("PDF export is not available in this browser.");
+    }
+  }
+
   return (
     <aside
       id="project-notes-panel"
@@ -214,6 +229,17 @@ export function ProjectNotesPanel({
           >
             {getNotesStatusLabel(notesSaveStatus)}
           </p>
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            aria-label="Export project notes as PDF"
+            data-testid="export-project-notes-pdf-button"
+            title="Export project notes as PDF"
+            className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-[14px] border border-[#eadff1] bg-white/78 px-3 text-xs font-black text-[#6e4ca0] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+          >
+            <FileDown size={15} />
+            Export PDF
+          </button>
         </div>
 
         <button

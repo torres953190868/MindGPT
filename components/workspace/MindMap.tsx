@@ -67,6 +67,7 @@ export function MindMap({
 }: MindMapProps) {
   const flowContainerRef = useRef<HTMLDivElement | null>(null);
   const homeViewportBaselineYRef = useRef<number | null>(null);
+  const previousFlowBoundsRef = useRef<DOMRectReadOnly | null>(null);
   const visibleNodeIds = useMemo(() => getVisibleNodeIds(project), [project]);
 
   const graphNodes = useMemo<Node<BranchNodeData>[]>(() => {
@@ -195,6 +196,65 @@ export function MindMap({
       window.removeEventListener("resize", scheduleCenter);
     };
   }, [centerHomeComposer, homeComposerNodeId]);
+
+  useEffect(() => {
+    previousFlowBoundsRef.current = null;
+  }, [project.id]);
+
+  useEffect(() => {
+    if (!reactFlowInstance || isHomeInlineComposer) return undefined;
+
+    const container = flowContainerRef.current;
+    if (!container) return undefined;
+
+    let animationFrame = 0;
+    const preserveViewportPosition = () => {
+      const nextBounds = container.getBoundingClientRect();
+
+      if (nextBounds.width === 0 || nextBounds.height === 0) {
+        previousFlowBoundsRef.current = null;
+        return;
+      }
+
+      const previousBounds = previousFlowBoundsRef.current;
+      previousFlowBoundsRef.current = nextBounds;
+
+      if (!previousBounds) return;
+
+      const deltaX = previousBounds.left - nextBounds.left;
+      const deltaY = previousBounds.top - nextBounds.top;
+
+      if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return;
+
+      const viewport = reactFlowInstance.getViewport();
+      void reactFlowInstance.setViewport(
+        {
+          ...viewport,
+          x: viewport.x + deltaX,
+          y: viewport.y + deltaY,
+        },
+        { duration: 0 },
+      );
+    };
+    const schedulePreserveViewportPosition = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(preserveViewportPosition);
+    };
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(schedulePreserveViewportPosition);
+
+    schedulePreserveViewportPosition();
+    observer?.observe(container);
+    window.addEventListener("resize", schedulePreserveViewportPosition);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      observer?.disconnect();
+      window.removeEventListener("resize", schedulePreserveViewportPosition);
+    };
+  }, [isHomeInlineComposer, reactFlowInstance, project.id]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {

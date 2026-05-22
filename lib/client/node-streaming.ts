@@ -96,6 +96,94 @@ export function createDraftChildProject(
   };
 }
 
+export function createBlankChildProject(
+  project: Project,
+  parentId: string,
+  mode: Exclude<BranchType, "root">,
+) {
+  const parent = project.nodes[parentId];
+  if (!parent) return null;
+
+  const timestamp = now();
+  const nodeId = createId(`node_${mode}_blank`);
+  const child: MindNode = {
+    id: nodeId,
+    projectId: project.id,
+    parentId,
+    title: mode === "branch" ? "New branch" : "New continuation",
+    titleManuallyEdited: false,
+    summary: "Write the first message from the node detail panel.",
+    messages: [],
+    children: [],
+    position: getChildPosition(
+      parent,
+      mode,
+      parent.children
+        .map((childId) => project.nodes[childId])
+        .filter((node): node is MindNode => Boolean(node)),
+    ),
+    branchType: mode,
+    collapsed: false,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  return {
+    node: child,
+    project: {
+      ...project,
+      nodes: {
+        ...project.nodes,
+        [parentId]: {
+          ...parent,
+          children: [...parent.children, nodeId],
+          updatedAt: timestamp,
+        },
+        [nodeId]: child,
+      },
+      updatedAt: timestamp,
+    },
+  };
+}
+
+export function createPopulatingBlankNodeProject(
+  project: Project,
+  nodeId: string,
+  instruction: string,
+  attachments: ChatAttachment[] = [],
+) {
+  const node = project.nodes[nodeId];
+  const trimmed = instruction.trim();
+  if (!node || node.messages.length > 0 || !trimmed) return null;
+
+  const timestamp = now();
+  const assistantMessage = makeMessage("assistant", "");
+  const nextNode: MindNode = {
+    ...node,
+    title: node.titleManuallyEdited
+      ? node.title
+      : node.branchType === "branch"
+        ? "Generating branch..."
+        : "Generating continuation...",
+    summary: "Streaming DeepSeek response.",
+    messages: [makeMessage("user", trimmed, attachments), assistantMessage],
+    updatedAt: timestamp,
+  };
+
+  return {
+    assistantMessageId: assistantMessage.id,
+    node: nextNode,
+    project: {
+      ...project,
+      nodes: {
+        ...project.nodes,
+        [nodeId]: nextNode,
+      },
+      updatedAt: timestamp,
+    },
+  };
+}
+
 export function appendDraftAssistantDelta(
   project: Project,
   nodeId: string,

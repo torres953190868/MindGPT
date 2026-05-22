@@ -1,8 +1,6 @@
 "use client";
 
-import Link from "next/link";
 import {
-  ArrowLeft,
   ChevronDown,
   ChevronRight,
   GitBranch,
@@ -175,49 +173,36 @@ export function WorkspaceSidebar({
   }
 
   return (
-      <aside
+    <aside
       aria-label="Workspace sidebar"
       data-testid="workspace-sidebar"
-      className="flex min-h-[220px] w-full flex-col gap-3 rounded-lg border border-neutral-200 bg-white p-3 shadow-sm lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none"
+      className="flex min-h-[220px] w-full flex-col gap-4 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none"
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Link
-            href="/projects"
-            className="inline-flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs font-bold text-[#5f556b] transition hover:bg-[#f5f2f8] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40"
-            aria-label="Back to projects"
-            data-testid="project-list-link"
-          >
-            <ArrowLeft size={15} />
-            <span className="truncate">Back to projects</span>
-          </Link>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={onCollapse}
-            aria-label="Collapse workspace sidebar"
-            aria-controls="conversation-outline"
-            aria-expanded="true"
-            data-testid="collapse-workspace-sidebar-button"
-            className="grid h-8 w-8 place-items-center rounded-md text-[#6b6077] transition hover:bg-[#f5f2f8] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40"
-          >
-            <PanelLeftClose size={16} />
-          </button>
-        </div>
+      <div className="flex min-h-10 items-center justify-start">
+        <button
+          type="button"
+          onClick={onCollapse}
+          aria-label="Collapse workspace sidebar"
+          aria-controls="conversation-outline"
+          aria-expanded="true"
+          data-testid="collapse-workspace-sidebar-button"
+          className="grid h-10 w-10 place-items-center rounded-full bg-neutral-100 text-neutral-600 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
+        >
+          <PanelLeftClose size={18} />
+        </button>
       </div>
 
-        <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" size={15} />
+      <div className="relative">
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500" size={16} />
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           aria-label="Search project nodes"
           data-testid="node-search-input"
           placeholder="Search nodes"
-          className="h-9 w-full rounded-md border border-neutral-200 bg-white pl-9 pr-11 text-xs font-medium text-neutral-900 outline-none placeholder:text-neutral-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
+          className="h-11 w-full rounded-xl border border-neutral-200 bg-white pl-10 pr-14 text-sm font-bold text-neutral-900 outline-none placeholder:text-neutral-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
         />
-        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-md bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold text-neutral-500">
+        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full bg-neutral-100 px-2 py-1 text-[11px] font-black text-neutral-500">
           ⌘K
         </span>
       </div>
@@ -225,13 +210,13 @@ export function WorkspaceSidebar({
       <div
         role="tablist"
         aria-label="Workspace sidebar views"
-        className="grid grid-cols-2 border-b border-neutral-200 text-xs font-bold"
+        className="grid grid-cols-2 gap-2 text-sm font-black"
       >
         <button
           type="button"
           role="tab"
           aria-selected="true"
-          className="relative h-9 text-brand-700 after:absolute after:bottom-[-1px] after:left-1/2 after:h-0.5 after:w-10 after:-translate-x-1/2 after:rounded-full after:bg-brand-500 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-200/40"
+          className="inline-flex h-11 items-center justify-center rounded-xl bg-brand-100 text-brand-800 transition hover:bg-brand-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
         >
           Outline
         </button>
@@ -239,9 +224,9 @@ export function WorkspaceSidebar({
           type="button"
           role="tab"
           aria-selected="false"
-          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md text-neutral-600 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-200/40"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-neutral-100 text-neutral-700 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
         >
-          <Tags size={13} />
+          <Tags size={16} />
           Tags
         </button>
       </div>
@@ -250,7 +235,7 @@ export function WorkspaceSidebar({
         id="conversation-outline"
         aria-label="Conversation outline"
         data-testid="conversation-outline"
-        className="min-h-[96px] flex-1 space-y-1 overflow-auto pr-1 lg:min-h-0"
+        className="min-h-[96px] flex-1 space-y-2 overflow-auto pr-1 lg:min-h-0"
       >
         {!hasMatches ? (
           <div
@@ -329,12 +314,12 @@ function OutlineItem({
           aria-expanded={expanded}
           data-testid="conversation-outline-toggle"
           data-node-id={node.id}
-          className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md text-brand-600 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-200 lg:mt-1"
+          className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/75 text-brand-600 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-200 lg:mt-1"
         >
-          {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
       ) : (
-        <span aria-hidden="true" className="h-5 w-5 shrink-0 lg:mt-1 lg:w-3.5" />
+        <span aria-hidden="true" className="h-7 w-7 shrink-0 lg:mt-1" />
       )}
       <button
         type="button"
@@ -343,13 +328,13 @@ function OutlineItem({
         aria-current={selected ? "true" : undefined}
         data-testid="conversation-outline-item"
         data-node-id={node.id}
-        className="flex min-h-10 min-w-0 flex-1 items-start gap-1.5 rounded-xl p-0.5 text-left outline-none transition focus:ring-2 focus:ring-brand-200 lg:min-h-0"
+        className="flex min-h-11 min-w-0 flex-1 items-start gap-2 rounded-xl p-0.5 text-left outline-none transition focus:ring-2 focus:ring-brand-200 lg:min-h-0"
       >
         <span
           aria-hidden="true"
-          className={`grid h-6 w-6 shrink-0 place-items-center rounded-full ${selected ? "bg-brand-100 text-brand-700" : "bg-white/80 text-neutral-500"}`}
+          className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${selected ? "bg-brand-100 text-brand-700" : "bg-white/80 text-neutral-500"}`}
         >
-          <Icon size={13} />
+          <Icon size={14} />
         </span>
         <span className="min-w-0">
           <span className="line-clamp-2 text-sm font-black leading-5">{node.title}</span>

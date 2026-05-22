@@ -39,6 +39,24 @@ export const createNodeSchema = z.object({
   modelSelection: chatModelSelectionSchema.optional(),
 });
 
+export const createBlankNodeSchema = z.object({
+  parentId: z.string().trim().min(1),
+  mode: z.enum(["continue", "branch"]),
+  blank: z.literal(true),
+  nodeId: z.string().trim().min(1).max(160).optional(),
+});
+
+export const createNodeRequestSchema = z.union([
+  createBlankNodeSchema,
+  createNodeSchema,
+]);
+
+export const populateBlankNodeSchema = z.object({
+  instruction: z.string().trim().min(1).max(1_500),
+  attachments: z.array(chatAttachmentSchema).max(MAX_CHAT_ATTACHMENTS).optional().default([]),
+  modelSelection: chatModelSelectionSchema.optional(),
+});
+
 export const regenerateNodeSchema = z
   .object({
     instruction: z.string().trim().min(1).max(1_500).optional(),

@@ -154,6 +154,7 @@ export function HomeDraftWorkspace() {
       onSelectNode={handleSelectNode}
       onQuickCreateNode={ignoreQuickCreateNode}
       onCreateNode={ignoreCreateNode}
+      onPopulateNode={ignoreMessageMutation}
       onEditUserMessage={ignoreMessageMutation}
       onRetryAssistantMessage={ignoreMessageMutation}
       onUpdateNodeTitle={ignoreMessageMutation}

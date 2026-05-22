@@ -164,6 +164,92 @@ export function addChildNode(
   };
 }
 
+export function addBlankChildNode(
+  project: Project,
+  parentId: string,
+  mode: Exclude<BranchType, "root">,
+  nodeId = createId(`node_${mode}_blank`),
+) {
+  const parent = project.nodes[parentId];
+  if (!parent || project.nodes[nodeId]) return null;
+
+  const timestamp = now();
+  const child: MindNode = {
+    id: nodeId,
+    projectId: project.id,
+    parentId,
+    title: mode === "branch" ? "New branch" : "New continuation",
+    titleManuallyEdited: false,
+    summary: "Write the first message from the node detail panel.",
+    messages: [],
+    children: [],
+    position: getChildPosition(
+      parent,
+      mode,
+      parent.children
+        .map((childId) => project.nodes[childId])
+        .filter((node): node is MindNode => Boolean(node)),
+    ),
+    branchType: mode,
+    collapsed: false,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  return {
+    node: child,
+    project: {
+      ...project,
+      nodes: {
+        ...project.nodes,
+        [parentId]: {
+          ...parent,
+          children: [...parent.children, nodeId],
+          updatedAt: timestamp,
+        },
+        [nodeId]: child,
+      },
+      updatedAt: timestamp,
+    },
+  };
+}
+
+export function populateBlankNode(
+  project: Project,
+  nodeId: string,
+  instruction: string,
+  reply: MockReply,
+  attachments: ChatAttachment[] = [],
+) {
+  const node = project.nodes[nodeId];
+  const trimmed = instruction.trim();
+  if (!node || node.messages.length > 0 || !trimmed) return null;
+
+  const timestamp = now();
+  const nextNode: MindNode = {
+    ...node,
+    title: node.titleManuallyEdited ? node.title : reply.title,
+    summary: reply.summary,
+    messages: [
+      makeMessage("user", trimmed, attachments),
+      makeMessage("assistant", reply.content),
+    ],
+    updatedAt: timestamp,
+  };
+
+  return {
+    node: nextNode,
+    project: {
+      ...project,
+      nodes: {
+        ...project.nodes,
+        [nodeId]: nextNode,
+      },
+      updatedAt: timestamp,
+    },
+  };
+}
+
 export function regenerateNode(
   project: Project,
   nodeId: string,

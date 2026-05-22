@@ -2,7 +2,9 @@ import { getContextTitles, getNodeConversationMessages } from "@/lib/graph";
 import {
   createRootProject,
   createPendingRootProject,
+  addBlankChildNode,
   addChildNode,
+  populateBlankNode,
   regenerateNode,
   removeNode,
   setNodeCollapsed,
@@ -44,6 +46,11 @@ type RegenerateNodeUpdate = {
 };
 
 type PrepareRegenerateNodeUpdate = Omit<RegenerateNodeUpdate, "reply">;
+
+type PopulateBlankNodeUpdate = {
+  instruction: string;
+  attachments?: ChatAttachment[];
+};
 
 type ProjectUpdate = {
   title?: string;
@@ -347,6 +354,87 @@ export async function createChildNodeForOwner(
 
   return {
     project: toProjectDto(nextProject),
+    node: result.node,
+  };
+}
+
+export async function createBlankChildNodeForOwner(
+  ownerId: string,
+  projectId: string,
+  parentId: string,
+  mode: Exclude<BranchType, "root">,
+  nodeId?: string,
+) {
+  const project = await readOwnedProject(ownerId, projectId);
+  const parent = project?.nodes[parentId];
+  if (!project || !parent) notFound();
+
+  const result = addBlankChildNode(project, parentId, mode, nodeId);
+  if (!result) {
+    badRequest("Blank node could not be created.", "BLANK_NODE_CREATE_FAILED");
+  }
+
+  const nextProject = withProjectOwner(result.project, ownerId);
+  await getProjectsRepository().saveProject(nextProject);
+
+  return {
+    project: toProjectDto(nextProject),
+    node: result.node,
+  };
+}
+
+export async function preparePopulateBlankNodeContext(
+  ownerId: string,
+  projectId: string,
+  nodeId: string,
+  update: PopulateBlankNodeUpdate,
+) {
+  const instruction = update.instruction.trim();
+  if (!instruction) badRequest("Instruction is required.", "INSTRUCTION_REQUIRED");
+
+  const project = await readOwnedProject(ownerId, projectId);
+  const node = project?.nodes[nodeId];
+  if (!project || !node) notFound();
+
+  if (node.messages.length > 0) {
+    badRequest("Node already has messages.", "NODE_ALREADY_POPULATED");
+  }
+
+  const contextNodeId = node.parentId ?? nodeId;
+
+  return {
+    attachments: update.attachments ?? [],
+    contextSummaries: getContextSummaries(project, contextNodeId),
+    instruction,
+    messages: node.parentId
+      ? getNodeConversationMessages(project, node.parentId).map((item) => item.message)
+      : [],
+    mode: node.branchType,
+  };
+}
+
+export async function populateBlankNodeForOwner(
+  ownerId: string,
+  projectId: string,
+  nodeId: string,
+  instruction: string,
+  reply: MockReply,
+  attachments: ChatAttachment[] = [],
+) {
+  const project = await readOwnedProject(ownerId, projectId);
+  const node = project?.nodes[nodeId];
+  if (!project || !node) notFound();
+
+  const result = populateBlankNode(project, nodeId, instruction, reply, attachments);
+  if (!result) {
+    badRequest("Blank node could not be populated.", "BLANK_NODE_POPULATE_FAILED");
+  }
+
+  const ownedProject = withProjectOwner(result.project, ownerId);
+  await getProjectsRepository().saveProject(ownedProject);
+
+  return {
+    project: toProjectDto(ownedProject),
     node: result.node,
   };
 }

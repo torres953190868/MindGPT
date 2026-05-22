@@ -56,6 +56,12 @@ type NodeDetailPanelProps = {
     attachments?: ChatAttachment[],
     modelSelection?: ChatModelSelection,
   ) => Promise<string | null>;
+  onPopulateNode: (
+    nodeId: string,
+    instruction: string,
+    attachments?: ChatAttachment[],
+    modelSelection?: ChatModelSelection,
+  ) => Promise<boolean>;
   onEditUserMessage: (
     nodeId: string,
     userMessageId: string,
@@ -203,6 +209,7 @@ export function NodeDetailPanel({
   node,
   conversationMessages,
   onCreateNode,
+  onPopulateNode,
   onEditUserMessage,
   onRetryAssistantMessage,
   onUpdateNodeTitle,
@@ -255,6 +262,7 @@ export function NodeDetailPanel({
   const isComposerBusy = composerControls.controlsBusy;
   const displayError = composerControls.attachmentError ?? error;
   const isInitialSubmit = initialSubmit;
+  const isBlankNode = !isInitialSubmit && Boolean(node && node.messages.length === 0);
   const isTitleEditBusy = isCreating || isComposerBusy;
   const titleEditTrimmed = titleEditValue.trim();
   const isTitleSaveDisabled =
@@ -324,6 +332,21 @@ export function NodeDetailPanel({
         composerControls.selectedModel,
       );
       if (projectId) {
+        setInput("");
+        composerControls.resetAttachments();
+        clearSelectedSourceText();
+      }
+      return;
+    }
+
+    if (isBlankNode) {
+      const populated = await onPopulateNode(
+        node.id,
+        trimmed,
+        preparedAttachments,
+        composerControls.selectedModel,
+      );
+      if (populated) {
         setInput("");
         composerControls.resetAttachments();
         clearSelectedSourceText();
@@ -469,7 +492,7 @@ export function NodeDetailPanel({
             aria-label="Collapse node details panel"
             aria-expanded="true"
             data-testid="collapse-node-detail-panel-button"
-            className="grid h-11 w-11 place-items-center self-end rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+            className="grid h-10 w-10 place-items-center self-end rounded-full bg-neutral-100 text-neutral-600 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
           >
             <PanelRightClose size={18} />
           </button>
@@ -776,7 +799,7 @@ export function NodeDetailPanel({
         onSubmit={handleSubmit}
         className="shrink-0 space-y-3 border-t border-neutral-200 pt-4"
       >
-        {!isInitialSubmit && selectedSourceText && (
+        {!isInitialSubmit && !isBlankNode && selectedSourceText && (
           <div
             aria-label="Selected source text"
             data-testid="selected-source-text"
@@ -800,7 +823,7 @@ export function NodeDetailPanel({
           </div>
         )}
 
-        {!isInitialSubmit && (
+        {!isInitialSubmit && !isBlankNode && (
           <div
             role="group"
             aria-label="Message branch mode"

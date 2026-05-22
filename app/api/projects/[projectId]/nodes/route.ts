@@ -5,9 +5,10 @@ import { jsonWithSession, safeErrorWithSession } from "@/lib/server/http";
 import {
   CREATE_NODE_LIMIT,
   CREATE_NODE_WINDOW_MS,
-  createNodeSchema,
+  createNodeRequestSchema,
 } from "@/lib/server/node-request";
 import {
+  createBlankChildNodeForOwner,
   createChildNodeForOwner,
   prepareChildContext,
 } from "@/lib/server/projects-service";
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest, context: NodesRouteContext) {
     });
     const { principal, session } = await getBranchMindAuthContext(request);
     const { projectId } = await context.params;
-    const body = await parseJsonBody(request, createNodeSchema, {
+    const body = await parseJsonBody(request, createNodeRequestSchema, {
       maxBytes: 24 * 1024,
     });
     const rateLimit = await checkRateLimitAsync(request, {
@@ -51,36 +52,48 @@ export async function POST(request: NextRequest, context: NodesRouteContext) {
       );
     }
 
+    if ("blank" in body && body.blank) {
+      const result = await createBlankChildNodeForOwner(
+        principal.id,
+        projectId,
+        body.parentId,
+        body.mode,
+        body.nodeId,
+      );
+      return jsonWithSession(result, session);
+    }
+
+    const createBody = body as Extract<typeof body, { instruction: string }>;
     const contextData = await prepareChildContext(
       principal.id,
       projectId,
-      body.parentId,
+      createBody.parentId,
     );
     const documentContexts = await getWorkspaceDocumentContextsForOwner(
       principal.id,
-      body.attachments,
-      [body.instruction, body.sourceText].filter(Boolean).join("\n\n"),
+      createBody.attachments,
+      [createBody.instruction, createBody.sourceText].filter(Boolean).join("\n\n"),
     );
     const reply = await requestDeepSeekReply({
-      mode: body.mode,
-      instruction: body.instruction,
+      mode: createBody.mode,
+      instruction: createBody.instruction,
       contextTitles: contextData.contextSummaries,
       messages: contextData.messages.map(({ role, content }) => ({
         role,
         content,
       })),
-      sourceText: body.sourceText,
+      sourceText: createBody.sourceText,
       documentContexts,
-      modelSelection: body.modelSelection,
+      modelSelection: createBody.modelSelection,
     });
     const result = await createChildNodeForOwner(
       principal.id,
       projectId,
-      body.parentId,
-      body.mode,
-      body.instruction,
+      createBody.parentId,
+      createBody.mode,
+      createBody.instruction,
       reply,
-      body.attachments,
+      createBody.attachments,
     );
 
     return jsonWithSession(result, session);

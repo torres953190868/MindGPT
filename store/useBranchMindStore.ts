@@ -4,7 +4,9 @@ import { create } from "zustand";
 import type { StoreApi } from "zustand";
 import {
   appendDraftAssistantDelta,
+  createBlankChildProject,
   createDraftChildProject,
+  createPopulatingBlankNodeProject,
   createRegeneratingNodeProject,
   createTextDeltaBatch,
   readNodeStreamingEvents,
@@ -21,6 +23,7 @@ import type {
   BranchType,
   ChatAttachment,
   ChatModelSelection,
+  MindNode,
   NodePosition,
   Project,
 } from "@/lib/types";
@@ -92,6 +95,16 @@ type BranchMindState = {
     attachments?: ChatAttachment[],
     modelSelection?: ChatModelSelection,
   ) => Promise<string | null>;
+  createBlankChildNode: (
+    parentId: string,
+    mode: Exclude<BranchType, "root">,
+  ) => Promise<string | null>;
+  populateBlankNode: (
+    nodeId: string,
+    instruction: string,
+    attachments?: ChatAttachment[],
+    modelSelection?: ChatModelSelection,
+  ) => Promise<boolean>;
   editUserMessage: (
     nodeId: string,
     userMessageId: string,
@@ -129,6 +142,7 @@ type SyncProjectResponse = {
 
 type UpdateNodeResponse = {
   project: Project;
+  node?: MindNode;
   selectedNodeId?: string;
 };
 
@@ -847,6 +861,125 @@ async function regenerateNodeInPlace(
   return true;
 }
 
+async function populateBlankNodeInPlace(
+  set: BranchMindSet,
+  get: BranchMindGet,
+  {
+    nodeId,
+    instruction,
+    attachments = [],
+    modelSelection,
+  }: {
+    nodeId: string;
+    instruction: string;
+    attachments?: ChatAttachment[];
+    modelSelection?: ChatModelSelection;
+  },
+) {
+  const trimmed = instruction.trim();
+  if (!trimmed) return false;
+
+  const state = get();
+  const project = state.projects.find((item) => item.id === state.activeProjectId);
+  const node = project?.nodes[nodeId];
+  if (
+    !project ||
+    !node ||
+    node.messages.length > 0 ||
+    state.creatingNodeId ||
+    state.streamingNodeId ||
+    isProjectWaitingForSync(state, project.id)
+  ) {
+    return false;
+  }
+
+  const draft = createPopulatingBlankNodeProject(
+    project,
+    nodeId,
+    trimmed,
+    attachments,
+  );
+  if (!draft) return false;
+
+  set({
+    projects: replaceProject(state.projects, draft.project),
+    selectedNodeId: nodeId,
+    creatingNodeId: nodeId,
+    streamingNodeId: nodeId,
+    aiError: null,
+  });
+
+  const deltaBatch = createTextDeltaBatch((contentDelta) => {
+    set((current) => {
+      const currentProject = current.projects.find((item) => item.id === project.id);
+      if (!currentProject) return current;
+
+      return {
+        projects: replaceProject(
+          current.projects,
+          appendDraftAssistantDelta(
+            currentProject,
+            nodeId,
+            draft.assistantMessageId,
+            contentDelta,
+          ),
+        ),
+      };
+    });
+  });
+
+  void (async () => {
+    let completed = false;
+
+    try {
+      const response = await fetch(
+        `/api/projects/${project.id}/nodes/${nodeId}/populate`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            instruction: trimmed,
+            attachments,
+            modelSelection,
+          }),
+        },
+      );
+
+      await readNodeStreamingEvents(response, (event) => {
+        if (event.type === "delta") {
+          deltaBatch.push(event.contentDelta);
+          return;
+        }
+
+        completed = true;
+        deltaBatch.flushNow();
+        set({
+          projects: replaceProject(get().projects, event.project),
+          selectedNodeId: event.node.id,
+          creatingNodeId: null,
+          streamingNodeId: null,
+        });
+      });
+
+      if (!completed) {
+        throw new Error("Streaming response ended before completion.");
+      }
+    } catch (error) {
+      deltaBatch.cancel();
+      set((current) => ({
+        projects: completed ? current.projects : replaceProject(current.projects, project),
+        selectedNodeId: nodeId,
+        creatingNodeId: null,
+        streamingNodeId: null,
+        aiError: getErrorMessage(error),
+      }));
+    }
+  })();
+
+  return true;
+}
+
 function readLegacyProjects() {
   if (typeof window === "undefined") return { projects: [], activeProjectId: null };
 
@@ -1290,6 +1423,72 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
     })();
 
     return draft.node.id;
+  },
+
+  createBlankChildNode: async (parentId, mode) => {
+    const state = get();
+    const project = state.projects.find((item) => item.id === state.activeProjectId);
+    const parent = project?.nodes[parentId];
+    if (
+      !project ||
+      !parent ||
+      state.creatingNodeId ||
+      state.streamingNodeId ||
+      isProjectWaitingForSync(state, project.id)
+    ) {
+      return null;
+    }
+
+    const draft = createBlankChildProject(project, parentId, mode);
+    if (!draft) return null;
+
+    set({
+      projects: replaceProject(state.projects, draft.project),
+      selectedNodeId: draft.node.id,
+      creatingNodeId: parentId,
+      aiError: null,
+    });
+
+    try {
+      const response = await fetch(`/api/projects/${project.id}/nodes`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          parentId,
+          mode,
+          blank: true,
+          nodeId: draft.node.id,
+        }),
+      });
+      const data = await readJson<UpdateNodeResponse>(response);
+      const selectedNodeId = data.node?.id ?? draft.node.id;
+
+      set({
+        projects: replaceProject(get().projects, data.project),
+        selectedNodeId,
+        creatingNodeId: null,
+      });
+      return selectedNodeId;
+    } catch (error) {
+      set((current) => ({
+        projects: replaceProject(current.projects, project),
+        selectedNodeId:
+          current.selectedNodeId === draft.node.id ? parentId : current.selectedNodeId,
+        creatingNodeId: null,
+        aiError: getErrorMessage(error),
+      }));
+      return null;
+    }
+  },
+
+  populateBlankNode: async (nodeId, instruction, attachments, modelSelection) => {
+    return populateBlankNodeInPlace(set, get, {
+      nodeId,
+      instruction,
+      attachments,
+      modelSelection,
+    });
   },
 
   editUserMessage: async (nodeId, userMessageId, instruction, modelSelection) => {

@@ -12,12 +12,14 @@ import { z } from "zod";
 const READ_ONLY_LOCAL_SESSION = { id: "", isNew: false };
 
 const updateAccountSchema = z.object({
-  displayName: z.string().min(1).max(100).optional(),
+  displayName: z.string().trim().min(1).max(100).nullable().optional(),
 });
 
 export type AccountDto = {
   email: string | null;
   displayName: string | null;
+  authMode: "supabase" | "local" | "guest";
+  authConfigured: boolean;
   plan: string;
   subscriptionStatus: string | null;
   usage: {
@@ -40,6 +42,8 @@ async function getFileAccountData(sessionId: string): Promise<AccountDto> {
   return {
     email: null,
     displayName: null,
+    authMode: "local",
+    authConfigured: false,
     plan: "free",
     subscriptionStatus: "inactive",
     usage: {
@@ -123,6 +127,8 @@ async function getSupabaseAccountData(userId: string, email: string | null): Pro
   return {
     email,
     displayName: planRow?.display_name ?? null,
+    authMode: "supabase",
+    authConfigured: true,
     plan,
     subscriptionStatus: planRow?.subscription_status ?? "inactive",
     usage: {
@@ -146,6 +152,8 @@ export async function GET(request: NextRequest) {
         {
           email: null,
           displayName: null,
+          authMode: "local",
+          authConfigured: false,
           plan: "free",
           subscriptionStatus: "inactive",
           usage: {
@@ -166,6 +174,8 @@ export async function GET(request: NextRequest) {
           {
             email: null,
             displayName: null,
+            authMode: "guest",
+            authConfigured: true,
             plan: "free",
             subscriptionStatus: "inactive",
             usage: {

@@ -28,6 +28,10 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
     (state) => state.startPendingInitialProjectStream,
   );
   const createChildNode = useBranchMindStore((state) => state.createChildNode);
+  const createBlankChildNode = useBranchMindStore(
+    (state) => state.createBlankChildNode,
+  );
+  const populateBlankNode = useBranchMindStore((state) => state.populateBlankNode);
   const editUserMessage = useBranchMindStore((state) => state.editUserMessage);
   const retryAssistantMessage = useBranchMindStore((state) => state.retryAssistantMessage);
   const retryPendingProjectSync = useBranchMindStore(
@@ -68,13 +72,15 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
 
   const handleQuickCreate = useCallback(
     (nodeId: string, mode: "continue" | "branch") => {
-      const instruction =
-        mode === "continue"
-          ? "Continue with the next key knowledge point."
-          : "Explain the most useful side topic from this node in depth.";
+      if (mode === "branch") {
+        void createBlankChildNode(nodeId, mode);
+        return;
+      }
+
+      const instruction = "Continue with the next key knowledge point.";
       void createChildNode(nodeId, mode, instruction);
     },
-    [createChildNode],
+    [createBlankChildNode, createChildNode],
   );
 
   const handleCreateFromPanel = useCallback(
@@ -149,6 +155,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
       onSelectNode={selectNode}
       onQuickCreateNode={handleQuickCreate}
       onCreateNode={handleCreateFromPanel}
+      onPopulateNode={populateBlankNode}
       onEditUserMessage={editUserMessage}
       onRetryAssistantMessage={retryAssistantMessage}
       onUpdateProjectTitle={updateProjectTitle}

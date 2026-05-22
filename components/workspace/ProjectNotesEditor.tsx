@@ -55,6 +55,7 @@ type ProjectNotesEditorProps = {
 
 export type ProjectNotesEditorHandle = {
   focusEnd: () => void;
+  getPrintableHtml: () => string;
 };
 
 type SlashMenuRange = {
@@ -615,6 +616,20 @@ export const ProjectNotesEditor = forwardRef<ProjectNotesEditorHandle, ProjectNo
       () => ({
         focusEnd: () => {
           editor?.commands.focus("end");
+        },
+        getPrintableHtml: () => {
+          if (!editor) return "";
+
+          const clone = editor.view.dom.cloneNode(true) as HTMLElement;
+          clone.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((input) => {
+            if (input.checked) {
+              input.setAttribute("checked", "");
+            } else {
+              input.removeAttribute("checked");
+            }
+          });
+
+          return clone.innerHTML;
         },
       }),
       [editor],

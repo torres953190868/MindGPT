@@ -2101,6 +2101,61 @@ test("workspace sidebars resize and snap like VS Code", async ({ page }, testInf
   }
 });
 
+test("keeps mind map nodes visually stable when the left sidebar collapses", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Desktop sidebar behavior is covered once.");
+
+  const sourceProject = makeWorkspaceProject(`stable-sidebar-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.goto(`/workspace/${project.id}`);
+
+    const mindMapCanvas = page.getByTestId("mind-map-canvas");
+    const rootCard = page.locator(
+      `[data-testid="branch-node-card"][data-node-id="${project.rootNodeId}"]`,
+    );
+
+    await expect(page.getByTestId("workspace-sidebar")).toBeVisible();
+    await expect(rootCard).toBeVisible();
+
+    const boxBeforeCollapse = await getElementBox(rootCard, "root card before sidebar collapse");
+    await page.getByTestId("collapse-workspace-sidebar-button").click();
+    await expect(page.getByTestId("workspace-sidebar")).toHaveCount(0);
+    await expect(mindMapCanvas.getByTestId("expand-workspace-sidebar-button")).toBeVisible();
+
+    await expect
+      .poll(async () => {
+        const boxAfterCollapse = await getElementBox(
+          rootCard,
+          "root card after sidebar collapse",
+        );
+        return Math.abs(boxAfterCollapse.x - boxBeforeCollapse.x);
+      })
+      .toBeLessThan(2);
+    await expect
+      .poll(async () => {
+        const boxAfterCollapse = await getElementBox(
+          rootCard,
+          "root card after sidebar collapse",
+        );
+        return Math.abs(boxAfterCollapse.y - boxBeforeCollapse.y);
+      })
+      .toBeLessThan(2);
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
 test("copies, edits, and retries conversation messages", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Clipboard message actions are covered once.");
 
@@ -2182,6 +2237,7 @@ test("adds the latest AI reply to editable project notes and persists it", async
 
     const notesEditor = page.getByTestId("project-notes-input");
     await expect(page.getByTestId("project-notes-panel")).toBeVisible();
+    await expect(page.getByTestId("export-project-notes-pdf-button")).toBeVisible();
     await expect(page.getByTestId("project-notes-preview-button")).toHaveCount(0);
     await expect(page.getByTestId("project-notes-preview")).toHaveCount(0);
     await page.getByTestId("add-latest-ai-reply-note-button").click();

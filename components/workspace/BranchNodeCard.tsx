@@ -2,7 +2,7 @@
 
 import { type FormEvent, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { GitBranch, Loader2, Send, Sparkles, Sprout, Ribbon } from "lucide-react";
+import { GitBranch, Loader2, Send, Sparkles, Ribbon } from "lucide-react";
 import {
   AttachmentMenuButton,
   ModelSelectorButton,
@@ -192,22 +192,6 @@ export function BranchNodeCard({ data }: NodeProps) {
 
         {!hasInlineComposer && (
         <div className="mt-4 hidden items-center gap-2 sm:flex">
-          <button
-            type="button"
-            disabled={creationDisabled}
-            data-testid="continue-down-button"
-            data-node-id={mindNode.id}
-            onClick={(event) => {
-              event.stopPropagation();
-              onSelect(mindNode.id);
-              onCreate(mindNode.id, "continue");
-            }}
-            aria-label="Continue down"
-            title="Continue down"
-            className="grid h-9 w-9 place-items-center rounded-full bg-success-100 text-success-700 transition hover:scale-110 hover:bg-success-200 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Sprout size={17} />
-          </button>
           <button
             type="button"
             disabled={creationDisabled}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
+  ArrowUpRight,
   BarChart3,
   CheckCircle2,
   ChevronDown,
@@ -50,9 +51,9 @@ function getInitial(email: string | null | undefined) {
 }
 
 function getPlanBadgeColor(plan: string) {
-  if (plan === "pro") return "bg-purple-100 text-purple-700";
-  if (plan === "team") return "bg-blue-100 text-blue-700";
-  return "bg-amber-100 text-amber-700";
+  if (plan === "pro") return "border-[#d8c8ea] bg-[#f5f1fa] text-[#62477d]";
+  if (plan === "team") return "border-[#bfd6dd] bg-[#eef6f7] text-[#315e68]";
+  return "border-[#e4d4ad] bg-[#fbf4e2] text-[#765d35]";
 }
 
 function getHighestUsageItem(usage: AccountDto["usage"]) {
@@ -84,20 +85,25 @@ function UsageBar({ used, limit }: { used: number; limit: number | null }) {
   if (limit === null) return null;
   const ratio = Math.min(used / limit, 1);
   const percentage = Math.round(ratio * 100);
-  const barColor = percentage >= 95 ? "bg-red-500" : percentage >= 80 ? "bg-amber-500" : "bg-purple-500";
+  const barColor = percentage >= 95 ? "bg-[#9a413d]" : percentage >= 80 ? "bg-[#a9722a]" : "bg-[#2f806b]";
 
   return (
-    <div className="px-3 pb-2 pt-1">
-      <div className="flex items-center justify-between text-[11px] font-medium text-[#9b8fa8]">
+    <div className="px-3 pb-2.5 pt-1.5">
+      <div className="flex items-center justify-between text-[11px] font-semibold text-[#7c7284]">
         <span>{percentage >= 95 ? "Almost at limit" : "Usage"}</span>
         <span>{used}/{limit}</span>
       </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#f0ebf5]">
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#ece9ef]">
         <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${percentage}%` }} />
       </div>
     </div>
   );
 }
+
+const accountMenuItemClass =
+  "flex min-h-9 items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-semibold text-[#4f4657] transition hover:bg-[#f6f4f1] hover:text-[#2f2934] focus:outline-none focus:ring-2 focus:ring-[#6e4ca0]/15";
+const accountMenuIconClass =
+  "grid h-6 w-6 shrink-0 place-items-center rounded-md bg-[#f1eff3] text-[#756b7d]";
 
 const WHATS_NEW_ITEMS = [
   {
@@ -264,7 +270,7 @@ export function AuthPanel({
           data-testid="auth-local-mode-status"
           className={
             isSidebar
-              ? "inline-flex min-h-11 w-full items-center gap-2 rounded-md border border-[#ebe7f1] bg-white px-2.5 py-2 text-sm font-bold text-[#5d5168] shadow-sm"
+              ? "inline-flex h-11 w-full items-center gap-2 rounded-xl border border-[#ebe7f1] bg-white px-3 text-sm font-black text-[#5d5168] shadow-sm"
               : "inline-flex min-h-11 items-center gap-2 rounded-[18px] bg-white/75 px-4 py-2.5 text-sm font-black text-[#5d5168] shadow-sm"
           }
         >
@@ -292,17 +298,17 @@ export function AuthPanel({
             data-testid="account-menu-button"
             className={
               isSidebar
-                ? "inline-flex min-h-12 w-full max-w-full items-center gap-2 rounded-md border border-[#ebe7f1] bg-white px-2.5 py-2 text-left font-bold text-[#554665] shadow-sm transition hover:bg-[#fbfafc] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40"
-                : "inline-flex min-h-11 max-w-full items-center gap-2 rounded-[18px] bg-white/78 px-3 py-2.5 font-black text-[#554665] shadow-sm transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
+                ? "inline-flex h-11 w-full max-w-full items-center gap-2 rounded-xl border border-[#ded8e4] bg-[#fffefd] px-3 text-left font-black text-[#443a49] shadow-[0_1px_2px_rgba(51,42,57,0.06)] transition hover:border-[#d0c9d8] hover:bg-[#f8f7f5] focus:outline-none focus:ring-2 focus:ring-[#6e4ca0]/20"
+                : "inline-flex min-h-11 max-w-full items-center gap-2 rounded-[18px] border border-white/80 bg-white/86 px-3 py-2.5 font-black text-[#443a49] shadow-[0_8px_20px_rgba(51,42,57,0.08)] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#6e4ca0]/15"
             }
           >
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#e5f6ee] text-xs text-[#3d7558]">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#edf5f1] text-xs font-bold text-[#2f6651] ring-1 ring-inset ring-[#d7e8df]">
               {getInitial(displayEmail)}
             </span>
             <span className={`${isSidebar ? "flex-1" : "max-w-36"} truncate`}>
               {displayName ?? "Signed in"}
             </span>
-            <ChevronDown size={15} />
+            <ChevronDown size={15} className="shrink-0 text-[#8b8292]" />
           </button>
 
           {isMenuOpen && (
@@ -310,29 +316,30 @@ export function AuthPanel({
               role="dialog"
               aria-label="Account menu"
               data-testid="account-menu-popover"
-              className={`absolute ${popoverHorizontal} z-50 rounded-2xl border border-[#f0ebf5] bg-white p-1.5 text-left shadow-xl shadow-[#e8dff5]/50 ${popoverPosition}`}
+              className={`absolute ${popoverHorizontal} z-50 rounded-xl border border-[#ded8e4] bg-[#fffefd] p-1.5 text-left shadow-[0_22px_60px_rgba(51,42,57,0.16)] ${popoverPosition}`}
             >
               {/* User info header with plan badge */}
-              <div className="rounded-xl bg-[#f9f6fc] px-3 py-3">
+              <div className="rounded-lg border border-[#ebe6ee] bg-[linear-gradient(135deg,#fbfaf8_0%,#f2f6f3_100%)] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
                 <div className="flex items-center gap-2.5">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#e5f6ee] text-xs font-bold text-[#3d7558]">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#edf5f1] text-xs font-bold text-[#2f6651] ring-1 ring-inset ring-[#d2e5dc]">
                     {getInitial(displayEmail)}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-[#342b3a]">
+                    <p className="truncate text-sm font-bold text-[#2f2934]">
                       {displayEmail ?? "BranchMind account"}
                     </p>
                     <div className="mt-0.5 flex items-center gap-2">
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${getPlanBadgeColor(plan)}`}>
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${getPlanBadgeColor(plan)}`}>
                         {plan}
                       </span>
                       {isFreePlan && (
                         <Link
                           href="/settings/billing"
                           onClick={() => setIsMenuOpen(false)}
-                          className="text-[11px] font-bold text-purple-600 transition hover:text-purple-700"
+                          className="inline-flex items-center gap-0.5 text-[11px] font-bold text-[#5e5365] transition hover:text-[#2f2934]"
                         >
-                          Upgrade →
+                          Upgrade
+                          <ArrowUpRight size={12} />
                         </Link>
                       )}
                     </div>
@@ -350,30 +357,36 @@ export function AuthPanel({
                 <Link
                   href="/settings/account"
                   onClick={() => setIsMenuOpen(false)}
-                  className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-[#554665] transition hover:bg-[#f5f1f9]"
+                  className={accountMenuItemClass}
                 >
-                  <Settings size={15} className="text-[#9b8fa8]" />
+                  <span className={accountMenuIconClass}>
+                    <Settings size={14} />
+                  </span>
                   Settings
                 </Link>
                 <Link
                   href="/settings/usage"
                   onClick={() => setIsMenuOpen(false)}
-                  className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-[#554665] transition hover:bg-[#f5f1f9]"
+                  className={accountMenuItemClass}
                 >
-                  <BarChart3 size={15} className="text-[#9b8fa8]" />
+                  <span className={accountMenuIconClass}>
+                    <BarChart3 size={14} />
+                  </span>
                   Usage & Limits
                 </Link>
                 <Link
                   href="/settings/billing"
                   onClick={() => setIsMenuOpen(false)}
-                  className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-[#554665] transition hover:bg-[#f5f1f9]"
+                  className={accountMenuItemClass}
                 >
-                  <CreditCard size={15} className="text-[#9b8fa8]" />
+                  <span className={accountMenuIconClass}>
+                    <CreditCard size={14} />
+                  </span>
                   Billing
                 </Link>
               </div>
 
-              <div className="my-1.5 h-px bg-[#f0ebf5]" />
+              <div className="my-1.5 h-px bg-[#ece7ef]" />
 
               {/* Bottom links */}
               <div className="space-y-0.5">
@@ -383,21 +396,25 @@ export function AuthPanel({
                     setIsMenuOpen(false);
                     setShowWhatsNew(true);
                   }}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-[#554665] transition hover:bg-[#f5f1f9]"
+                  className={`w-full ${accountMenuItemClass}`}
                 >
-                  <Sparkles size={15} className="text-[#9b8fa8]" />
+                  <span className={accountMenuIconClass}>
+                    <Sparkles size={14} />
+                  </span>
                   What&apos;s New
                 </button>
                 <a
                   href="mailto:support@branchmind.app"
-                  className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-[#554665] transition hover:bg-[#f5f1f9]"
+                  className={accountMenuItemClass}
                 >
-                  <HelpCircle size={15} className="text-[#9b8fa8]" />
+                  <span className={accountMenuIconClass}>
+                    <HelpCircle size={14} />
+                  </span>
                   Help & Support
                 </a>
               </div>
 
-              <div className="my-1.5 h-px bg-[#f0ebf5]" />
+              <div className="my-1.5 h-px bg-[#ece7ef]" />
 
               {/* Sign out */}
               <button
@@ -406,9 +423,11 @@ export function AuthPanel({
                 disabled={submittingAction === "logout"}
                 aria-label="Sign out"
                 data-testid="sign-out-button"
-                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-[#8f3f3a] transition hover:bg-[#ffeceb] disabled:cursor-not-allowed disabled:opacity-65"
+                className="flex min-h-9 w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-semibold text-[#7d3b37] transition hover:bg-[#fff1ef] hover:text-[#692f2c] focus:outline-none focus:ring-2 focus:ring-[#9a413d]/15 disabled:cursor-not-allowed disabled:opacity-65"
               >
-                <LogOut size={15} />
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-[#f8eeee] text-[#8f3f3a]">
+                  <LogOut size={14} />
+                </span>
                 {submittingAction === "logout" ? "Signing out..." : "Sign out"}
               </button>
               {error && (
@@ -437,7 +456,7 @@ export function AuthPanel({
         data-testid="account-sign-in-button"
         className={
           isSidebar
-            ? "inline-flex min-h-11 w-full items-center gap-2 rounded-md border border-[#ebe7f1] bg-white px-3 py-2.5 font-bold text-[#5d427d] shadow-sm transition hover:bg-[#f7f3fb] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40"
+            ? "inline-flex h-11 w-full items-center gap-2 rounded-xl border border-[#ebe7f1] bg-white px-3 font-black text-[#5d427d] shadow-sm transition hover:bg-[#f7f3fb] focus:outline-none focus:ring-2 focus:ring-[#b9a5db]/40"
             : "inline-flex min-h-11 items-center gap-2 rounded-[18px] bg-[#f1e8fb] px-4 py-2.5 font-black text-[#5d427d] shadow-sm transition hover:bg-[#e4d5f6] focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
         }
       >
