@@ -117,6 +117,12 @@ textarea {
   background-size: 24px 24px;
 }
 
+.settings-shell {
+  background:
+    linear-gradient(145deg, rgba(49, 93, 79, 0.055) 0%, rgba(49, 93, 79, 0) 38%),
+    linear-gradient(180deg, #f3f0ea 0%, #ece8df 100%);
+}
+
 .home-research-canvas {
   background:
     radial-gradient(circle at 16% 22%, rgba(255, 194, 209, 0.25), transparent 28%),

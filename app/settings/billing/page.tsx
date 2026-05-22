@@ -12,7 +12,7 @@ const PLANS = [
     period: "/month",
     description: "A focused starter tier with clear usage limits.",
     icon: Zap,
-    iconColor: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
+    iconColor: "bg-[#fff4d6] text-[#8a6a20] ring-1 ring-[#ead8a7]",
     eyebrow: "Starter limits",
     features: [
       { label: "5 projects" },
@@ -31,7 +31,7 @@ const PLANS = [
     period: "/month",
     description: "Remove limits and keep building.",
     icon: Crown,
-    iconColor: "bg-[#f0ecff] text-[#5b37b7] ring-1 ring-[#d8cff8]",
+    iconColor: "bg-[#ebe4f8] text-[#5a3d88] ring-1 ring-[#d8caef]",
     eyebrow: "Best upgrade",
     features: [
       { label: "Unlimited projects", highlight: true },
@@ -51,7 +51,7 @@ const PLANS = [
     period: "/month",
     description: "Collaborate with your team.",
     icon: Crown,
-    iconColor: "bg-slate-50 text-slate-600 ring-1 ring-slate-200",
+    iconColor: "bg-[#deebe4] text-[#315d4f] ring-1 ring-[#c8ded4]",
     eyebrow: "For teams",
     features: [
       { label: "Unlimited everything" },
@@ -100,7 +100,7 @@ export default function BillingSettingsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 size={24} className="animate-spin text-[#9b8fa8]" />
+        <Loader2 size={24} className="animate-spin text-[#766d78]" />
       </div>
     );
   }
@@ -112,30 +112,30 @@ export default function BillingSettingsPage() {
   const isActiveSubscription = account?.subscriptionStatus === "active";
 
   return (
-    <div className="space-y-5 text-[#1f2937]">
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_14px_38px_rgba(15,23,42,0.08)]">
+    <div className="space-y-5 text-[#29252f]">
+      <div className="overflow-hidden rounded-lg border border-[#ddd4c7] bg-[#fffdf8] shadow-[0_18px_42px_rgba(52,45,35,0.055)]">
         <div className="flex flex-col gap-5 p-5 md:p-6 lg:flex-row lg:items-stretch lg:justify-between">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${currentPlanMeta.iconColor}`}>
                 <CurrentPlanIcon size={18} />
               </span>
-              <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
+              <span className="text-xs font-black uppercase tracking-[0.14em] text-[#766d78]">
                 Current plan
               </span>
               <span
                 className={`rounded-full px-2.5 py-1 text-xs font-extrabold ${
-                  isActiveSubscription ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700"
+                  isActiveSubscription ? "bg-[#deebe4] text-[#315d4f]" : "bg-[#f4efe7] text-[#5e5661]"
                 }`}
               >
                 {isActiveSubscription ? "Active subscription" : "No billing required"}
               </span>
             </div>
 
-            <h2 className="mt-4 text-2xl font-black capitalize tracking-normal text-[#111827]">
+            <h2 className="mt-4 text-2xl font-black capitalize tracking-normal text-[#29252f]">
               {currentPlan} Plan
             </h2>
-            <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-slate-600">
+            <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-[#766d78]">
               {isFreePlan
                 ? "Free is good for trying BranchMind. Pro removes the project and node ceilings when your workspace starts to grow."
                 : "Your workspace is already on an upgraded plan with more room for documents, ideas, and AI work."}
@@ -144,39 +144,39 @@ export default function BillingSettingsPage() {
             {isFreePlan && (
               <div className="mt-4 grid gap-2 sm:grid-cols-3">
                 {FREE_LIMITS.map((limit) => (
-                  <div key={limit.label} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{limit.label}</p>
-                    <p className="mt-0.5 text-sm font-black text-[#111827]">{limit.value}</p>
+                  <div key={limit.label} className="rounded-lg border border-[#ddd4c7] bg-[#f6f1e9] px-3 py-2.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-[#766d78]">{limit.label}</p>
+                    <p className="mt-0.5 text-sm font-black text-[#29252f]">{limit.value}</p>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 lg:w-72">
-            <div className="flex items-center gap-2 text-sm font-black text-[#111827]">
-              <ShieldCheck size={17} className="text-emerald-600" />
+          <div className="rounded-lg border border-[#ddd4c7] bg-[#f6f1e9] p-4 lg:w-72">
+            <div className="flex items-center gap-2 text-sm font-black text-[#29252f]">
+              <ShieldCheck size={17} className="text-[#315d4f]" />
               Upgrade path
             </div>
-            <p className="mt-2 text-sm font-medium leading-6 text-slate-600">
+            <p className="mt-2 text-sm font-semibold leading-6 text-[#766d78]">
               Pro unlocks unlimited projects and nodes, plus 10x more daily AI messages.
             </p>
             <button
               type="button"
               onClick={() => handleUpgrade("pro")}
               disabled={!isFreePlan}
-              className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#1f2937] px-4 text-sm font-black text-white shadow-[0_12px_28px_rgba(15,23,42,0.24)] transition hover:-translate-y-0.5 hover:bg-[#111827] disabled:cursor-default disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none disabled:hover:translate-y-0"
+              className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#28242d] px-4 text-sm font-black text-[#fffdf8] shadow-[0_12px_24px_rgba(40,36,45,0.18)] transition hover:-translate-y-0.5 hover:bg-[#1e1a24] disabled:cursor-default disabled:bg-[#d8d0c5] disabled:text-[#8a8178] disabled:shadow-none disabled:hover:translate-y-0"
             >
               {isFreePlan ? "Upgrade to Pro" : "Plan active"}
               {isFreePlan && <ArrowRight size={16} />}
             </button>
-            <p className="mt-2 text-xs font-semibold text-slate-500">Checkout integration is coming in Phase 2.</p>
+            <p className="mt-2 text-xs font-semibold text-[#8d838d]">Checkout integration is coming in Phase 2.</p>
           </div>
         </div>
       </div>
 
       {upgradeMessage && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800 shadow-sm">
+        <div className="rounded-lg border border-[#e7c777] bg-[#fff4d6] px-4 py-3 text-sm font-bold text-[#8a6a20] shadow-sm">
           {upgradeMessage}
         </div>
       )}
@@ -188,14 +188,14 @@ export default function BillingSettingsPage() {
           return (
             <div
               key={plan.key}
-              className={`relative flex min-h-[350px] flex-col rounded-xl border p-5 transition ${
+              className={`relative flex min-h-[350px] flex-col rounded-lg border p-5 transition ${
                 plan.popular
-                  ? "border-[#1f2937] bg-white shadow-[0_18px_45px_rgba(15,23,42,0.14)] ring-1 ring-[#1f2937]/10 md:-translate-y-1"
-                  : "border-slate-200 bg-white shadow-sm"
+                  ? "border-[#28242d] bg-[#fffdf8] shadow-[0_20px_46px_rgba(40,36,45,0.12)] ring-1 ring-[#28242d]/10 md:-translate-y-1"
+                  : "border-[#ddd4c7] bg-[#fffdf8] shadow-[0_14px_34px_rgba(52,45,35,0.045)]"
               }`}
             >
               {plan.popular && (
-                <span className="absolute -top-3 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-[#1f2937] px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white shadow-lg shadow-slate-900/20">
+                <span className="absolute -top-3 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-[#28242d] px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#fffdf8] shadow-lg shadow-[#28242d]/15">
                   <Sparkles size={11} />
                   Recommended
                 </span>
@@ -206,26 +206,26 @@ export default function BillingSettingsPage() {
                     <Icon size={18} />
                   </span>
                   <div>
-                    <p className="text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">
+                    <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#766d78]">
                       {plan.eyebrow}
                     </p>
-                    <h3 className="mt-0.5 text-base font-black text-[#111827]">{plan.name}</h3>
+                    <h3 className="mt-0.5 text-base font-black text-[#29252f]">{plan.name}</h3>
                   </div>
                 </div>
                 {isCurrent && (
-                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-extrabold text-emerald-700">
+                  <span className="rounded-full bg-[#deebe4] px-2.5 py-1 text-[11px] font-extrabold text-[#315d4f]">
                     Current
                   </span>
                 )}
               </div>
 
-              <p className="mt-4 min-h-10 text-sm font-semibold leading-5 text-slate-600">{plan.description}</p>
+              <p className="mt-4 min-h-10 text-sm font-semibold leading-5 text-[#766d78]">{plan.description}</p>
 
               <div className="mt-5">
-                <span className={`${plan.popular ? "text-4xl" : "text-3xl"} font-black text-[#111827]`}>
+                <span className={`${plan.popular ? "text-4xl" : "text-3xl"} font-black text-[#29252f]`}>
                   {plan.price}
                 </span>
-                <span className="text-sm font-bold text-slate-500">{plan.period}</span>
+                <span className="text-sm font-bold text-[#8d838d]">{plan.period}</span>
               </div>
 
               <ul className="mt-5 space-y-3">
@@ -234,11 +234,11 @@ export default function BillingSettingsPage() {
                     key={feature.label}
                     className={`flex items-start gap-2 text-sm ${
                       "highlight" in feature && feature.highlight
-                        ? "font-black text-[#111827]"
-                        : "font-semibold text-slate-700"
+                        ? "font-black text-[#29252f]"
+                        : "font-semibold text-[#5e5661]"
                     }`}
                   >
-                    <Check size={15} className="mt-0.5 shrink-0 text-emerald-600" />
+                    <Check size={15} className="mt-0.5 shrink-0 text-[#315d4f]" />
                     {feature.label}
                   </li>
                 ))}
@@ -251,10 +251,10 @@ export default function BillingSettingsPage() {
                   disabled={plan.ctaDisabled || isCurrent}
                   className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-black transition ${
                     isCurrent
-                      ? "cursor-default bg-slate-100 text-slate-500"
+                      ? "cursor-default bg-[#f4efe7] text-[#8d838d]"
                       : plan.popular && !plan.ctaDisabled
-                        ? "bg-[#1f2937] text-white shadow-[0_12px_28px_rgba(15,23,42,0.24)] hover:-translate-y-0.5 hover:bg-[#111827]"
-                        : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                        ? "bg-[#28242d] text-[#fffdf8] shadow-[0_12px_24px_rgba(40,36,45,0.18)] hover:-translate-y-0.5 hover:bg-[#1e1a24]"
+                        : "border border-[#d9d0c2] bg-[#fffdf8] text-[#5e5661] hover:border-[#c7bcad] hover:bg-[#fffaf3]"
                   } disabled:opacity-75`}
                 >
                   {isCurrent ? "Current plan" : plan.cta}
@@ -266,11 +266,11 @@ export default function BillingSettingsPage() {
         })}
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-base font-black text-[#111827]">Invoices</h2>
-        <p className="mt-0.5 text-sm font-semibold text-slate-500">Your billing history will appear here.</p>
-        <div className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 py-8 text-center">
-          <p className="text-sm font-bold text-slate-500">No invoices yet.</p>
+      <div className="rounded-lg border border-[#ddd4c7] bg-[#fffdf8] p-5 shadow-[0_18px_42px_rgba(52,45,35,0.055)]">
+        <h2 className="text-base font-black text-[#29252f]">Invoices</h2>
+        <p className="mt-0.5 text-sm font-semibold text-[#766d78]">Your billing history will appear here.</p>
+        <div className="mt-4 rounded-lg border border-dashed border-[#d9d0c2] bg-[#f6f1e9] py-8 text-center">
+          <p className="text-sm font-bold text-[#8d838d]">No invoices yet.</p>
         </div>
       </div>
     </div>

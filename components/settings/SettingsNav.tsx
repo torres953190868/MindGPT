@@ -15,7 +15,7 @@ export function SettingsNav() {
 
   return (
     <nav aria-label="Settings" className="w-full lg:w-60 lg:shrink-0">
-      <div className="grid grid-cols-3 gap-1 rounded-xl border border-[#e4ddd4] bg-[#fffdf9]/90 p-1 shadow-[0_10px_30px_rgba(35,31,26,0.06)] lg:sticky lg:top-8 lg:block lg:space-y-1 lg:p-1.5">
+      <div className="grid grid-cols-3 gap-1 rounded-lg border border-[#ddd4c7] bg-[#fffdf8]/85 p-1 shadow-[0_16px_40px_rgba(52,45,35,0.07)] backdrop-blur lg:sticky lg:top-8 lg:block lg:space-y-1 lg:p-1.5">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
           return (
@@ -25,15 +25,15 @@ export function SettingsNav() {
               aria-current={isActive ? "page" : undefined}
               className={`group flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-lg px-2 py-2.5 text-sm font-bold transition focus:outline-none focus:ring-2 focus:ring-[#2b2730]/15 sm:gap-2.5 sm:px-3 lg:justify-start ${
                 isActive
-                  ? "bg-[#25222b] text-white shadow-[0_12px_28px_rgba(37,34,43,0.22)]"
-                  : "text-[#5d5363] hover:bg-[#f6f2ea] hover:text-[#2e2933]"
+                  ? "bg-[#28242d] text-[#fffdf8] shadow-[0_14px_28px_rgba(40,36,45,0.18)]"
+                  : "text-[#635b66] hover:bg-[#f4efe7] hover:text-[#2e2933]"
               }`}
             >
               <span
                 className={`grid h-7 w-7 shrink-0 place-items-center rounded-md transition ${
                   isActive
-                    ? "bg-white/12 text-white"
-                    : "bg-[#f0ece5] text-[#7c7280] group-hover:bg-white"
+                    ? "bg-white/12 text-[#fffdf8]"
+                    : "bg-[#f1ece3] text-[#817784] group-hover:bg-[#fffdf8]"
                 }`}
               >
                 <item.icon size={15} />
