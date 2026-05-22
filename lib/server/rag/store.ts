@@ -419,6 +419,25 @@ function requireFilePath(document: RagDocument) {
   return filePath;
 }
 
+function localDocumentFilePath(document: Pick<RagDocument, "id">) {
+  const filePath = path.resolve(RAG_FILES_DIR, `${document.id}.pdf`);
+  const filesDir = path.resolve(RAG_FILES_DIR);
+  const relativePath = path.relative(filesDir, filePath);
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) return null;
+  return filePath;
+}
+
+async function readLocalDocumentFile(document: RagDocument) {
+  const filePath = requireFilePath(document) ?? localDocumentFilePath(document);
+  if (!filePath) return null;
+  try {
+    return new Uint8Array(await readFile(filePath));
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
 async function deleteDocumentFile(document: RagDocument) {
   const filePath = requireFilePath(document);
   if (!filePath) return;
@@ -524,14 +543,7 @@ class FileRagRepository implements RagRepository {
   }
 
   async readDocumentFile(document: RagDocument) {
-    const filePath = requireFilePath(document);
-    if (!filePath) return null;
-    try {
-      return new Uint8Array(await readFile(filePath));
-    } catch (error) {
-      if (isNodeError(error) && error.code === "ENOENT") return null;
-      throw error;
-    }
+    return readLocalDocumentFile(document);
   }
 
   async setDocumentStatus(
@@ -771,12 +783,17 @@ class SupabaseRagRepository implements RagRepository {
   }
 
   async readDocumentFile(document: RagDocument) {
+    const localBytes = await readLocalDocumentFile(document);
+    if (localBytes) return localBytes;
     if (!document.storagePath) return null;
+
     const { data, error } = await getSupabaseRagStorage().download(
       document.storagePath,
     );
     if (error) {
-      if (isStorageNotFoundError(error)) return null;
+      if (isStorageNotFoundError(error)) {
+        return readLocalDocumentFile(document);
+      }
       assertNoStorageError(error, "download document file");
     }
     if (!data) return null;

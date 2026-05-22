@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
   BarChart3,
+  Bug,
   CheckCircle2,
   ChevronDown,
   CreditCard,
@@ -15,6 +16,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
+import { BugReportDialog } from "@/components/BugReportLauncher";
 import { writeRememberedAuthEmail } from "@/lib/client/auth-email";
 import type { AccountDto } from "@/app/api/account/route";
 
@@ -182,6 +184,7 @@ export function AuthPanel({
   const [session, setSession] = useState<AuthSession | null>(null);
   const [account, setAccount] = useState<AccountDto | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showBugReport, setShowBugReport] = useState(false);
   const [showWhatsNew, setShowWhatsNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submittingAction, setSubmittingAction] = useState<"logout" | null>(null);
@@ -403,6 +406,20 @@ export function AuthPanel({
                   </span>
                   What&apos;s New
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    setShowBugReport(true);
+                  }}
+                  data-testid="report-bug-menu-item"
+                  className={`w-full ${accountMenuItemClass}`}
+                >
+                  <span className={accountMenuIconClass}>
+                    <Bug size={14} />
+                  </span>
+                  Report a bug
+                </button>
                 <a
                   href="mailto:support@branchmind.app"
                   className={accountMenuItemClass}
@@ -439,6 +456,11 @@ export function AuthPanel({
           )}
         </section>
 
+        <BugReportDialog
+          open={showBugReport}
+          onOpenChange={setShowBugReport}
+          defaultContactEmail={displayEmail}
+        />
         <WhatsNewModal open={showWhatsNew} onClose={() => setShowWhatsNew(false)} />
       </>
     );

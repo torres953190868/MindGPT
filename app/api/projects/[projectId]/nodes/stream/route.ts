@@ -104,6 +104,7 @@ export async function POST(request: NextRequest, context: NodesStreamRouteContex
       async start(controller) {
         try {
           for await (const event of streamDeepSeekReply({
+            llmTask: "node_generation",
             mode: body.mode,
             instruction: body.instruction,
             contextTitles: contextData.contextSummaries,

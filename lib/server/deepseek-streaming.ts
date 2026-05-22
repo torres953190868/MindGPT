@@ -3,9 +3,6 @@ import {
   createProviderHttpError,
   deepSeekStreamChunkSchema,
   DeepSeekError,
-  getActiveChatApiKey,
-  getActiveChatUrl,
-  getChatRequestTimeoutMs,
   getMockReply,
   isAbortError,
   isDeepSeekMockMode,
@@ -13,10 +10,14 @@ import {
   parseDeepSeekResponse,
   parseStreamingReply,
   RETRY_DELAY_MS,
-  resolveChatModelSelection,
   type BranchMindReplyRequest,
 } from "@/lib/server/deepseek-core";
-import type { ChatCompletionsProvider } from "@/lib/server/ai-provider";
+import {
+  getLlmProviderApiKey,
+  getLlmRequestTimeoutMs,
+  resolveLlmCandidates,
+  type LlmRuntimeProvider,
+} from "@/lib/server/llm-router";
 import type { MockReply } from "@/lib/types";
 
 export type DeepSeekStreamingEvent =
@@ -131,12 +132,12 @@ export function getJsonStringValuePrefix(rawJson: string, key: string) {
 
 async function fetchDeepSeekStream(
   body: BranchMindReplyRequest,
-  provider: ChatCompletionsProvider,
+  provider: LlmRuntimeProvider,
   apiKey: string,
   model: string,
   signal: AbortSignal,
 ) {
-  return fetch(getActiveChatUrl(provider), {
+  return fetch(provider.baseUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -223,7 +224,7 @@ async function* readDeepSeekContentDeltas(stream: ReadableStream<Uint8Array>) {
 
 function normalizeStreamingError(
   error: unknown,
-  provider: ChatCompletionsProvider,
+  provider: LlmRuntimeProvider,
 ) {
   if (isAbortError(error)) {
     return new DeepSeekError(`${provider.displayName} request timed out.`, 504, {
@@ -249,84 +250,102 @@ export async function* streamDeepSeekReply(
     return;
   }
 
-  const { provider, model } = resolveChatModelSelection(body.modelSelection);
-  const apiKey = getActiveChatApiKey(provider);
   let lastError: DeepSeekError | null = null;
+  const candidates = await resolveLlmCandidates(
+    body.llmTask ?? "node_generation",
+    body.modelSelection,
+    { requireJson: true, requireStreaming: true },
+  );
 
-  for (let attempt = 1; attempt <= MAX_DEEPSEEK_ATTEMPTS; attempt += 1) {
-    const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(),
-      getChatRequestTimeoutMs(provider),
-    );
-    let emittedDelta = false;
-    let rawReply = "";
-    let visibleContent = "";
+  for (let candidateIndex = 0; candidateIndex < candidates.length; candidateIndex += 1) {
+    const candidate = candidates[candidateIndex];
+    const provider = candidate.provider;
+    const apiKey = getLlmProviderApiKey(provider);
+    if (!apiKey) {
+      throw new DeepSeekError(`${provider.apiKeyEnv} is not configured.`, 500, {
+        code: `${provider.errorCodePrefix}_NOT_CONFIGURED`,
+      });
+    }
+    const model = candidate.model.model;
 
-    try {
-      const response = await fetchDeepSeekStream(
-        body,
-        provider,
-        apiKey,
-        model,
-        controller.signal,
+    for (let attempt = 1; attempt <= MAX_DEEPSEEK_ATTEMPTS; attempt += 1) {
+      const controller = new AbortController();
+      const timeout = setTimeout(
+        () => controller.abort(),
+        getLlmRequestTimeoutMs(provider),
       );
-      if (!response.ok) {
-        throw createProviderHttpError(
-          provider,
-          response,
-          await readErrorResponse(response),
-        );
-      }
-      if (!response.body) {
-        throw new DeepSeekError("DeepSeek returned an empty stream.", 502, {
-          code: "DEEPSEEK_EMPTY_STREAM",
-          retryable: true,
-        });
-      }
+      let emittedDelta = false;
+      let rawReply = "";
+      let visibleContent = "";
 
-      for await (const rawDelta of readDeepSeekContentDeltas(response.body)) {
-        rawReply += rawDelta;
-        const contentPrefix = getJsonStringValuePrefix(rawReply, "content");
-        if (!contentPrefix || contentPrefix.value.length <= visibleContent.length) {
+      try {
+        const response = await fetchDeepSeekStream(
+          body,
+          provider,
+          apiKey,
+          model,
+          controller.signal,
+        );
+        if (!response.ok) {
+          throw createProviderHttpError(
+            provider,
+            response,
+            await readErrorResponse(response),
+          );
+        }
+        if (!response.body) {
+          throw new DeepSeekError(`${provider.displayName} returned an empty stream.`, 502, {
+            code: `${provider.errorCodePrefix}_EMPTY_STREAM`,
+            retryable: true,
+          });
+        }
+
+        for await (const rawDelta of readDeepSeekContentDeltas(response.body)) {
+          rawReply += rawDelta;
+          const contentPrefix = getJsonStringValuePrefix(rawReply, "content");
+          if (!contentPrefix || contentPrefix.value.length <= visibleContent.length) {
+            continue;
+          }
+
+          const contentDelta = contentPrefix.value.slice(visibleContent.length);
+          visibleContent = contentPrefix.value;
+          emittedDelta = true;
+          yield { type: "delta", contentDelta };
+        }
+
+        const reply = parseStreamingReply(
+          rawReply,
+          body.instruction,
+          visibleContent,
+        );
+        if (reply.content.length > visibleContent.length) {
+          emittedDelta = true;
+          yield {
+            type: "delta",
+            contentDelta: reply.content.slice(visibleContent.length),
+          };
+        }
+        yield { type: "complete", reply };
+        return;
+      } catch (error) {
+        const nextError = normalizeStreamingError(error, provider);
+        lastError = nextError;
+
+        if (emittedDelta || !nextError.retryable) {
+          throw nextError;
+        }
+
+        if (attempt < MAX_DEEPSEEK_ATTEMPTS) {
+          await wait(RETRY_DELAY_MS);
           continue;
         }
 
-        const contentDelta = contentPrefix.value.slice(visibleContent.length);
-        visibleContent = contentPrefix.value;
-        emittedDelta = true;
-        yield { type: "delta", contentDelta };
+        if (candidateIndex >= candidates.length - 1) {
+          throw nextError;
+        }
+      } finally {
+        clearTimeout(timeout);
       }
-
-      const reply = parseStreamingReply(
-        rawReply,
-        body.instruction,
-        visibleContent,
-      );
-      if (reply.content.length > visibleContent.length) {
-        emittedDelta = true;
-        yield {
-          type: "delta",
-          contentDelta: reply.content.slice(visibleContent.length),
-        };
-      }
-      yield { type: "complete", reply };
-      return;
-    } catch (error) {
-      const nextError = normalizeStreamingError(error, provider);
-      lastError = nextError;
-
-      if (
-        emittedDelta ||
-        !nextError.retryable ||
-        attempt >= MAX_DEEPSEEK_ATTEMPTS
-      ) {
-        throw nextError;
-      }
-
-      await wait(RETRY_DELAY_MS);
-    } finally {
-      clearTimeout(timeout);
     }
   }
 

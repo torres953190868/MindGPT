@@ -420,8 +420,10 @@ export function WorkspaceCanvasShell({
   const canvasIntroStyle = {
     transform: `translate3d(0, ${canvasIntroPanOffsetY}px, 0)`,
   } as CSSProperties;
-  const workspaceGridClassName =
-    "grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden rounded-b-xl border border-t-0 border-neutral-200 bg-white shadow-xl shadow-[rgba(44,35,62,0.08)] lg:h-full lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:shadow-none";
+  const workspaceGridClassName = [
+    "grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden border border-neutral-200 bg-white shadow-xl shadow-[rgba(44,35,62,0.08)] lg:h-full lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:shadow-none",
+    dataDraftWorkspace ? "rounded-xl" : "rounded-b-xl border-t-0",
+  ].join(" ");
   const mobileTabsClassName = hasProjectNotes
     ? "grid grid-cols-4 gap-2 rounded-[24px] border border-white/80 bg-white/68 p-2 shadow-sm lg:hidden"
     : "grid grid-cols-3 gap-2 rounded-[24px] border border-white/80 bg-white/68 p-2 shadow-sm lg:hidden";
@@ -960,130 +962,138 @@ export function WorkspaceCanvasShell({
       data-draft-workspace={dataDraftWorkspace ? "true" : undefined}
       className="branchmind-workspace-surface flex min-h-screen flex-col bg-[#fbfafc] p-3 text-[#272033] lg:h-screen lg:min-h-[720px] lg:overflow-hidden lg:p-0"
     >
-      <header
-        aria-label="Workspace header"
-        data-testid="workspace-header"
-        className="flex min-h-14 flex-wrap items-center justify-between gap-3 rounded-t-xl border border-neutral-200 bg-white/95 px-4 py-2 shadow-sm backdrop-blur lg:flex-nowrap lg:rounded-none lg:border-x-0 lg:border-t-0 lg:px-5 lg:shadow-none"
-      >
-        <div className="flex min-w-0 flex-1 items-center gap-4">
-          <div className="flex shrink-0 items-center gap-2 border-r border-neutral-200 pr-4">
-            <span className="grid h-8 w-8 place-items-center rounded-md border border-brand-200 bg-brand-50 text-brand-600">
-              <Brain size={18} />
-            </span>
-            <span className="text-base font-extrabold text-neutral-900">BranchMind</span>
-          </div>
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            {isEditingProjectTitle ? (
-              <form
-                className="flex min-w-0 flex-1 items-center gap-1.5 sm:max-w-[460px]"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void handleSaveProjectTitleEdit();
-                }}
-              >
-                <h1 id="workspace-title" className="sr-only">
+      {dataDraftWorkspace && (
+        <h1 id="workspace-title" className="sr-only">
+          {project.title}
+        </h1>
+      )}
+
+      {!dataDraftWorkspace && (
+        <header
+          aria-label="Workspace header"
+          data-testid="workspace-header"
+          className="flex min-h-14 flex-wrap items-center justify-between gap-3 rounded-t-xl border border-neutral-200 bg-white/95 px-4 py-2 shadow-sm backdrop-blur lg:flex-nowrap lg:rounded-none lg:border-x-0 lg:border-t-0 lg:px-5 lg:shadow-none"
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-4">
+            <div className="flex shrink-0 items-center gap-2 border-r border-neutral-200 pr-4">
+              <span className="grid h-8 w-8 place-items-center rounded-md border border-brand-200 bg-brand-50 text-brand-600">
+                <Brain size={18} />
+              </span>
+              <span className="text-base font-extrabold text-neutral-900">BranchMind</span>
+            </div>
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              {isEditingProjectTitle ? (
+                <form
+                  className="flex min-w-0 flex-1 items-center gap-1.5 sm:max-w-[460px]"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void handleSaveProjectTitleEdit();
+                  }}
+                >
+                  <h1 id="workspace-title" className="sr-only">
+                    {project.title}
+                  </h1>
+                  <input
+                    ref={projectTitleInputRef}
+                    value={projectTitleEditValue}
+                    onChange={(event) => setProjectTitleEditValue(event.target.value)}
+                    onKeyDown={handleProjectTitleEditKeyDown}
+                    disabled={isProjectTitleBusy}
+                    aria-label="Project name"
+                    data-testid="project-title-edit-input"
+                    maxLength={120}
+                    className="h-9 min-w-0 flex-1 rounded-md border border-brand-200 bg-white px-3 text-sm font-extrabold text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-60 sm:text-base"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isProjectTitleSaveDisabled}
+                    aria-label="Save project name"
+                    title="Save"
+                    data-testid="save-project-title-button"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-success-100 text-success-700 transition hover:bg-success-200 focus:outline-none focus:ring-2 focus:ring-success-200 disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    {isProjectTitleSaving ? (
+                      <Loader2 size={15} className="animate-spin" />
+                    ) : (
+                      <Check size={15} />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancelProjectTitleEdit}
+                    disabled={isProjectTitleSaving}
+                    aria-label="Cancel project name edit"
+                    title="Cancel"
+                    data-testid="cancel-project-title-button"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-neutral-200 bg-white text-neutral-600 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <X size={15} />
+                  </button>
+                </form>
+              ) : (
+                <h1
+                  id="workspace-title"
+                  data-testid="workspace-title-text"
+                  className="line-clamp-1 min-w-0 text-sm font-extrabold text-neutral-900 sm:text-base"
+                >
                   {project.title}
                 </h1>
-                <input
-                  ref={projectTitleInputRef}
-                  value={projectTitleEditValue}
-                  onChange={(event) => setProjectTitleEditValue(event.target.value)}
-                  onKeyDown={handleProjectTitleEditKeyDown}
-                  disabled={isProjectTitleBusy}
-                  aria-label="Project name"
-                  data-testid="project-title-edit-input"
-                  maxLength={120}
-                  className="h-9 min-w-0 flex-1 rounded-md border border-brand-200 bg-white px-3 text-sm font-extrabold text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-60 sm:text-base"
-                />
-                <button
-                  type="submit"
-                  disabled={isProjectTitleSaveDisabled}
-                  aria-label="Save project name"
-                  title="Save"
-                  data-testid="save-project-title-button"
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-success-100 text-success-700 transition hover:bg-success-200 focus:outline-none focus:ring-2 focus:ring-success-200 disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  {isProjectTitleSaving ? (
-                    <Loader2 size={15} className="animate-spin" />
-                  ) : (
-                    <Check size={15} />
-                  )}
-                </button>
+              )}
+              {canEditProjectTitle && !isEditingProjectTitle && (
                 <button
                   type="button"
-                  onClick={handleCancelProjectTitleEdit}
-                  disabled={isProjectTitleSaving}
-                  aria-label="Cancel project name edit"
-                  title="Cancel"
-                  data-testid="cancel-project-title-button"
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-neutral-200 bg-white text-neutral-600 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-45"
+                  onClick={handleStartProjectTitleEdit}
+                  disabled={isProjectTitleBusy}
+                  aria-label="Edit project name"
+                  title="Edit project name"
+                  data-testid="edit-project-title-button"
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-neutral-600 transition hover:bg-neutral-100 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200/40 disabled:cursor-not-allowed disabled:opacity-45"
                 >
-                  <X size={15} />
+                  <Pencil size={15} />
                 </button>
-              </form>
-            ) : (
-              <h1
-                id="workspace-title"
-                data-testid="workspace-title-text"
-                className="line-clamp-1 min-w-0 text-sm font-extrabold text-neutral-900 sm:text-base"
-              >
-                {project.title}
-              </h1>
-            )}
-            {canEditProjectTitle && !isEditingProjectTitle && (
-              <button
-                type="button"
-                onClick={handleStartProjectTitleEdit}
-                disabled={isProjectTitleBusy}
-                aria-label="Edit project name"
-                title="Edit project name"
-                data-testid="edit-project-title-button"
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-neutral-600 transition hover:bg-neutral-100 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200/40 disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                <Pencil size={15} />
-              </button>
-            )}
-            {showProjectStar && !isEditingProjectTitle && (
-              <button
-                type="button"
-                aria-label="Star project"
-                className="hidden h-8 w-8 shrink-0 place-items-center rounded-md text-neutral-600 transition hover:bg-neutral-100 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200/40 sm:grid"
-              >
-                <Star size={16} />
-              </button>
-            )}
+              )}
+              {showProjectStar && !isEditingProjectTitle && (
+                <button
+                  type="button"
+                  aria-label="Star project"
+                  className="hidden h-8 w-8 shrink-0 place-items-center rounded-md text-neutral-600 transition hover:bg-neutral-100 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200/40 sm:grid"
+                >
+                  <Star size={16} />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-        <nav
-          aria-label="Workspace navigation"
-          data-testid="workspace-navigation"
-          className="flex w-full min-w-0 flex-wrap items-center justify-end gap-1.5 sm:w-auto"
-        >
-          <Link
-            href="/projects"
-            aria-label="Project list"
-            data-testid="workspace-projects-link"
-            className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-bold text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
+          <nav
+            aria-label="Workspace navigation"
+            data-testid="workspace-navigation"
+            className="flex w-full min-w-0 flex-wrap items-center justify-end gap-1.5 sm:w-auto"
           >
-            <Folder size={16} />
-            Projects
-          </Link>
-          <button
-            type="button"
-            aria-label="Workspace grid"
-            className="grid h-9 w-9 place-items-center rounded-md text-neutral-600 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
-          >
-            <Grid2X2 size={16} />
-          </button>
-          <button
-            type="button"
-            aria-label="More workspace actions"
-            className="grid h-9 w-9 place-items-center rounded-md text-neutral-600 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
-          >
-            <MoreHorizontal size={17} />
-          </button>
-        </nav>
-      </header>
+            <Link
+              href="/projects"
+              aria-label="Project list"
+              data-testid="workspace-projects-link"
+              className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-bold text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
+            >
+              <Folder size={16} />
+              Projects
+            </Link>
+            <button
+              type="button"
+              aria-label="Workspace grid"
+              className="grid h-9 w-9 place-items-center rounded-md text-neutral-600 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
+            >
+              <Grid2X2 size={16} />
+            </button>
+            <button
+              type="button"
+              aria-label="More workspace actions"
+              className="grid h-9 w-9 place-items-center rounded-md text-neutral-600 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
+            >
+              <MoreHorizontal size={17} />
+            </button>
+          </nav>
+        </header>
+      )}
 
       {aiError && !selectedNode && (
         <p

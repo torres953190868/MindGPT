@@ -75,6 +75,7 @@ export async function POST(request: NextRequest, context: NodesRouteContext) {
       [createBody.instruction, createBody.sourceText].filter(Boolean).join("\n\n"),
     );
     const reply = await requestDeepSeekReply({
+      llmTask: "node_generation",
       mode: createBody.mode,
       instruction: createBody.instruction,
       contextTitles: contextData.contextSummaries,

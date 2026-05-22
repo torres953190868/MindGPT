@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { getBranchMindAuthContext } from "@/lib/server/auth";
-import { getChatModelCatalog } from "@/lib/server/deepseek-core";
 import { jsonWithSession, safeErrorWithSession } from "@/lib/server/http";
+import { getLlmChatModelCatalog } from "@/lib/server/llm-router";
 import { getExistingSessionId, getOrCreateSession } from "@/lib/server/session";
 import { hasSupabaseServerConfig } from "@/lib/supabase/server";
 
@@ -12,11 +12,11 @@ export async function GET(request: NextRequest) {
 
   try {
     if (!hasSupabaseServerConfig() && !getExistingSessionId(request)) {
-      return jsonWithSession(getChatModelCatalog(), READ_ONLY_LOCAL_SESSION);
+      return jsonWithSession(await getLlmChatModelCatalog(), READ_ONLY_LOCAL_SESSION);
     }
 
     const { session } = await getBranchMindAuthContext(request);
-    return jsonWithSession(getChatModelCatalog(), session);
+    return jsonWithSession(await getLlmChatModelCatalog(), session);
   } catch (error) {
     return safeErrorWithSession(error, fallbackSession);
   }

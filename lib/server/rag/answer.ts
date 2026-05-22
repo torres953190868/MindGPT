@@ -1,10 +1,9 @@
 import {
-  getChatCompletionsProvider,
-  getProviderAllowedModels,
-  getProviderApiKey,
-  getProviderUrl,
-  type ChatCompletionsProvider,
-} from "@/lib/server/ai-provider";
+  getLlmRequestTimeoutMs,
+  requireLlmProviderApiKey,
+  resolveLlmCandidates,
+  type LlmRuntimeCandidate,
+} from "@/lib/server/llm-router";
 import { RagError } from "./errors";
 import { compactText } from "./text";
 import type {
@@ -30,54 +29,6 @@ type ChatResponse = {
 function isMockMode() {
   const value = process.env.AI_MOCK_MODE ?? process.env.LLM_MOCK_MODE;
   return ["1", "true", "yes", "on"].includes(value?.trim().toLowerCase() ?? "");
-}
-
-function providerId() {
-  return (process.env.LLM_PROVIDER ?? process.env.AI_PROVIDER ?? "deepseek")
-    .trim()
-    .toLowerCase();
-}
-
-function getProvider() {
-  const provider = getChatCompletionsProvider(providerId());
-  if (!provider) {
-    throw new RagError("Configured LLM provider is not supported.", {
-      code: "LLM_PROVIDER_NOT_SUPPORTED",
-      details: { provider: providerId() },
-      status: 500,
-    });
-  }
-  return provider;
-}
-
-function getModel(provider: ChatCompletionsProvider) {
-  const model = (
-    process.env.LLM_MODEL ??
-    process.env[provider.modelEnv] ??
-    provider.defaultModel
-  ).trim();
-
-  if (!getProviderAllowedModels(provider).has(model)) {
-    throw new RagError(`Configured ${provider.displayName} model is not allowed.`, {
-      code: "LLM_MODEL_NOT_ALLOWED",
-      details: { model, provider: provider.id },
-      status: 500,
-    });
-  }
-
-  return model;
-}
-
-function getApiKey(provider: ChatCompletionsProvider) {
-  const apiKey = getProviderApiKey(provider);
-  if (!apiKey) {
-    throw new RagError(`${provider.apiKeyEnv} is not configured.`, {
-      code: "LLM_API_KEY_MISSING",
-      details: { provider: provider.id },
-      status: 500,
-    });
-  }
-  return apiKey;
 }
 
 function contextForPrompt(retrieved: RetrievedChunk[]) {
@@ -228,30 +179,90 @@ async function requestAnswer(
     return `根据检索到的片段，问题可以从这些页面寻找依据。(${retrieved[0]?.chunk.pageStart ?? "?"}页)\n\n来源\n${sources}`;
   }
 
-  const provider = getProvider();
-  const model = getModel(provider);
-  const apiKey = getApiKey(provider);
-  const response = await fetch(getProviderUrl(provider), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You answer questions over retrieved PDF excerpts. Use only provided context.",
-        },
-        { role: "user", content: buildPrompt(question, retrieved, sections) },
-      ],
-      max_tokens: 900,
-      stream: false,
-      ...provider.payloadOptions,
-    }),
+  const candidates = await resolveLlmCandidates("pdf_qa");
+  let lastRetryableError: RagError | null = null;
+
+  for (let index = 0; index < candidates.length; index += 1) {
+    try {
+      return await requestProviderAnswer(candidates[index], question, retrieved, sections);
+    } catch (error) {
+      if (!(error instanceof RagError)) throw error;
+      const details =
+        error.details && typeof error.details === "object"
+          ? (error.details as { retryable?: unknown })
+          : null;
+      const retryable = details?.retryable === true;
+      lastRetryableError = error;
+
+      if (!retryable || index >= candidates.length - 1) throw error;
+    }
+  }
+
+  throw lastRetryableError ?? new RagError("LLM answer request failed.", {
+    code: "LLM_REQUEST_FAILED",
+    status: 502,
   });
+}
+
+async function requestProviderAnswer(
+  candidate: LlmRuntimeCandidate,
+  question: string,
+  retrieved: RetrievedChunk[],
+  sections: RagSection[],
+) {
+  const provider = candidate.provider;
+  const model = candidate.model.model;
+  const apiKey = requireLlmProviderApiKey(provider);
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    getLlmRequestTimeoutMs(provider),
+  );
+
+  let response: Response;
+  try {
+    response = await fetch(provider.baseUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You answer questions over retrieved PDF excerpts. Use only provided context.",
+          },
+          { role: "user", content: buildPrompt(question, retrieved, sections) },
+        ],
+        max_tokens: 900,
+        stream: false,
+        ...provider.payloadOptions,
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    const isTimeout = error instanceof Error && error.name === "AbortError";
+    throw new RagError(
+      isTimeout
+        ? `${provider.displayName} answer request timed out.`
+        : `${provider.displayName} answer request failed.`,
+      {
+        code: isTimeout ? "LLM_REQUEST_TIMEOUT" : "LLM_NETWORK_ERROR",
+        details: {
+          model,
+          provider: provider.providerId,
+          retryable: true,
+        },
+        status: isTimeout ? 504 : 502,
+      },
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
@@ -266,7 +277,7 @@ async function requestAnswer(
       code: "LLM_REQUEST_FAILED",
       details: {
         model,
-        provider: provider.id,
+        provider: provider.providerId,
         retryable: response.status === 429 || response.status >= 500,
         upstreamStatus: response.status,
       },

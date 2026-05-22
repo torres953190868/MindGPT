@@ -334,7 +334,8 @@ test("home opens directly into a draft workspace", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByTestId("workspace-shell")).toBeVisible();
-  await expect(page.getByTestId("workspace-header")).toContainText("New workspace");
+  await expect(page.getByTestId("workspace-header")).toHaveCount(0);
+  await expect(page.locator("#workspace-title")).toContainText("New workspace");
   await expect(page.getByTestId("home-hero")).toBeVisible();
   await expect(page.getByTestId("home-hero")).toContainText("BranchMind");
   await expect(page.getByTestId("home-hero-tagline")).toContainText(
@@ -428,6 +429,7 @@ test("home opens directly into a draft workspace", async ({ page }) => {
 
   await mindMapCanvas.getByTestId("expand-workspace-sidebar-button").click();
   await expect(page.getByTestId("workspace-sidebar")).toBeVisible();
+  await expect(page.getByTestId("workspace-sidebar-projects-link")).toBeVisible();
   await expect
     .poll(() => getElementWidth(mindMapCanvas))
     .toBeLessThan(mapWidthWithPanelsCollapsed - 120);
@@ -442,7 +444,8 @@ test("home opens directly into a draft workspace", async ({ page }) => {
   ).toHaveCount(0);
   await expect(page.getByTestId("message-composer")).toHaveCount(1);
 
-  await page.getByTestId("workspace-projects-link").click();
+  await mindMapCanvas.getByTestId("expand-workspace-sidebar-button").click();
+  await page.getByTestId("workspace-sidebar-projects-link").click();
 
   await expect(page).toHaveURL(/\/projects$/);
   await expect(page.getByTestId("projects-navigation")).toBeVisible();
@@ -507,6 +510,65 @@ test("home draft workspace sidebars resize and snap like workspace", async ({
   await expect.poll(() => getElementWidth(nodeDetailPanel)).toBeGreaterThanOrEqual(300);
   await expect(page.getByTestId("node-detail-notes-button")).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
+});
+
+test("home model menu scrolls without panning the canvas", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Wheel behavior is covered once.");
+
+  const scrollableModels = Array.from(
+    { length: 18 },
+    (_, index) => `scroll-test-model-${index + 1}`,
+  );
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.route("**/api/chat/models", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        defaultSelection: {
+          providerId: "deepseek",
+          model: scrollableModels[0],
+        },
+        providers: [
+          {
+            id: "deepseek",
+            displayName: "DeepSeek",
+            configured: true,
+            models: scrollableModels,
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.goto("/");
+  const mindMapCanvas = page.getByTestId("mind-map-canvas");
+  const menu = page.getByTestId("chat-model-menu");
+
+  await page.getByTestId("chat-model-selector-button").click();
+  await expect(menu).toBeVisible();
+  await expect
+    .poll(() =>
+      menu.evaluate((element) => element.scrollHeight > element.clientHeight),
+    )
+    .toBe(true);
+
+  const viewportBeforeWheel = await getReactFlowViewport(mindMapCanvas);
+  await menu.hover();
+  await page.mouse.wheel(0, 520);
+
+  await expect
+    .poll(() => menu.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(24);
+  await expect
+    .poll(async () => {
+      const viewport = await getReactFlowViewport(mindMapCanvas);
+      return viewport.y;
+    })
+    .toBeCloseTo(viewportBeforeWheel.y, 1);
 });
 
 test("home launcher restores a stored model after hydration", async ({
@@ -1585,7 +1647,67 @@ test("shows signed-in account menu state", async ({ page }) => {
   await expect(page.locator('[data-testid="account-menu-popover"]:visible')).toContainText(
     "learner@example.com",
   );
+  await expect(page.getByTestId("report-bug-menu-item")).toBeVisible();
   await expect(page.locator('[data-testid="sign-out-button"]:visible')).toBeVisible();
+});
+
+test("submits a bug report from the account menu", async ({ page }) => {
+  await mockAuthSession(page, {
+    configured: true,
+    user: { id: "user_e2e_bug", email: "learner@example.com" },
+  });
+
+  let bugReportRequests = 0;
+  await page.route("**/api/bug-reports", async (route) => {
+    bugReportRequests += 1;
+    const postData = route.request().postDataBuffer();
+    expect(postData).not.toBeNull();
+    const body = postData?.toString("utf8") ?? "";
+    expect(route.request().method()).toBe("POST");
+    expect(body).toContain('name="title"');
+    expect(body).toContain("Workspace panel failed");
+    expect(body).toContain('name="description"');
+    expect(body).toContain("The node detail panel stopped responding.");
+    expect(body).toContain('name="contactEmail"');
+    expect(body).toContain("learner@example.com");
+    expect(body).toContain('name="currentUrl"');
+    expect(body).toContain("/projects");
+    expect(body).toContain('name="userAgent"');
+
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      body: JSON.stringify({
+        report: {
+          id: "bug-report-e2e",
+          title: "Workspace panel failed",
+          description: "The node detail panel stopped responding.",
+          status: "open",
+          contactEmail: "learner@example.com",
+          currentUrl: `${E2E_BASE_URL}/projects`,
+          createdAt: new Date().toISOString(),
+        },
+      }),
+    });
+  });
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/projects");
+  await page.locator('[data-testid="account-menu-button"]:visible').first().click();
+  await page.getByTestId("report-bug-menu-item").click();
+
+  await expect(page.locator('[data-testid="account-menu-popover"]:visible')).toHaveCount(0);
+  await expect(page.getByTestId("bug-report-dialog")).toBeVisible();
+  await expect(page.getByLabel("Contact email")).toHaveValue("learner@example.com");
+
+  await page.getByLabel("Title").fill("Workspace panel failed");
+  await page
+    .getByLabel("Description")
+    .fill("The node detail panel stopped responding.");
+  await page.getByRole("button", { name: "Submit report" }).click();
+
+  await expect(page.getByText("Report sent.")).toBeVisible();
+  await expect.poll(() => bugReportRequests).toBe(1);
 });
 
 test("opens the most recently updated project from the projects sidebar", async ({ page }) => {

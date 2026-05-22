@@ -1,3 +1,5 @@
+import { mkdir, unlink, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RagDocument } from "@/lib/server/rag/types";
 
@@ -28,6 +30,23 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 const originalRagBackend = process.env.BRANCHMIND_RAG_BACKEND;
+const legacyLocalFilePath = path.join(
+  process.cwd(),
+  "data",
+  "rag-files",
+  "doc_store_test_legacy_local.pdf",
+);
+
+async function removeLegacyLocalFile() {
+  try {
+    await unlink(legacyLocalFilePath);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return;
+    }
+    throw error;
+  }
+}
 
 function makeDocument(overrides: Partial<RagDocument> = {}): RagDocument {
   return {
@@ -94,12 +113,13 @@ describe("rag store", () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     if (originalRagBackend === undefined) {
       delete process.env.BRANCHMIND_RAG_BACKEND;
     } else {
       process.env.BRANCHMIND_RAG_BACKEND = originalRagBackend;
     }
+    await removeLegacyLocalFile();
   });
 
   it("counts Supabase chunks without selecting embeddings", async () => {
@@ -154,6 +174,30 @@ describe("rag store", () => {
     expect(storageFromMock).toHaveBeenCalledWith("branchmind-rag-files");
     expect(downloadMock).toHaveBeenCalledWith("users/user_storage/doc_storage.pdf");
     expect(bytes).toEqual(new Uint8Array([0x25, 0x50, 0x44, 0x46]));
+  });
+
+  it("reads legacy local PDF bytes for migrated Supabase metadata", async () => {
+    const legacyBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]);
+    await mkdir(path.dirname(legacyLocalFilePath), { recursive: true });
+    await writeFile(legacyLocalFilePath, legacyBytes);
+    const { getRagRepository } = await import("@/lib/server/rag/store");
+
+    const bytesFromMigratedPath = await getRagRepository().readDocumentFile(
+      makeDocument({
+        id: "doc_store_test_legacy_local",
+        storagePath: legacyLocalFilePath,
+      }),
+    );
+    const bytesFromLegacyId = await getRagRepository().readDocumentFile(
+      makeDocument({
+        id: "doc_store_test_legacy_local",
+        storagePath: "users/user_storage/doc_store_test_legacy_local.pdf",
+      }),
+    );
+
+    expect(downloadMock).not.toHaveBeenCalled();
+    expect(bytesFromMigratedPath).toEqual(legacyBytes);
+    expect(bytesFromLegacyId).toEqual(legacyBytes);
   });
 
   it("deletes Supabase document metadata and its Storage object", async () => {

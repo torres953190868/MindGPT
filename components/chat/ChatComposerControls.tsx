@@ -2,6 +2,7 @@
 
 import {
   type ChangeEvent,
+  type WheelEvent as ReactWheelEvent,
   useCallback,
   useEffect,
   useRef,
@@ -125,6 +126,10 @@ type FloatingMenuPlacement = "above" | "below";
 
 function getMenuPlacementClass(placement: FloatingMenuPlacement) {
   return placement === "below" ? "absolute left-0 top-full z-50 mt-2" : "absolute bottom-full left-0 z-50 mb-2";
+}
+
+function stopFloatingMenuWheelPropagation(event: ReactWheelEvent<HTMLDivElement>) {
+  event.stopPropagation();
 }
 
 function formatFileSize(size: number) {
@@ -878,7 +883,8 @@ export function AttachmentMenuButton({
                   role="menu"
                   aria-label="Knowledge PDFs"
                   data-testid="knowledge-document-menu"
-                  className="mt-1 max-h-64 overflow-auto rounded-[16px] border border-[#eadff1] bg-[#fbf8ff] p-1"
+                  onWheel={stopFloatingMenuWheelPropagation}
+                  className="nowheel mt-1 max-h-64 overflow-auto overscroll-contain rounded-[16px] border border-[#eadff1] bg-[#fbf8ff] p-1"
                 >
                   {controls.isLoadingKnowledgeDocuments && (
                     <p
@@ -985,7 +991,8 @@ export function ModelSelectorButton({
           role="listbox"
           aria-label="Chat models"
           data-testid="chat-model-menu"
-          className={`${getMenuPlacementClass(placement)} max-h-72 w-72 overflow-auto rounded-[20px] border border-white/80 bg-white/95 p-2 shadow-2xl shadow-[#d4c2e7]/55 backdrop-blur`}
+          onWheel={stopFloatingMenuWheelPropagation}
+          className={`${getMenuPlacementClass(placement)} nowheel max-h-72 w-72 overflow-auto overscroll-contain rounded-[20px] border border-white/80 bg-white/95 p-2 shadow-2xl shadow-[#d4c2e7]/55 backdrop-blur`}
         >
           {controls.modelOptions.map((option) => {
             const isSelected = matchesModelSelection(option, controls.selectedModel);

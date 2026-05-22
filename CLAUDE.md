@@ -38,6 +38,8 @@ Core chat completion:
 - `OPENCODE_GO_API_KEY` - Required when `AI_PROVIDER=opencode-go` unless mock mode is enabled.
 - `OPENCODE_GO_MODEL` - Optional for OpenCode Go, defaults to `glm-5.1`.
 - `OPENCODE_GO_ALLOWED_MODELS` - Optional comma-separated allowlist for the model selector.
+- `BRANCHMIND_ADMIN_EMAILS` - Comma-separated Supabase Auth emails allowed to access `/admin`.
+- `BRANCHMIND_ENABLE_LOCAL_ADMIN` - Optional local-only admin bypass for development without Supabase Auth.
 
 Auth, origin, and project storage:
 

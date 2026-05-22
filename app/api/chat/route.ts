@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const reply = await requestDeepSeekReply(body);
+    const reply = await requestDeepSeekReply({ ...body, llmTask: "branch_chat" });
     return jsonWithSession(reply, session);
   } catch (error) {
     return safeErrorWithSession(error, fallbackSession);

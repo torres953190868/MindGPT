@@ -15,6 +15,7 @@ import {
 import type {
   ChatDocumentContext,
   ChatModelSelection,
+  LlmRouteTask,
   MockMode,
   MockReply,
 } from "@/lib/types";
@@ -32,6 +33,7 @@ export type BranchMindReplyRequest = {
   sourceText?: string;
   documentContexts?: ChatDocumentContext[];
   modelSelection?: ChatModelSelection;
+  llmTask?: LlmRouteTask;
 };
 
 export type DeepSeekChoice = {
@@ -78,6 +80,12 @@ function parseTimeoutMs(value: string | undefined) {
   const timeoutMs = Number(value.trim());
   return Number.isFinite(timeoutMs) && timeoutMs >= 1_000 ? timeoutMs : null;
 }
+
+type ProviderErrorCodeLike = {
+  displayName: string;
+  errorCodePrefix: string;
+  payloadOptions?: Record<string, unknown>;
+};
 
 export function getChatRequestTimeoutMs(provider: ChatCompletionsProvider) {
   return (
@@ -176,7 +184,7 @@ export function isDeepSeekMockMode() {
   );
 }
 
-function providerCode(provider: ChatCompletionsProvider, suffix: string) {
+function providerCode(provider: ProviderErrorCodeLike, suffix: string) {
   return `${provider.errorCodePrefix}_${suffix}`;
 }
 
@@ -309,7 +317,7 @@ export function assertConfiguredChatProvider() {
 }
 
 export function createProviderHttpError(
-  provider: ChatCompletionsProvider,
+  provider: ProviderErrorCodeLike,
   response: Response,
   data: DeepSeekResponse,
 ) {
@@ -538,7 +546,7 @@ export function buildMessages(body: BranchMindReplyRequest): ApiMessage[] {
 
 export function createDeepSeekPayload(
   body: BranchMindReplyRequest,
-  provider: ChatCompletionsProvider,
+  provider: Pick<ProviderErrorCodeLike, "payloadOptions">,
   model: string,
   stream: boolean,
 ) {

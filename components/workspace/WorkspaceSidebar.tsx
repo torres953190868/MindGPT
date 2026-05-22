@@ -1,13 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import {
+  Brain,
   ChevronDown,
   ChevronRight,
+  Folder,
   GitBranch,
   PanelLeftClose,
   Search,
   Sprout,
-  Tags,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { MindNode, Project } from "@/lib/types";
@@ -178,7 +180,17 @@ export function WorkspaceSidebar({
       data-testid="workspace-sidebar"
       className="flex min-h-[220px] w-full flex-col gap-4 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none"
     >
-      <div className="flex min-h-10 items-center justify-start">
+      <div className="flex min-h-10 items-center justify-between gap-3">
+        <Link
+          href="/"
+          aria-label="BranchMind home"
+          className="flex min-w-0 items-center gap-2 rounded-md py-1 pr-2 text-neutral-900 transition hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
+        >
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-brand-200 bg-brand-50 text-brand-600">
+            <Brain size={18} />
+          </span>
+          <span className="truncate text-base font-extrabold">BranchMind</span>
+        </Link>
         <button
           type="button"
           onClick={onCollapse}
@@ -186,7 +198,7 @@ export function WorkspaceSidebar({
           aria-controls="conversation-outline"
           aria-expanded="true"
           data-testid="collapse-workspace-sidebar-button"
-          className="grid h-10 w-10 place-items-center rounded-full bg-neutral-100 text-neutral-600 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-neutral-100 text-neutral-600 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
         >
           <PanelLeftClose size={18} />
         </button>
@@ -207,29 +219,26 @@ export function WorkspaceSidebar({
         </span>
       </div>
 
-      <div
-        role="tablist"
-        aria-label="Workspace sidebar views"
+      <nav
+        aria-label="Workspace sidebar navigation"
         className="grid grid-cols-2 gap-2 text-sm font-black"
       >
         <button
           type="button"
-          role="tab"
-          aria-selected="true"
+          aria-current="page"
           className="inline-flex h-11 items-center justify-center rounded-xl bg-brand-100 text-brand-800 transition hover:bg-brand-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
         >
           Outline
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected="false"
+        <Link
+          href="/projects"
+          data-testid="workspace-sidebar-projects-link"
           className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-neutral-100 text-neutral-700 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
         >
-          <Tags size={16} />
-          Tags
-        </button>
-      </div>
+          <Folder size={16} />
+          Projects
+        </Link>
+      </nav>
 
       <nav
         id="conversation-outline"

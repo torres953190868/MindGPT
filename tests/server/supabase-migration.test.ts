@@ -35,6 +35,13 @@ const userPlansMigration = readFileSync(
   ),
   "utf8",
 );
+const adminLlmBugReportsMigration = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/20260522000000_branchmind_admin_llm_bug_reports.sql",
+  ),
+  "utf8",
+);
 
 describe("Supabase foundation migration", () => {
   it("creates the beta persistence and distributed rate-limit tables", () => {
@@ -93,6 +100,18 @@ describe("Supabase foundation migration", () => {
     );
     expect(userPlansMigration).not.toMatch(
       /on branchmind_user_plans\s+for update/i,
+    );
+  });
+
+  it("adds admin LLM routing tables and private bug report attachments", () => {
+    expect(adminLlmBugReportsMigration).toContain("branchmind_llm_providers");
+    expect(adminLlmBugReportsMigration).toContain("branchmind_llm_models");
+    expect(adminLlmBugReportsMigration).toContain("branchmind_llm_routes");
+    expect(adminLlmBugReportsMigration).toContain("branchmind_bug_reports");
+    expect(adminLlmBugReportsMigration).toContain("'branchmind-bug-attachments'");
+    expect(adminLlmBugReportsMigration).toContain("false");
+    expect(adminLlmBugReportsMigration).toContain(
+      "revoke all on public.branchmind_bug_reports from anon, authenticated",
     );
   });
 });

@@ -1,4 +1,4 @@
-import type { BranchType, ChatRole } from "@/lib/types";
+import type { BranchType, BugReportStatus, ChatRole, LlmRouteTask } from "@/lib/types";
 
 export type Json =
   | string
@@ -476,6 +476,183 @@ export type Database = {
           max_ai_messages_per_day?: number | null;
         };
         Relationships: [];
+      };
+      branchmind_llm_providers: {
+        Row: {
+          provider_id: string;
+          display_name: string;
+          base_url: string;
+          api_key_env: string;
+          enabled: boolean;
+          timeout_ms: number | null;
+          payload_options: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          provider_id: string;
+          display_name: string;
+          base_url: string;
+          api_key_env: string;
+          enabled?: boolean;
+          timeout_ms?: number | null;
+          payload_options?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          provider_id?: string;
+          display_name?: string;
+          base_url?: string;
+          api_key_env?: string;
+          enabled?: boolean;
+          timeout_ms?: number | null;
+          payload_options?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      branchmind_llm_models: {
+        Row: {
+          provider_id: string;
+          model: string;
+          display_name: string;
+          enabled: boolean;
+          supports_streaming: boolean;
+          supports_json: boolean;
+          notes: string | null;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          provider_id: string;
+          model: string;
+          display_name: string;
+          enabled?: boolean;
+          supports_streaming?: boolean;
+          supports_json?: boolean;
+          notes?: string | null;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          provider_id?: string;
+          model?: string;
+          display_name?: string;
+          enabled?: boolean;
+          supports_streaming?: boolean;
+          supports_json?: boolean;
+          notes?: string | null;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "branchmind_llm_models_provider_id_fkey";
+            columns: ["provider_id"];
+            referencedRelation: "branchmind_llm_providers";
+            referencedColumns: ["provider_id"];
+          },
+        ];
+      };
+      branchmind_llm_routes: {
+        Row: {
+          task: LlmRouteTask;
+          default_provider_id: string;
+          default_model: string;
+          fallback_provider_id: string | null;
+          fallback_model: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          task: LlmRouteTask;
+          default_provider_id: string;
+          default_model: string;
+          fallback_provider_id?: string | null;
+          fallback_model?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          task?: LlmRouteTask;
+          default_provider_id?: string;
+          default_model?: string;
+          fallback_provider_id?: string | null;
+          fallback_model?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "branchmind_llm_routes_default_fkey";
+            columns: ["default_provider_id", "default_model"];
+            referencedRelation: "branchmind_llm_models";
+            referencedColumns: ["provider_id", "model"];
+          },
+          {
+            foreignKeyName: "branchmind_llm_routes_fallback_fkey";
+            columns: ["fallback_provider_id", "fallback_model"];
+            referencedRelation: "branchmind_llm_models";
+            referencedColumns: ["provider_id", "model"];
+          },
+        ];
+      };
+      branchmind_bug_reports: {
+        Row: {
+          id: string;
+          reporter_user_id: string | null;
+          reporter_email: string | null;
+          contact_email: string | null;
+          title: string;
+          description: string;
+          status: BugReportStatus;
+          current_url: string | null;
+          user_agent: string | null;
+          screenshot_path: string | null;
+          admin_notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          reporter_user_id?: string | null;
+          reporter_email?: string | null;
+          contact_email?: string | null;
+          title: string;
+          description: string;
+          status?: BugReportStatus;
+          current_url?: string | null;
+          user_agent?: string | null;
+          screenshot_path?: string | null;
+          admin_notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          reporter_user_id?: string | null;
+          reporter_email?: string | null;
+          contact_email?: string | null;
+          title?: string;
+          description?: string;
+          status?: BugReportStatus;
+          current_url?: string | null;
+          user_agent?: string | null;
+          screenshot_path?: string | null;
+          admin_notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "branchmind_bug_reports_reporter_user_id_fkey";
+            columns: ["reporter_user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
       };
     };
     Views: Record<string, never>;
