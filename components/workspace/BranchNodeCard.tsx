@@ -9,6 +9,10 @@ import {
   PendingAttachmentChips,
   useChatComposerControls,
 } from "@/components/chat/ChatComposerControls";
+import {
+  getHighlightedActionClass,
+  useHighlightedAction,
+} from "@/components/ui/highlighted-action";
 import type { ChatAttachment, ChatModelSelection, MindNode } from "@/lib/types";
 
 export type InlineNodeComposerData = {
@@ -37,6 +41,8 @@ export type BranchNodeData = {
   inlineComposer?: InlineNodeComposerData;
 };
 
+type QuickActionItem = "branch" | "fold";
+
 export function BranchNodeCard({ data }: NodeProps) {
   const nodeData = data as BranchNodeData;
   const {
@@ -54,6 +60,9 @@ export function BranchNodeCard({ data }: NodeProps) {
   const hasChildren = mindNode.children.length > 0;
   const hasInlineComposer = Boolean(inlineComposer);
   const isHomeInlineComposer = inlineComposer?.variant === "home";
+  const quickActionHighlight = useHighlightedAction<QuickActionItem>();
+  const isBranchQuickActionHighlighted = quickActionHighlight.isHighlighted("branch");
+  const isFoldQuickActionHighlighted = quickActionHighlight.isHighlighted("fold");
 
   return (
     <article
@@ -191,12 +200,17 @@ export function BranchNodeCard({ data }: NodeProps) {
         {inlineComposer && <InlineNodeComposer composer={inlineComposer} />}
 
         {!hasInlineComposer && (
-        <div className="mt-4 hidden items-center gap-2 sm:flex">
+        <div
+          onMouseLeave={quickActionHighlight.clearHighlightedAction}
+          className="mt-4 hidden items-center gap-2 sm:flex"
+        >
           <button
             type="button"
             disabled={creationDisabled}
             data-testid="branch-right-button"
             data-node-id={mindNode.id}
+            data-highlighted={quickActionHighlight.getDataHighlighted("branch")}
+            {...quickActionHighlight.getHoverHandlers("branch")}
             onClick={(event) => {
               event.stopPropagation();
               onSelect(mindNode.id);
@@ -204,7 +218,10 @@ export function BranchNodeCard({ data }: NodeProps) {
             }}
             aria-label="Branch right"
             title="Branch right"
-            className="branch-node-quick-action branch-node-quick-action-branch grid h-9 w-9 place-items-center rounded-full bg-brand-100 text-brand-700 transition hover:scale-110 hover:bg-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className={`branch-node-quick-action branch-node-quick-action-branch grid h-9 w-9 place-items-center rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 ${getHighlightedActionClass(
+              isBranchQuickActionHighlighted,
+              "bg-brand-100 text-brand-700",
+            )}`}
           >
             <GitBranch size={17} />
           </button>
@@ -227,7 +244,12 @@ export function BranchNodeCard({ data }: NodeProps) {
             title="Toggle children"
             data-testid="toggle-children-button"
             data-node-id={mindNode.id}
-            className="branch-node-quick-action branch-node-quick-action-toggle grid h-9 w-9 place-items-center rounded-full bg-danger-100 text-danger-600 transition hover:scale-110 hover:bg-danger-200 disabled:cursor-not-allowed disabled:opacity-50"
+            data-highlighted={quickActionHighlight.getDataHighlighted("fold")}
+            {...quickActionHighlight.getHoverHandlers("fold")}
+            className={`branch-node-quick-action branch-node-quick-action-toggle grid h-9 w-9 place-items-center rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 ${getHighlightedActionClass(
+              isFoldQuickActionHighlighted,
+              "bg-danger-100 text-danger-600",
+            )}`}
           >
             <Ribbon size={17} />
           </button>

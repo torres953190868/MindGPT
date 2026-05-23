@@ -8,15 +8,15 @@ export default function ReaderPage() {
     <main
       aria-labelledby="reader-title"
       data-testid="reader-page"
-      className="branchmind-reader-surface min-h-screen bg-[#fbfafc] px-4 py-5 text-[#1f1a2a] sm:px-6"
+      className="branchmind-reader-surface min-h-screen bg-surface-bg px-4 py-5 text-text-primary sm:px-6"
     >
       <div className="mx-auto max-w-[1440px] space-y-3">
         <div className="flex min-w-0 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#8463c7] text-sm font-black text-white">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-900 text-sm font-black text-surface-elevated shadow-sm">
               3
             </span>
-            <h1 id="reader-title" className="truncate text-lg font-black text-[#1f1a2a]">
+            <h1 id="reader-title" className="truncate text-lg font-black text-text-primary">
               PDF Reader desktop
             </h1>
           </div>
@@ -24,7 +24,7 @@ export default function ReaderPage() {
             href="/"
             aria-label="Back to BranchMind home"
             data-testid="reader-home-button"
-            className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-[#e5dfec] bg-white px-3 text-sm font-extrabold text-[#554665] shadow-sm transition hover:bg-[#f8f5fc] focus:outline-none focus:ring-2 focus:ring-[#d9caef]"
+            className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-border-default bg-surface-elevated px-3 text-sm font-extrabold text-text-secondary shadow-sm transition hover:border-border-hover hover:bg-surface-soft focus:outline-none focus:ring-2 focus:ring-brand-200"
           >
             <Home size={16} />
             Home
@@ -33,7 +33,7 @@ export default function ReaderPage() {
 
         <Suspense
           fallback={
-            <div className="rounded-lg border border-[#e4dfeb] bg-white p-5 text-sm font-bold text-[#76667f] shadow-sm">
+            <div className="rounded-lg border border-border-default bg-surface-elevated p-5 text-sm font-bold text-text-secondary shadow-sm">
               Loading reader
             </div>
           }

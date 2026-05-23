@@ -8,10 +8,15 @@ import {
   Folder,
   GitBranch,
   PanelLeftClose,
+  PanelLeftOpen,
   Search,
   Sprout,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  getHighlightedActionClass,
+  useHighlightedAction,
+} from "@/components/ui/highlighted-action";
 import type { MindNode, Project } from "@/lib/types";
 
 type WorkspaceSidebarProps = {
@@ -26,6 +31,14 @@ type OutlineRow = {
   node: MindNode;
   depth: number;
 };
+
+type SidebarNavItem = "outline" | "projects";
+
+function getSidebarNavButtonClass(highlighted: boolean) {
+  return `workspace-sidebar-nav-link inline-flex h-11 items-center justify-center gap-2 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 ${
+    getHighlightedActionClass(highlighted, "bg-neutral-100 text-neutral-700")
+  }`;
+}
 
 function matchesQuery(node: MindNode, normalized: string) {
   return (
@@ -119,6 +132,9 @@ export function WorkspaceSidebar({
   onCollapse,
 }: WorkspaceSidebarProps) {
   const [query, setQuery] = useState("");
+  const navHighlight = useHighlightedAction<SidebarNavItem>({
+    defaultAction: "outline",
+  });
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(() =>
     getDefaultExpandedNodeIds(project),
   );
@@ -134,6 +150,8 @@ export function WorkspaceSidebar({
     [effectiveExpandedNodeIds, normalized, project],
   );
   const hasMatches = outlineRows.length > 0;
+  const isOutlineNavHighlighted = navHighlight.isHighlighted("outline");
+  const isProjectsNavHighlighted = navHighlight.isHighlighted("projects");
 
   useEffect(() => {
     if (previousProjectId.current === project.id) return;
@@ -221,19 +239,25 @@ export function WorkspaceSidebar({
 
       <nav
         aria-label="Workspace sidebar navigation"
+        onMouseLeave={navHighlight.clearHighlightedAction}
         className="grid grid-cols-2 gap-2 text-sm font-black"
       >
         <button
           type="button"
           aria-current="page"
-          className="workspace-sidebar-nav-active inline-flex h-11 items-center justify-center rounded-xl bg-brand-100 text-brand-800 transition hover:bg-brand-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
+          data-highlighted={navHighlight.getDataHighlighted("outline")}
+          {...navHighlight.getHoverHandlers("outline")}
+          className={getSidebarNavButtonClass(isOutlineNavHighlighted)}
         >
+          <PanelLeftOpen size={16} />
           Outline
         </button>
         <Link
           href="/projects"
           data-testid="workspace-sidebar-projects-link"
-          className="workspace-sidebar-nav-link inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-neutral-100 text-neutral-700 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
+          data-highlighted={navHighlight.getDataHighlighted("projects")}
+          {...navHighlight.getHoverHandlers("projects")}
+          className={getSidebarNavButtonClass(isProjectsNavHighlighted)}
         >
           <Folder size={16} />
           Projects

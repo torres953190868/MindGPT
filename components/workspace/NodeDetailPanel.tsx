@@ -36,6 +36,10 @@ import {
   PendingAttachmentChips,
   useChatComposerControls,
 } from "@/components/chat/ChatComposerControls";
+import {
+  getHighlightedActionClass,
+  useHighlightedAction,
+} from "@/components/ui/highlighted-action";
 import type { ConversationMessageItem } from "@/lib/graph";
 import type {
   ChatAttachment,
@@ -102,9 +106,13 @@ type MessageActionButtonProps = {
   testId: string;
   title?: string;
   disabled?: boolean;
+  highlightedHover?: boolean;
   onClick: () => void;
   children: ReactNode;
 };
+
+type HeaderActionItem = "edit" | "delete" | "notes";
+type ModeActionItem = "continue" | "branch";
 
 function getSelectionPreview(sourceText: string) {
   const compact = sourceText.replace(/\s+/g, " ").trim();
@@ -139,6 +147,7 @@ function MessageActionButton({
   testId,
   title = label,
   disabled = false,
+  highlightedHover = false,
   onClick,
   children,
 }: MessageActionButtonProps) {
@@ -150,7 +159,11 @@ function MessageActionButton({
       aria-label={label}
       title={title}
       data-testid={testId}
-      className="grid h-11 w-11 place-items-center rounded-full text-current opacity-75 transition hover:bg-white/70 hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-current/25 disabled:cursor-not-allowed disabled:opacity-35 sm:h-8 sm:w-8"
+      className={`grid h-11 w-11 place-items-center rounded-full opacity-75 focus:outline-none focus:ring-2 focus:ring-current/25 disabled:cursor-not-allowed disabled:opacity-35 sm:h-8 sm:w-8 ${
+        highlightedHover
+          ? "text-current transition-all duration-100 ease-in hover:bg-neutral-900 hover:text-white hover:opacity-100 hover:shadow-lg hover:duration-1000 hover:ease-out"
+          : "text-current transition hover:bg-white/70 hover:opacity-100"
+      }`}
     >
       {children}
     </button>
@@ -240,6 +253,10 @@ export function NodeDetailPanel({
   const [editingValue, setEditingValue] = useState("");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleEditValue, setTitleEditValue] = useState("");
+  const headerHighlight = useHighlightedAction<HeaderActionItem>();
+  const modeHighlight = useHighlightedAction<ModeActionItem>({ defaultAction: mode });
+  const clearHeaderHighlightedAction = headerHighlight.clearHighlightedAction;
+  const clearModeHighlightedAction = modeHighlight.clearHighlightedAction;
   const composerControls = useChatComposerControls({ isBusy: isCreating });
   const resetComposerAttachments = composerControls.resetAttachments;
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -297,7 +314,15 @@ export function NodeDetailPanel({
     setEditingValue("");
     setIsEditingTitle(false);
     setTitleEditValue("");
-  }, [clearSelectedSourceText, node?.id, resetComposerAttachments]);
+    clearHeaderHighlightedAction();
+    clearModeHighlightedAction();
+  }, [
+    clearSelectedSourceText,
+    clearHeaderHighlightedAction,
+    clearModeHighlightedAction,
+    node?.id,
+    resetComposerAttachments,
+  ]);
 
   useEffect(() => {
     if (!isEditingTitle) return;
@@ -506,6 +531,20 @@ export function NodeDetailPanel({
     );
   }
 
+  const isTitleEditButtonEnabled = !isInitialSubmit && !isEditingTitle && !isTitleEditBusy;
+  const isDeleteButtonEnabled = Boolean(node.parentId && !isCreating);
+  const isTitleEditButtonHighlighted = headerHighlight.isHighlighted("edit", {
+    enabled: isTitleEditButtonEnabled,
+  });
+  const isDeleteButtonHighlighted = headerHighlight.isHighlighted("delete", {
+    enabled: isDeleteButtonEnabled,
+  });
+  const isNotesButtonHighlighted = headerHighlight.isHighlighted("notes", {
+    active: isNotesOpen,
+  });
+  const isContinueModeHighlighted = modeHighlight.isHighlighted("continue");
+  const isBranchModeHighlighted = modeHighlight.isHighlighted("branch");
+
   return (
     <aside
       aria-labelledby={titleId}
@@ -576,7 +615,14 @@ export function NodeDetailPanel({
                 aria-label="Edit node title"
                 title="Edit title"
                 data-testid="edit-node-title-button"
-                className="node-detail-icon-button grid h-10 w-10 place-items-center rounded-full bg-neutral-100 text-brand-600 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-45"
+                data-highlighted={headerHighlight.getDataHighlighted("edit", {
+                  enabled: isTitleEditButtonEnabled,
+                })}
+                {...headerHighlight.getHoverHandlers("edit", { clearOnMouseLeave: true })}
+                className={`node-detail-icon-button grid h-10 w-10 place-items-center rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-45 ${getHighlightedActionClass(
+                  isTitleEditButtonHighlighted,
+                  "bg-neutral-100 text-brand-600",
+                )}`}
               >
                 <Pencil size={16} />
               </button>
@@ -620,7 +666,14 @@ export function NodeDetailPanel({
               onClick={() => onDeleteNode(node.id)}
               aria-label="Delete node"
               data-testid="delete-node-button"
-              className="node-detail-tertiary-action node-detail-delete-action inline-flex h-11 items-center gap-2 rounded-xl bg-danger-50 px-3 text-sm font-black text-danger-600 transition hover:bg-danger-100 disabled:cursor-not-allowed disabled:opacity-65"
+              data-highlighted={headerHighlight.getDataHighlighted("delete", {
+                enabled: isDeleteButtonEnabled,
+              })}
+              {...headerHighlight.getHoverHandlers("delete", { clearOnMouseLeave: true })}
+              className={`node-detail-tertiary-action node-detail-delete-action inline-flex h-11 items-center gap-2 rounded-xl px-3 text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-danger-100 disabled:cursor-not-allowed disabled:opacity-65 ${getHighlightedActionClass(
+                isDeleteButtonHighlighted,
+                "bg-danger-50 text-danger-600",
+              )}`}
             >
               <Trash2 size={16} />
               Delete
@@ -634,11 +687,14 @@ export function NodeDetailPanel({
               aria-controls="project-notes-panel"
               aria-expanded={isNotesOpen}
               data-testid="node-detail-notes-button"
-              className={`node-detail-tertiary-action node-detail-notes-action inline-flex h-11 items-center gap-2 rounded-xl px-3 text-sm font-black transition focus:outline-none focus:ring-2 focus:ring-brand-200 ${
-                isNotesOpen
-                  ? "bg-brand-100 text-brand-800 hover:bg-brand-200"
-                  : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
-              }`}
+              data-highlighted={headerHighlight.getDataHighlighted("notes", {
+                active: isNotesOpen,
+              })}
+              {...headerHighlight.getHoverHandlers("notes", { clearOnMouseLeave: true })}
+              className={`node-detail-tertiary-action node-detail-notes-action inline-flex h-11 items-center gap-2 rounded-xl px-3 text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 ${getHighlightedActionClass(
+                isNotesButtonHighlighted,
+                "bg-neutral-100 text-neutral-700",
+              )}`}
             >
               <NotebookPen size={16} />
               Notes
@@ -768,6 +824,7 @@ export function NodeDetailPanel({
                           testId="edit-message-button"
                           onClick={() => handleStartEdit(message)}
                           disabled={isCreating}
+                          highlightedHover
                         >
                           <Pencil size={15} />
                         </MessageActionButton>
@@ -828,6 +885,7 @@ export function NodeDetailPanel({
             role="group"
             aria-label="Message branch mode"
             data-testid="message-branch-mode"
+            onMouseLeave={modeHighlight.clearHighlightedAction}
             className="grid grid-cols-2 gap-2"
           >
             <button
@@ -837,11 +895,12 @@ export function NodeDetailPanel({
               aria-label="Continue down"
               aria-pressed={mode === "continue"}
               data-testid="continue-down-button"
-              className={`node-detail-mode-button node-detail-mode-continue inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-65 ${
-                mode === "continue"
-                  ? "bg-success-100 text-success-800"
-                  : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
-              }`}
+              data-highlighted={modeHighlight.getDataHighlighted("continue")}
+              {...modeHighlight.getPointerHoverHandlers("continue")}
+              className={`node-detail-mode-button node-detail-mode-continue inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 ${getHighlightedActionClass(
+                isContinueModeHighlighted,
+                "bg-neutral-100 text-neutral-700",
+              )}`}
             >
               <Sprout size={16} />
               Continue
@@ -853,11 +912,12 @@ export function NodeDetailPanel({
               aria-label="Branch right"
               aria-pressed={mode === "branch"}
               data-testid="branch-right-button"
-              className={`node-detail-mode-button node-detail-mode-branch inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-65 ${
-                mode === "branch"
-                  ? "bg-brand-100 text-brand-800"
-                  : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
-              }`}
+              data-highlighted={modeHighlight.getDataHighlighted("branch")}
+              {...modeHighlight.getPointerHoverHandlers("branch")}
+              className={`node-detail-mode-button node-detail-mode-branch inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 ${getHighlightedActionClass(
+                isBranchModeHighlighted,
+                "bg-neutral-100 text-neutral-700",
+              )}`}
             >
               <GitBranch size={16} />
               Branch

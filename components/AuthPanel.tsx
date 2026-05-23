@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
@@ -103,9 +104,39 @@ function UsageBar({ used, limit }: { used: number; limit: number | null }) {
 }
 
 const accountMenuItemClass =
-  "flex min-h-9 items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-semibold text-neutral-700 transition hover:bg-neutral-50 hover:text-neutral-900 focus:outline-none focus:ring-2 focus:ring-brand-100";
-const accountMenuIconClass =
-  "grid h-6 w-6 shrink-0 place-items-center rounded-md bg-neutral-100 text-neutral-600";
+  "flex min-h-9 items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-brand-100";
+const accountMenuDangerItemClass =
+  "flex min-h-9 w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-danger-100 disabled:cursor-not-allowed disabled:opacity-65";
+const accountMenuIconBaseClass =
+  "grid h-6 w-6 shrink-0 place-items-center rounded-md transition-all";
+
+function getAccountMenuItemClass(isHighlighted: boolean) {
+  return `${accountMenuItemClass} ${
+    isHighlighted
+      ? "bg-neutral-900 text-white shadow-lg duration-1000 ease-out"
+      : "text-neutral-700 duration-100 ease-in"
+  }`;
+}
+
+function getAccountMenuDangerItemClass(isHighlighted: boolean) {
+  return `${accountMenuDangerItemClass} ${
+    isHighlighted
+      ? "bg-neutral-900 text-white shadow-lg duration-1000 ease-out"
+      : "text-danger-600 duration-100 ease-in"
+  }`;
+}
+
+function getAccountMenuIconClass(isHighlighted: boolean, tone: "default" | "danger" = "default") {
+  if (isHighlighted) {
+    return `${accountMenuIconBaseClass} bg-white/12 text-white duration-1000 ease-out`;
+  }
+
+  return `${accountMenuIconBaseClass} ${
+    tone === "danger"
+      ? "bg-danger-50 text-danger-600 duration-100 ease-in"
+      : "bg-neutral-100 text-neutral-600 duration-100 ease-in"
+  }`;
+}
 
 const WHATS_NEW_ITEMS = [
   {
@@ -180,10 +211,12 @@ export function AuthPanel({
   placement = "bottom",
   variant = "default",
 }: AuthPanelProps) {
+  const pathname = usePathname();
   const menuRef = useRef<HTMLElement | null>(null);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [account, setAccount] = useState<AccountDto | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [hoveredMenuItem, setHoveredMenuItem] = useState<string | null>(null);
   const [showBugReport, setShowBugReport] = useState(false);
   const [showWhatsNew, setShowWhatsNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -238,6 +271,10 @@ export function AuthPanel({
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [isMenuOpen]);
 
+  useEffect(() => {
+    if (!isMenuOpen) setHoveredMenuItem(null);
+  }, [isMenuOpen]);
+
   async function handleLogout() {
     setSubmittingAction("logout");
     setError(null);
@@ -261,6 +298,21 @@ export function AuthPanel({
   const plan = account?.plan ?? "free";
   const highestUsage = account ? getHighestUsageItem(account.usage) : null;
   const isFreePlan = plan === "free";
+  const isUsageSettingsActive = pathname.startsWith("/settings/usage");
+  const isBillingSettingsActive = pathname.startsWith("/settings/billing");
+  const isAccountSettingsActive =
+    pathname.startsWith("/settings") && !isUsageSettingsActive && !isBillingSettingsActive;
+
+  function isAccountMenuItemHighlighted(id: string, active = false) {
+    return hoveredMenuItem === id || (active && hoveredMenuItem === null);
+  }
+
+  function getAccountMenuHoverHandlers(id: string) {
+    return {
+      onMouseEnter: () => setHoveredMenuItem(id),
+      onMouseLeave: () => setHoveredMenuItem(null),
+    };
+  }
 
   if (session && !session.configured) {
     return (
@@ -319,6 +371,7 @@ export function AuthPanel({
               role="dialog"
               aria-label="Account menu"
               data-testid="account-menu-popover"
+              onMouseLeave={() => setHoveredMenuItem(null)}
               className={`absolute ${popoverHorizontal} z-50 rounded-xl border border-neutral-200 bg-white p-1.5 text-left shadow-2xl ${popoverPosition}`}
             >
               {/* User info header with plan badge */}
@@ -359,30 +412,54 @@ export function AuthPanel({
               <div className="mt-1 space-y-0.5">
                 <Link
                   href="/settings/account"
+                  aria-current={isAccountSettingsActive ? "page" : undefined}
                   onClick={() => setIsMenuOpen(false)}
-                  className={accountMenuItemClass}
+                  {...getAccountMenuHoverHandlers("settings-account")}
+                  className={getAccountMenuItemClass(
+                    isAccountMenuItemHighlighted("settings-account", isAccountSettingsActive),
+                  )}
                 >
-                  <span className={accountMenuIconClass}>
+                  <span
+                    className={getAccountMenuIconClass(
+                      isAccountMenuItemHighlighted("settings-account", isAccountSettingsActive),
+                    )}
+                  >
                     <Settings size={14} />
                   </span>
                   Settings
                 </Link>
                 <Link
                   href="/settings/usage"
+                  aria-current={isUsageSettingsActive ? "page" : undefined}
                   onClick={() => setIsMenuOpen(false)}
-                  className={accountMenuItemClass}
+                  {...getAccountMenuHoverHandlers("settings-usage")}
+                  className={getAccountMenuItemClass(
+                    isAccountMenuItemHighlighted("settings-usage", isUsageSettingsActive),
+                  )}
                 >
-                  <span className={accountMenuIconClass}>
+                  <span
+                    className={getAccountMenuIconClass(
+                      isAccountMenuItemHighlighted("settings-usage", isUsageSettingsActive),
+                    )}
+                  >
                     <BarChart3 size={14} />
                   </span>
                   Usage & Limits
                 </Link>
                 <Link
                   href="/settings/billing"
+                  aria-current={isBillingSettingsActive ? "page" : undefined}
                   onClick={() => setIsMenuOpen(false)}
-                  className={accountMenuItemClass}
+                  {...getAccountMenuHoverHandlers("settings-billing")}
+                  className={getAccountMenuItemClass(
+                    isAccountMenuItemHighlighted("settings-billing", isBillingSettingsActive),
+                  )}
                 >
-                  <span className={accountMenuIconClass}>
+                  <span
+                    className={getAccountMenuIconClass(
+                      isAccountMenuItemHighlighted("settings-billing", isBillingSettingsActive),
+                    )}
+                  >
                     <CreditCard size={14} />
                   </span>
                   Billing
@@ -399,9 +476,16 @@ export function AuthPanel({
                     setIsMenuOpen(false);
                     setShowWhatsNew(true);
                   }}
-                  className={`w-full ${accountMenuItemClass}`}
+                  {...getAccountMenuHoverHandlers("whats-new")}
+                  className={`w-full ${getAccountMenuItemClass(
+                    isAccountMenuItemHighlighted("whats-new"),
+                  )}`}
                 >
-                  <span className={accountMenuIconClass}>
+                  <span
+                    className={getAccountMenuIconClass(
+                      isAccountMenuItemHighlighted("whats-new"),
+                    )}
+                  >
                     <Sparkles size={14} />
                   </span>
                   What&apos;s New
@@ -413,18 +497,32 @@ export function AuthPanel({
                     setShowBugReport(true);
                   }}
                   data-testid="report-bug-menu-item"
-                  className={`w-full ${accountMenuItemClass}`}
+                  {...getAccountMenuHoverHandlers("report-bug")}
+                  className={`w-full ${getAccountMenuItemClass(
+                    isAccountMenuItemHighlighted("report-bug"),
+                  )}`}
                 >
-                  <span className={accountMenuIconClass}>
+                  <span
+                    className={getAccountMenuIconClass(
+                      isAccountMenuItemHighlighted("report-bug"),
+                    )}
+                  >
                     <Bug size={14} />
                   </span>
                   Report a bug
                 </button>
                 <a
                   href="mailto:support@branchmind.app"
-                  className={accountMenuItemClass}
+                  {...getAccountMenuHoverHandlers("help-support")}
+                  className={getAccountMenuItemClass(
+                    isAccountMenuItemHighlighted("help-support"),
+                  )}
                 >
-                  <span className={accountMenuIconClass}>
+                  <span
+                    className={getAccountMenuIconClass(
+                      isAccountMenuItemHighlighted("help-support"),
+                    )}
+                  >
                     <HelpCircle size={14} />
                   </span>
                   Help & Support
@@ -440,9 +538,17 @@ export function AuthPanel({
                 disabled={submittingAction === "logout"}
                 aria-label="Sign out"
                 data-testid="sign-out-button"
-                className="flex min-h-9 w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-semibold text-danger-600 transition hover:bg-danger-50 hover:text-danger-700 focus:outline-none focus:ring-2 focus:ring-danger-100 disabled:cursor-not-allowed disabled:opacity-65"
+                {...getAccountMenuHoverHandlers("sign-out")}
+                className={getAccountMenuDangerItemClass(
+                  isAccountMenuItemHighlighted("sign-out"),
+                )}
               >
-                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-danger-50 text-danger-600">
+                <span
+                  className={getAccountMenuIconClass(
+                    isAccountMenuItemHighlighted("sign-out"),
+                    "danger",
+                  )}
+                >
                   <LogOut size={14} />
                 </span>
                 {submittingAction === "logout" ? "Signing out..." : "Sign out"}
