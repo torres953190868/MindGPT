@@ -17,8 +17,8 @@ export const BRANCHMIND_THEMES = [
   {
     id: "warm-limestone",
     name: "Warm Limestone",
-    description: "A quiet account-center skin with stone neutrals, porcelain panels, and sage accents.",
-    swatches: ["#29252f", "#f3f0ea", "#5a7667"],
+    description: "A quiet account-center skin with stone neutrals, porcelain panels, and antique olive accents.",
+    swatches: ["#29252f", "#f3f0ea", "#7d6b45"],
   },
 ] as const;
 

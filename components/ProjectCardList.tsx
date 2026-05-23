@@ -353,7 +353,7 @@ export function ProjectCardList() {
 
   return (
     <section
-      className="mx-auto flex w-full max-w-[1500px] flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white/95 shadow-xl md:min-h-[calc(100vh-2rem)] md:flex-row"
+      className="project-card-list-shell mx-auto flex w-full max-w-[1500px] flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white/95 shadow-xl md:min-h-[calc(100vh-2rem)] md:flex-row"
       aria-labelledby="projects-title"
       data-testid="project-card-list"
     >
@@ -430,7 +430,7 @@ export function ProjectCardList() {
         className="sr-only"
       />
 
-      <aside className="flex w-full shrink-0 flex-col border-b border-neutral-200 bg-white px-3 py-3 md:w-56 md:border-b-0 md:border-r">
+      <aside className="project-card-list-sidebar flex w-full shrink-0 flex-col border-b border-neutral-200 bg-white px-3 py-3 md:w-56 md:border-b-0 md:border-r">
         <Link
           href="/"
           aria-label="BranchMind home"
@@ -547,8 +547,8 @@ export function ProjectCardList() {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col bg-white">
-        <header className="flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-neutral-200 px-4 py-3 md:px-5">
+      <div className="project-card-list-main flex min-w-0 flex-1 flex-col bg-white">
+        <header className="project-card-list-header flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-neutral-200 px-4 py-3 md:px-5">
           <div className="flex min-w-0 items-center gap-3">
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-success-50 text-success-600">
               <FolderOpen size={18} />
@@ -574,7 +574,7 @@ export function ProjectCardList() {
           </button>
         </header>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:p-5">
+        <div className="project-card-list-content flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:p-5">
           <div
             className="flex flex-col gap-3 lg:flex-row lg:items-center"
             data-testid="project-list-toolbar"
@@ -648,7 +648,7 @@ export function ProjectCardList() {
               role="status"
               aria-live="polite"
               data-testid="project-list-loading-state"
-              className="space-y-0 rounded-lg border border-neutral-200 bg-white"
+              className="project-card-list-panel space-y-0 rounded-lg border border-neutral-200 bg-white"
             >
               {Array.from({ length: 5 }).map((_, i) => (
                 <div
@@ -670,7 +670,7 @@ export function ProjectCardList() {
             <section
               aria-label="No projects"
               data-testid="project-empty-state"
-              className="flex flex-col items-center rounded-lg border border-neutral-200 bg-white p-10 text-center"
+              className="project-card-list-panel flex flex-col items-center rounded-lg border border-neutral-200 bg-white p-10 text-center"
             >
               <span className="grid h-14 w-14 place-items-center rounded-2xl bg-brand-50 text-brand-500">
                 <FolderOpen size={28} />
@@ -692,7 +692,7 @@ export function ProjectCardList() {
             <section
               aria-label="No matching projects"
               data-testid="project-search-empty-state"
-              className="flex flex-col items-center rounded-lg border border-neutral-200 bg-white p-10 text-center"
+              className="project-card-list-panel flex flex-col items-center rounded-lg border border-neutral-200 bg-white p-10 text-center"
             >
               <span className="grid h-14 w-14 place-items-center rounded-2xl bg-neutral-100 text-neutral-600">
                 <Search size={28} />
@@ -704,7 +704,7 @@ export function ProjectCardList() {
             </section>
           ) : (
             <div
-              className="overflow-hidden rounded-lg border border-neutral-200 bg-white"
+              className="project-card-list-panel overflow-hidden rounded-lg border border-neutral-200 bg-white"
               data-testid="project-grid"
             >
               <div className="overflow-x-auto">

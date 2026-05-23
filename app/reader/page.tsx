@@ -8,7 +8,7 @@ export default function ReaderPage() {
     <main
       aria-labelledby="reader-title"
       data-testid="reader-page"
-      className="min-h-screen bg-[#fbfafc] px-4 py-5 text-[#1f1a2a] sm:px-6"
+      className="branchmind-reader-surface min-h-screen bg-[#fbfafc] px-4 py-5 text-[#1f1a2a] sm:px-6"
     >
       <div className="mx-auto max-w-[1440px] space-y-3">
         <div className="flex min-w-0 items-center justify-between gap-3">
