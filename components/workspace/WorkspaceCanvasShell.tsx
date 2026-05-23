@@ -1,26 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import {
-  Brain,
-  Check,
-  Folder,
-  Grid2X2,
-  Loader2,
   Map as MapIcon,
   MessageSquare,
-  MoreHorizontal,
   NotebookPen,
   PanelLeftOpen,
   PanelRightOpen,
-  Pencil,
   RefreshCcw,
-  Star,
-  X,
 } from "lucide-react";
 import {
   type CSSProperties,
-  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -94,7 +83,6 @@ type RetryAssistantMessageHandler = (
 ) => Promise<boolean>;
 
 type UpdateNodeTitleHandler = (nodeId: string, title: string) => Promise<boolean>;
-type UpdateProjectTitleHandler = (projectId: string, title: string) => Promise<boolean>;
 
 type ProjectNotesConfig = {
   projectNotes: string;
@@ -126,14 +114,12 @@ type WorkspaceCanvasShellProps = {
   onPopulateNode: PopulateNodeHandler;
   onEditUserMessage: EditUserMessageHandler;
   onRetryAssistantMessage: RetryAssistantMessageHandler;
-  onUpdateProjectTitle?: UpdateProjectTitleHandler;
   onUpdateNodeTitle: UpdateNodeTitleHandler;
   onToggleNode: (nodeId: string) => void;
   onDeleteNode: (nodeId: string) => void;
   onMoveNode: (nodeId: string, position: NodePosition) => void;
   dataDraftWorkspace?: boolean;
   disableNodeCreationActions?: boolean;
-  showProjectStar?: boolean;
   initialWorkspaceSidebarCollapsed?: boolean;
   initialNodeDetailPanelCollapsed?: boolean;
   inlineNodeComposer?: InlineNodeComposerData;
@@ -303,7 +289,7 @@ function CanvasCornerToggleButton({
       aria-label={ariaLabel}
       aria-expanded="false"
       data-testid={testId}
-      className={`absolute top-4 z-20 grid h-9 w-9 place-items-center rounded-md border border-neutral-200 bg-white/95 text-neutral-700 shadow-sm backdrop-blur transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40 ${
+      className={`branchmind-canvas-toggle absolute top-4 z-20 grid h-9 w-9 place-items-center rounded-md border border-neutral-200 bg-white/95 text-neutral-700 shadow-sm backdrop-blur transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40 ${
         side === "left" ? "left-4" : "right-4"
       }`}
     >
@@ -324,14 +310,12 @@ export function WorkspaceCanvasShell({
   onPopulateNode,
   onEditUserMessage,
   onRetryAssistantMessage,
-  onUpdateProjectTitle,
   onUpdateNodeTitle,
   onToggleNode,
   onDeleteNode,
   onMoveNode,
   dataDraftWorkspace = false,
   disableNodeCreationActions = false,
-  showProjectStar = true,
   initialWorkspaceSidebarCollapsed = false,
   initialNodeDetailPanelCollapsed = false,
   inlineNodeComposer,
@@ -341,7 +325,6 @@ export function WorkspaceCanvasShell({
   canvasIntro,
 }: WorkspaceCanvasShellProps) {
   const workspaceGridRef = useRef<HTMLDivElement | null>(null);
-  const projectTitleInputRef = useRef<HTMLInputElement | null>(null);
   const workspaceSidebarRestoreWidthRef = useRef(WORKSPACE_SIDEBAR_DEFAULT_WIDTH);
   const detailPanelRestoreWidthRef = useRef(DETAIL_PANEL_DEFAULT_WIDTH);
   const autoCollapsedSidebarForNotesRef = useRef(false);
@@ -355,9 +338,6 @@ export function WorkspaceCanvasShell({
   const [mobileMapHeight, setMobileMapHeight] = useState(MOBILE_MAP_DEFAULT_HEIGHT);
   const [mobileWorkspaceView, setMobileWorkspaceView] =
     useState<MobileWorkspaceView>("map");
-  const [isEditingProjectTitle, setIsEditingProjectTitle] = useState(false);
-  const [projectTitleEditValue, setProjectTitleEditValue] = useState("");
-  const [isProjectTitleSaving, setIsProjectTitleSaving] = useState(false);
   const [isWorkspaceSidebarCollapsed, setIsWorkspaceSidebarCollapsed] = useState(
     initialWorkspaceSidebarCollapsed,
   );
@@ -376,15 +356,6 @@ export function WorkspaceCanvasShell({
         : [],
     [project, selectedNode],
   );
-  const canEditProjectTitle = Boolean(onUpdateProjectTitle) && !dataDraftWorkspace;
-  const isProjectTitleBusy =
-    isProjectTitleSaving || Boolean(creatingNodeId || streamingNodeId);
-  const projectTitleEditTrimmed = projectTitleEditValue.trim();
-  const isProjectTitleSaveDisabled =
-    isProjectTitleBusy ||
-    !onUpdateProjectTitle ||
-    !projectTitleEditTrimmed ||
-    projectTitleEditTrimmed === project.title.trim();
   const isSelectedNodeCreating = selectedNode
     ? creatingNodeId === selectedNode.id || streamingNodeId === selectedNode.id
     : false;
@@ -420,13 +391,11 @@ export function WorkspaceCanvasShell({
   const canvasIntroStyle = {
     transform: `translate3d(0, ${canvasIntroPanOffsetY}px, 0)`,
   } as CSSProperties;
-  const workspaceGridClassName = [
-    "grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden border border-neutral-200 bg-white shadow-xl lg:h-full lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:shadow-none",
-    dataDraftWorkspace ? "rounded-xl" : "rounded-b-xl border-t-0",
-  ].join(" ");
+  const workspaceGridClassName =
+    "branchmind-workspace-grid grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl lg:h-full lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:shadow-none";
   const mobileTabsClassName = hasProjectNotes
-    ? "grid grid-cols-4 gap-2 rounded-[24px] border border-white/80 bg-white/68 p-2 shadow-sm lg:hidden"
-    : "grid grid-cols-3 gap-2 rounded-[24px] border border-white/80 bg-white/68 p-2 shadow-sm lg:hidden";
+    ? "branchmind-mobile-tabs grid grid-cols-4 gap-2 rounded-[24px] border border-white/80 bg-white/68 p-2 shadow-sm lg:hidden"
+    : "branchmind-mobile-tabs grid grid-cols-3 gap-2 rounded-[24px] border border-white/80 bg-white/68 p-2 shadow-sm lg:hidden";
 
   const getWorkspaceGridWidth = useCallback(() => {
     return workspaceGridRef.current?.clientWidth ?? 0;
@@ -632,54 +601,6 @@ export function WorkspaceCanvasShell({
     [onSelectNode],
   );
 
-  const handleStartProjectTitleEdit = useCallback(() => {
-    if (!canEditProjectTitle || isProjectTitleBusy) return;
-    setProjectTitleEditValue(project.title);
-    setIsEditingProjectTitle(true);
-  }, [canEditProjectTitle, isProjectTitleBusy, project.title]);
-
-  const handleCancelProjectTitleEdit = useCallback(() => {
-    if (isProjectTitleSaving) return;
-    setIsEditingProjectTitle(false);
-    setProjectTitleEditValue("");
-  }, [isProjectTitleSaving]);
-
-  const handleSaveProjectTitleEdit = useCallback(async () => {
-    if (isProjectTitleSaveDisabled || !onUpdateProjectTitle) return;
-
-    setIsProjectTitleSaving(true);
-    try {
-      const saved = await onUpdateProjectTitle(project.id, projectTitleEditTrimmed);
-      if (saved) {
-        setIsEditingProjectTitle(false);
-        setProjectTitleEditValue("");
-      }
-    } finally {
-      setIsProjectTitleSaving(false);
-    }
-  }, [
-    isProjectTitleSaveDisabled,
-    onUpdateProjectTitle,
-    project.id,
-    projectTitleEditTrimmed,
-  ]);
-
-  const handleProjectTitleEditKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLInputElement>) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        handleCancelProjectTitleEdit();
-        return;
-      }
-
-      if (event.key === "Enter") {
-        event.preventDefault();
-        void handleSaveProjectTitleEdit();
-      }
-    },
-    [handleCancelProjectTitleEdit, handleSaveProjectTitleEdit],
-  );
-
   const handleSidePanelResizeStart = useCallback((side: ResizableSide, event: ResizeStartEvent) => {
     event.preventDefault();
     const isPointerResize = getResizeInputMode(event) === "pointer";
@@ -867,18 +788,6 @@ export function WorkspaceCanvasShell({
   }, [mobileMapHeight]);
 
   useEffect(() => {
-    if (!isEditingProjectTitle) return;
-    projectTitleInputRef.current?.focus();
-    projectTitleInputRef.current?.select();
-  }, [isEditingProjectTitle]);
-
-  useEffect(() => {
-    setIsEditingProjectTitle(false);
-    setProjectTitleEditValue("");
-    setIsProjectTitleSaving(false);
-  }, [project.id]);
-
-  useEffect(() => {
     if (canvasIntro) return;
     setCanvasIntroPanOffsetY(0);
   }, [canvasIntro]);
@@ -962,138 +871,9 @@ export function WorkspaceCanvasShell({
       data-draft-workspace={dataDraftWorkspace ? "true" : undefined}
       className="branchmind-workspace-surface flex min-h-screen flex-col bg-surface-bg p-3 text-neutral-900 lg:h-screen lg:min-h-[720px] lg:overflow-hidden lg:p-0"
     >
-      {dataDraftWorkspace && (
-        <h1 id="workspace-title" className="sr-only">
-          {project.title}
-        </h1>
-      )}
-
-      {!dataDraftWorkspace && (
-        <header
-          aria-label="Workspace header"
-          data-testid="workspace-header"
-          className="flex min-h-14 flex-wrap items-center justify-between gap-3 rounded-t-xl border border-neutral-200 bg-white/95 px-4 py-2 shadow-sm backdrop-blur lg:flex-nowrap lg:rounded-none lg:border-x-0 lg:border-t-0 lg:px-5 lg:shadow-none"
-        >
-          <div className="flex min-w-0 flex-1 items-center gap-4">
-            <div className="flex shrink-0 items-center gap-2 border-r border-neutral-200 pr-4">
-              <span className="grid h-8 w-8 place-items-center rounded-md border border-brand-200 bg-brand-50 text-brand-600">
-                <Brain size={18} />
-              </span>
-              <span className="text-base font-extrabold text-neutral-900">BranchMind</span>
-            </div>
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              {isEditingProjectTitle ? (
-                <form
-                  className="flex min-w-0 flex-1 items-center gap-1.5 sm:max-w-[460px]"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void handleSaveProjectTitleEdit();
-                  }}
-                >
-                  <h1 id="workspace-title" className="sr-only">
-                    {project.title}
-                  </h1>
-                  <input
-                    ref={projectTitleInputRef}
-                    value={projectTitleEditValue}
-                    onChange={(event) => setProjectTitleEditValue(event.target.value)}
-                    onKeyDown={handleProjectTitleEditKeyDown}
-                    disabled={isProjectTitleBusy}
-                    aria-label="Project name"
-                    data-testid="project-title-edit-input"
-                    maxLength={120}
-                    className="h-9 min-w-0 flex-1 rounded-md border border-brand-200 bg-white px-3 text-sm font-extrabold text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-60 sm:text-base"
-                  />
-                  <button
-                    type="submit"
-                    disabled={isProjectTitleSaveDisabled}
-                    aria-label="Save project name"
-                    title="Save"
-                    data-testid="save-project-title-button"
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-success-100 text-success-700 transition hover:bg-success-200 focus:outline-none focus:ring-2 focus:ring-success-200 disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    {isProjectTitleSaving ? (
-                      <Loader2 size={15} className="animate-spin" />
-                    ) : (
-                      <Check size={15} />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCancelProjectTitleEdit}
-                    disabled={isProjectTitleSaving}
-                    aria-label="Cancel project name edit"
-                    title="Cancel"
-                    data-testid="cancel-project-title-button"
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-neutral-200 bg-white text-neutral-600 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    <X size={15} />
-                  </button>
-                </form>
-              ) : (
-                <h1
-                  id="workspace-title"
-                  data-testid="workspace-title-text"
-                  className="line-clamp-1 min-w-0 text-sm font-extrabold text-neutral-900 sm:text-base"
-                >
-                  {project.title}
-                </h1>
-              )}
-              {canEditProjectTitle && !isEditingProjectTitle && (
-                <button
-                  type="button"
-                  onClick={handleStartProjectTitleEdit}
-                  disabled={isProjectTitleBusy}
-                  aria-label="Edit project name"
-                  title="Edit project name"
-                  data-testid="edit-project-title-button"
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-neutral-600 transition hover:bg-neutral-100 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200/40 disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  <Pencil size={15} />
-                </button>
-              )}
-              {showProjectStar && !isEditingProjectTitle && (
-                <button
-                  type="button"
-                  aria-label="Star project"
-                  className="hidden h-8 w-8 shrink-0 place-items-center rounded-md text-neutral-600 transition hover:bg-neutral-100 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200/40 sm:grid"
-                >
-                  <Star size={16} />
-                </button>
-              )}
-            </div>
-          </div>
-          <nav
-            aria-label="Workspace navigation"
-            data-testid="workspace-navigation"
-            className="flex w-full min-w-0 flex-wrap items-center justify-end gap-1.5 sm:w-auto"
-          >
-            <Link
-              href="/projects"
-              aria-label="Project list"
-              data-testid="workspace-projects-link"
-              className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-bold text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
-            >
-              <Folder size={16} />
-              Projects
-            </Link>
-            <button
-              type="button"
-              aria-label="Workspace grid"
-              className="grid h-9 w-9 place-items-center rounded-md text-neutral-600 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
-            >
-              <Grid2X2 size={16} />
-            </button>
-            <button
-              type="button"
-              aria-label="More workspace actions"
-              className="grid h-9 w-9 place-items-center rounded-md text-neutral-600 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
-            >
-              <MoreHorizontal size={17} />
-            </button>
-          </nav>
-        </header>
-      )}
+      <h1 id="workspace-title" className="sr-only">
+        {project.title}
+      </h1>
 
       {aiError && !selectedNode && (
         <p
@@ -1183,7 +963,7 @@ export function WorkspaceCanvasShell({
         <section
           aria-labelledby="mind-map-section-title"
           data-testid="mind-map-canvas"
-          className={`relative h-[var(--mobile-map-height)] overflow-hidden rounded-lg border border-neutral-200 bg-surface-canvas shadow-sm lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none ${
+          className={`branchmind-map-shell relative h-[var(--mobile-map-height)] overflow-hidden rounded-lg border border-neutral-200 bg-surface-canvas shadow-sm lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none ${
             mobileWorkspaceView === "map" ? "" : "hidden lg:block"
           }`}
         >
@@ -1192,7 +972,7 @@ export function WorkspaceCanvasShell({
           </h2>
           {canvasIntro && (
             <div
-              className="relative z-10 flex justify-center px-4 pt-6 lg:pointer-events-none lg:absolute lg:inset-x-4 lg:top-24 lg:p-0"
+              className="branchmind-canvas-intro relative z-10 flex justify-center px-4 pt-6 lg:pointer-events-none lg:absolute lg:inset-x-4 lg:top-24 lg:p-0"
               style={canvasIntroStyle}
             >
               {canvasIntro}

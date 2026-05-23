@@ -163,15 +163,14 @@ export function HomeDraftWorkspace() {
       onMoveNode={handleMoveNode}
       dataDraftWorkspace
       disableNodeCreationActions
-      showProjectStar={false}
       initialWorkspaceSidebarCollapsed
       initialNodeDetailPanelCollapsed
       canvasIntro={
         <div
           data-testid="home-hero"
-          className="max-w-[min(760px,calc(100vw-48px))] text-center"
+          className="branchmind-home-hero max-w-[min(760px,calc(100vw-48px))] text-center"
         >
-          <p className="home-title-soft text-5xl font-black leading-none text-neutral-900 sm:text-7xl lg:text-8xl">
+          <p className="branchmind-home-logo home-title-soft text-5xl font-black leading-none text-neutral-900 sm:text-7xl lg:text-8xl">
             BranchMind
           </p>
           <p

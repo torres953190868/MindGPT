@@ -37,7 +37,6 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
   const retryPendingProjectSync = useBranchMindStore(
     (state) => state.retryPendingProjectSync,
   );
-  const updateProjectTitle = useBranchMindStore((state) => state.updateProjectTitle);
   const updateProjectNotes = useBranchMindStore((state) => state.updateProjectNotes);
   const updateNodeTitle = useBranchMindStore((state) => state.updateNodeTitle);
   const updateNodePosition = useBranchMindStore((state) => state.updateNodePosition);
@@ -158,7 +157,6 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
       onPopulateNode={populateBlankNode}
       onEditUserMessage={editUserMessage}
       onRetryAssistantMessage={retryAssistantMessage}
-      onUpdateProjectTitle={updateProjectTitle}
       onUpdateNodeTitle={updateNodeTitle}
       onToggleNode={toggleNodeCollapsed}
       onDeleteNode={deleteNode}

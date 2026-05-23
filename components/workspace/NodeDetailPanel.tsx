@@ -194,7 +194,7 @@ function NodeBriefCard({ node }: { node: MindNode }) {
     <article
       aria-label="Node brief"
       data-testid="node-brief-card"
-      className="rounded-xl border border-brand-100 bg-brand-50 p-4 text-sm leading-6 text-neutral-700"
+      className="node-brief-card rounded-xl border border-brand-100 bg-brand-50 p-4 text-sm leading-6 text-neutral-700"
     >
       <p className="mb-1 text-[11px] font-black uppercase tracking-wider text-neutral-500">Node brief</p>
       <h3 className="text-base font-black leading-snug text-neutral-900">
@@ -483,7 +483,7 @@ export function NodeDetailPanel({
       <aside
         aria-label="Node details"
         data-testid="node-detail-panel"
-        className="flex h-full min-h-0 w-full max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-neutral-100 bg-white/90 p-4 shadow-lg lg:max-h-full lg:self-start lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
+        className="node-detail-panel-surface flex h-full min-h-0 w-full max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-neutral-100 bg-white/90 p-4 shadow-lg lg:max-h-full lg:self-start lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
       >
         {showCollapseButton && (
           <button
@@ -492,7 +492,7 @@ export function NodeDetailPanel({
             aria-label="Collapse node details panel"
             aria-expanded="true"
             data-testid="collapse-node-detail-panel-button"
-            className="grid h-10 w-10 place-items-center self-end rounded-full bg-neutral-100 text-neutral-600 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
+            className="node-detail-icon-button grid h-10 w-10 place-items-center self-end rounded-full bg-neutral-100 text-neutral-600 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
           >
             <PanelRightClose size={18} />
           </button>
@@ -510,13 +510,13 @@ export function NodeDetailPanel({
     <aside
       aria-labelledby={titleId}
       data-testid="node-detail-panel"
-      className={`grid h-full min-h-0 w-full max-h-[calc(100vh-2rem)] overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-brand-100/35 lg:max-h-full lg:self-start lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none ${
+      className={`node-detail-panel-surface grid h-full min-h-0 w-full max-h-[calc(100vh-2rem)] overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-brand-100/35 lg:max-h-full lg:self-start lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none ${
         showComposer
           ? "grid-rows-[auto_minmax(0,1fr)_auto]"
           : "grid-rows-[auto_minmax(0,1fr)]"
       }`}
     >
-        <div className="shrink-0 space-y-3 border-b border-neutral-200 pb-4">
+        <div className="node-detail-header shrink-0 space-y-3 border-b border-neutral-200 pb-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1 space-y-3">
             <p className="text-[11px] font-black uppercase tracking-wider text-neutral-500">
@@ -544,7 +544,7 @@ export function NodeDetailPanel({
                     aria-label="Cancel node title edit"
                     title="Cancel"
                     data-testid="cancel-node-title-edit-button"
-                    className="grid h-10 w-10 place-items-center rounded-full bg-white/75 text-neutral-600 transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-45"
+                    className="node-detail-icon-button grid h-10 w-10 place-items-center rounded-full bg-white/75 text-neutral-600 transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     <X size={16} />
                   </button>
@@ -555,7 +555,7 @@ export function NodeDetailPanel({
                     aria-label="Save node title"
                     title="Save"
                     data-testid="save-node-title-edit-button"
-                    className="grid h-10 w-10 place-items-center rounded-full bg-success-100 text-success-700 transition hover:bg-success-200 focus:outline-none focus:ring-4 focus:ring-success-100 disabled:cursor-not-allowed disabled:opacity-45"
+                    className="node-detail-icon-button node-detail-icon-button-save grid h-10 w-10 place-items-center rounded-full bg-success-100 text-success-700 transition hover:bg-success-200 focus:outline-none focus:ring-4 focus:ring-success-100 disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     <Save size={16} />
                   </button>
@@ -576,7 +576,7 @@ export function NodeDetailPanel({
                 aria-label="Edit node title"
                 title="Edit title"
                 data-testid="edit-node-title-button"
-                className="grid h-10 w-10 place-items-center rounded-full bg-neutral-100 text-brand-600 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-45"
+                className="node-detail-icon-button grid h-10 w-10 place-items-center rounded-full bg-neutral-100 text-brand-600 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <Pencil size={16} />
               </button>
@@ -589,7 +589,7 @@ export function NodeDetailPanel({
                 aria-controls="conversation-history"
                 aria-expanded="true"
                 data-testid="collapse-node-detail-panel-button"
-                className="grid h-10 w-10 place-items-center rounded-full bg-neutral-100 text-neutral-600 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                className="node-detail-icon-button grid h-10 w-10 place-items-center rounded-full bg-neutral-100 text-neutral-600 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
               >
                 <PanelRightClose size={18} />
               </button>
@@ -607,7 +607,7 @@ export function NodeDetailPanel({
               aria-expanded={!node.collapsed}
               aria-controls="mind-map"
               data-testid="toggle-node-button"
-              className="inline-flex h-11 items-center gap-2 rounded-xl bg-danger-100 px-3 text-sm font-black text-danger-700 transition hover:bg-danger-200 disabled:cursor-not-allowed disabled:opacity-65"
+              className="node-detail-tertiary-action node-detail-fold-action inline-flex h-11 items-center gap-2 rounded-xl bg-danger-100 px-3 text-sm font-black text-danger-700 transition hover:bg-danger-200 disabled:cursor-not-allowed disabled:opacity-65"
             >
               <Ribbon size={16} />
               {node.collapsed ? "Expand" : "Fold"}
@@ -620,7 +620,7 @@ export function NodeDetailPanel({
               onClick={() => onDeleteNode(node.id)}
               aria-label="Delete node"
               data-testid="delete-node-button"
-              className="inline-flex h-11 items-center gap-2 rounded-xl bg-danger-50 px-3 text-sm font-black text-danger-600 transition hover:bg-danger-100 disabled:cursor-not-allowed disabled:opacity-65"
+              className="node-detail-tertiary-action node-detail-delete-action inline-flex h-11 items-center gap-2 rounded-xl bg-danger-50 px-3 text-sm font-black text-danger-600 transition hover:bg-danger-100 disabled:cursor-not-allowed disabled:opacity-65"
             >
               <Trash2 size={16} />
               Delete
@@ -634,7 +634,7 @@ export function NodeDetailPanel({
               aria-controls="project-notes-panel"
               aria-expanded={isNotesOpen}
               data-testid="node-detail-notes-button"
-              className={`inline-flex h-11 items-center gap-2 rounded-xl px-3 text-sm font-black transition focus:outline-none focus:ring-2 focus:ring-brand-200 ${
+              className={`node-detail-tertiary-action node-detail-notes-action inline-flex h-11 items-center gap-2 rounded-xl px-3 text-sm font-black transition focus:outline-none focus:ring-2 focus:ring-brand-200 ${
                 isNotesOpen
                   ? "bg-brand-100 text-brand-800 hover:bg-brand-200"
                   : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
@@ -797,7 +797,7 @@ export function NodeDetailPanel({
         aria-describedby={displayError ? errorId : isComposerBusy ? statusId : undefined}
         data-testid="message-composer"
         onSubmit={handleSubmit}
-        className="shrink-0 space-y-3 border-t border-neutral-200 pt-4"
+        className="node-detail-composer shrink-0 space-y-3 border-t border-neutral-200 pt-4"
       >
         {!isInitialSubmit && !isBlankNode && selectedSourceText && (
           <div
@@ -837,7 +837,7 @@ export function NodeDetailPanel({
               aria-label="Continue down"
               aria-pressed={mode === "continue"}
               data-testid="continue-down-button"
-              className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-65 ${
+              className={`node-detail-mode-button node-detail-mode-continue inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-65 ${
                 mode === "continue"
                   ? "bg-success-100 text-success-800"
                   : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
@@ -853,7 +853,7 @@ export function NodeDetailPanel({
               aria-label="Branch right"
               aria-pressed={mode === "branch"}
               data-testid="branch-right-button"
-              className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-65 ${
+              className={`node-detail-mode-button node-detail-mode-branch inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-65 ${
                 mode === "branch"
                   ? "bg-brand-100 text-brand-800"
                   : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
@@ -869,7 +869,7 @@ export function NodeDetailPanel({
           disabled={isComposerBusy}
           onRemove={composerControls.removePendingAttachment}
         />
-        <div className="relative rounded-[20px] border border-neutral-200/80 bg-white shadow-sm transition focus-within:border-brand-300 focus-within:shadow-md focus-within:shadow-brand-100/20 focus-within:ring-4 focus-within:ring-brand-100/30">
+        <div className="node-detail-composer-box relative rounded-[20px] border border-neutral-200/80 bg-white shadow-sm transition focus-within:border-brand-300 focus-within:shadow-md focus-within:shadow-brand-100/20 focus-within:ring-4 focus-within:ring-brand-100/30">
           <textarea
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -891,7 +891,7 @@ export function NodeDetailPanel({
               disabled={isComposerBusy || !input.trim()}
               aria-label="Send message"
               data-testid="send-message-button"
-              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="branchmind-primary-action inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {composerControls.isPreparingAttachments ? (
                 <Loader2 size={14} className="animate-spin" />

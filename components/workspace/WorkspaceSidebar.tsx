@@ -178,18 +178,18 @@ export function WorkspaceSidebar({
     <aside
       aria-label="Workspace sidebar"
       data-testid="workspace-sidebar"
-      className="flex min-h-[220px] w-full flex-col gap-4 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none"
+      className="workspace-sidebar-panel flex min-h-[220px] w-full flex-col gap-4 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none"
     >
       <div className="flex min-h-10 items-center justify-between gap-3">
         <Link
           href="/"
           aria-label="BranchMind home"
-          className="flex min-w-0 items-center gap-2 rounded-md py-1 pr-2 text-neutral-900 transition hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
+          className="workspace-brand-link flex min-w-0 items-center gap-2 rounded-md py-1 pr-2 text-neutral-900 transition hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
         >
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-brand-200 bg-brand-50 text-brand-600">
+          <span className="branchmind-logo-mark grid h-8 w-8 shrink-0 place-items-center rounded-md border border-brand-200 bg-brand-50 text-brand-600">
             <Brain size={18} />
           </span>
-          <span className="truncate text-base font-extrabold">BranchMind</span>
+          <span className="branchmind-logo-text truncate text-base font-extrabold">BranchMind</span>
         </Link>
         <button
           type="button"
@@ -198,7 +198,7 @@ export function WorkspaceSidebar({
           aria-controls="conversation-outline"
           aria-expanded="true"
           data-testid="collapse-workspace-sidebar-button"
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-neutral-100 text-neutral-600 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
+          className="workspace-sidebar-icon-button grid h-10 w-10 shrink-0 place-items-center rounded-full bg-neutral-100 text-neutral-600 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
         >
           <PanelLeftClose size={18} />
         </button>
@@ -212,7 +212,7 @@ export function WorkspaceSidebar({
           aria-label="Search project nodes"
           data-testid="node-search-input"
           placeholder="Search nodes"
-          className="h-11 w-full rounded-xl border border-neutral-200 bg-white pl-10 pr-14 text-sm font-bold text-neutral-900 outline-none placeholder:text-neutral-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
+          className="workspace-sidebar-search h-11 w-full rounded-xl border border-neutral-200 bg-white pl-10 pr-14 text-sm font-bold text-neutral-900 outline-none placeholder:text-neutral-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
         />
         <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full bg-neutral-100 px-2 py-1 text-[11px] font-black text-neutral-500">
           ⌘K
@@ -226,14 +226,14 @@ export function WorkspaceSidebar({
         <button
           type="button"
           aria-current="page"
-          className="inline-flex h-11 items-center justify-center rounded-xl bg-brand-100 text-brand-800 transition hover:bg-brand-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
+          className="workspace-sidebar-nav-active inline-flex h-11 items-center justify-center rounded-xl bg-brand-100 text-brand-800 transition hover:bg-brand-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
         >
           Outline
         </button>
         <Link
           href="/projects"
           data-testid="workspace-sidebar-projects-link"
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-neutral-100 text-neutral-700 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
+          className="workspace-sidebar-nav-link inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-neutral-100 text-neutral-700 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
         >
           <Folder size={16} />
           Projects
@@ -304,13 +304,13 @@ function OutlineItem({
       data-testid="conversation-outline-row"
       data-node-id={node.id}
       data-depth={depth}
-      className={`relative flex w-full items-start gap-1 rounded-xl px-1.5 py-1 text-left transition ${
+      className={`workspace-outline-row relative flex w-full items-start gap-1 rounded-xl px-1.5 py-1 text-left transition ${
         selected ? "bg-brand-50 text-brand-800" : "bg-white/65 text-neutral-700 hover:bg-white"
       }`}
       style={{ paddingLeft: `${Math.min(depth, 4) * 6 + 6}px` }}
     >
       {selected && (
-        <span className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-500" />
+        <span className="workspace-outline-active-bar absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-500" />
       )}
       {hasChildren ? (
         <button
@@ -323,7 +323,7 @@ function OutlineItem({
           aria-expanded={expanded}
           data-testid="conversation-outline-toggle"
           data-node-id={node.id}
-          className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/75 text-brand-600 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-200 lg:mt-1"
+          className="workspace-outline-toggle mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/75 text-brand-600 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-200 lg:mt-1"
         >
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
@@ -341,7 +341,7 @@ function OutlineItem({
       >
         <span
           aria-hidden="true"
-          className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${selected ? "bg-brand-100 text-brand-700" : "bg-white/80 text-neutral-500"}`}
+          className={`workspace-outline-icon grid h-7 w-7 shrink-0 place-items-center rounded-full ${selected ? "bg-brand-100 text-brand-700" : "bg-white/80 text-neutral-500"}`}
         >
           <Icon size={14} />
         </span>

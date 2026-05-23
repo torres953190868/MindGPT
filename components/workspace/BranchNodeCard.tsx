@@ -64,7 +64,7 @@ export function BranchNodeCard({ data }: NodeProps) {
       data-selected={selected ? "true" : "false"}
       data-inline-composer={hasInlineComposer ? "true" : undefined}
       data-home-composer={isHomeInlineComposer ? "true" : undefined}
-      className={`branch-node-edge-hit-area group bg-white text-left transition ${
+      className={`branch-node-card-surface branch-node-edge-hit-area group bg-white text-left transition ${
         isHomeInlineComposer
           ? `w-[min(760px,calc(100vw-48px))] rounded-[18px] border border-neutral-200/90 p-4 shadow-lg sm:p-6 ${
               selected
@@ -167,7 +167,7 @@ export function BranchNodeCard({ data }: NodeProps) {
               </span>
               <span
                 aria-label={`${mindNode.children.length} child nodes`}
-                className="grid h-8 min-w-8 place-items-center rounded-full bg-brand-100 px-2 text-sm font-black text-brand-700"
+                className="branch-node-child-count grid h-8 min-w-8 place-items-center rounded-full bg-brand-100 px-2 text-sm font-black text-brand-700"
               >
                 {mindNode.children.length}
               </span>
@@ -204,7 +204,7 @@ export function BranchNodeCard({ data }: NodeProps) {
             }}
             aria-label="Branch right"
             title="Branch right"
-            className="grid h-9 w-9 place-items-center rounded-full bg-brand-100 text-brand-700 transition hover:scale-110 hover:bg-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="branch-node-quick-action branch-node-quick-action-branch grid h-9 w-9 place-items-center rounded-full bg-brand-100 text-brand-700 transition hover:scale-110 hover:bg-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <GitBranch size={17} />
           </button>
@@ -227,7 +227,7 @@ export function BranchNodeCard({ data }: NodeProps) {
             title="Toggle children"
             data-testid="toggle-children-button"
             data-node-id={mindNode.id}
-            className="grid h-9 w-9 place-items-center rounded-full bg-danger-100 text-danger-600 transition hover:scale-110 hover:bg-danger-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="branch-node-quick-action branch-node-quick-action-toggle grid h-9 w-9 place-items-center rounded-full bg-danger-100 text-danger-600 transition hover:scale-110 hover:bg-danger-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Ribbon size={17} />
           </button>
@@ -281,7 +281,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
         onSubmit={handleSubmit}
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
-        className="nodrag nopan space-y-3"
+        className="home-inline-composer nodrag nopan space-y-3"
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -319,7 +319,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
                     setInput(suggestion);
                   }}
                   data-testid="home-prompt-suggestion"
-                  className="inline-flex min-h-9 max-w-full items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 text-sm font-bold text-neutral-700 shadow-sm transition hover:border-brand-200 hover:bg-neutral-50 focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-55"
+                  className="home-prompt-suggestion-button inline-flex min-h-9 max-w-full items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 text-sm font-bold text-neutral-700 shadow-sm transition hover:border-brand-200 hover:bg-neutral-50 focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-55"
                 >
                   <Sparkles size={15} className="shrink-0 text-brand-500" />
                   <span className="truncate">{suggestion}</span>
@@ -332,7 +332,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
             disabled={isComposerBusy || !input.trim()}
             aria-label="Send message"
             data-testid="send-message-button"
-            className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-brand-600 px-5 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="branchmind-primary-action inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-brand-600 px-5 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {composerControls.isPreparingAttachments || composer.isBusy ? (
               <Loader2 size={15} className="animate-spin" />
@@ -398,7 +398,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
             disabled={isComposerBusy || !input.trim()}
             aria-label="Send message"
             data-testid="send-message-button"
-            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="branchmind-primary-action inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {composerControls.isPreparingAttachments || composer.isBusy ? (
               <Loader2 size={14} className="animate-spin" />

@@ -1750,7 +1750,7 @@ test("opens the most recently updated project from the projects sidebar", async 
 
     await expect(page).toHaveURL(new RegExp(`/workspace/${newerProject.id}$`));
     await expect(page.getByTestId("workspace-shell")).toBeVisible();
-    await expect(page.getByTestId("workspace-header")).toContainText(newerProject.title);
+    await expect(page.getByTestId("workspace-header")).toHaveCount(0);
   } finally {
     for (const projectId of projectIdsToDelete) {
       await page.request
@@ -1863,7 +1863,7 @@ test("places the workspace account entry in the sidebar footer", async ({ page }
     projectIdToDelete = project.id;
 
     await page.goto(`/workspace/${project.id}`);
-    await expect(page.getByTestId("workspace-navigation")).not.toContainText("Sign in");
+    await expect(page.getByTestId("workspace-header")).toHaveCount(0);
     await expect(page.getByTestId("workspace-sidebar-footer")).toBeVisible();
     await expect(
       page.getByTestId("workspace-sidebar-footer").getByTestId("account-sign-in-button"),
@@ -1897,7 +1897,7 @@ test("loads a seeded workspace with stable test ids", async ({ page }) => {
     await page.goto(`/workspace/${project.id}`);
 
     await expect(page.getByTestId("workspace-shell")).toBeVisible();
-    await expect(page.getByTestId("workspace-header")).toContainText(project.title);
+    await expect(page.getByTestId("workspace-header")).toHaveCount(0);
     await expect(page.getByTestId("workspace-sidebar")).toBeVisible();
     await expect(page.getByTestId("conversation-outline")).toBeVisible();
     await expect(page.getByTestId("conversation-outline-item")).toHaveCount(1);
@@ -1966,7 +1966,6 @@ test("edits a root node title from the node detail header", async ({ page }) => 
     await page.getByTestId("save-node-title-edit-button").click();
 
     await expect(page.getByTestId("node-title-edit-input")).toHaveCount(0);
-    await expect(page.getByTestId("workspace-header")).toContainText(editedTitle);
     await expect(page.getByTestId("node-detail-panel")).toContainText(editedTitle);
     await expect(page.getByTestId("branch-node-card")).toContainText(editedTitle);
     await expect(page.getByTestId("conversation-outline")).toContainText(editedTitle);
@@ -1980,40 +1979,6 @@ test("edits a root node title from the node detail header", async ({ page }) => 
     expect(persisted?.nodes[persisted.rootNodeId]).toMatchObject({
       title: editedTitle,
       titleManuallyEdited: true,
-    });
-  } finally {
-    if (projectIdToDelete) {
-      await page.request
-        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
-        .catch(() => undefined);
-    }
-  }
-});
-
-test("renames a project from the workspace header", async ({ page }) => {
-  const sourceProject = makeWorkspaceProject(`project-title-edit-${makeSeed()}`);
-  const editedTitle = "Workspace title from header";
-  let projectIdToDelete: string | null = null;
-
-  try {
-    const project = await importProject(page, sourceProject);
-    projectIdToDelete = project.id;
-
-    await page.goto(`/workspace/${project.id}`);
-    await page.getByTestId("edit-project-title-button").click();
-    await expect(page.getByTestId("project-title-edit-input")).toHaveValue(project.title);
-    await page.getByTestId("project-title-edit-input").fill(editedTitle);
-    await page.getByTestId("save-project-title-button").click();
-
-    await expect(page.getByTestId("project-title-edit-input")).toHaveCount(0);
-    await expect(page.getByTestId("workspace-header")).toContainText(editedTitle);
-    await expect(page.getByTestId("node-detail-panel")).toContainText("Seeded root node");
-
-    const persisted = await getPersistedProject(page, project.id);
-    expect(persisted.title).toBe(editedTitle);
-    expect(persisted.nodes[persisted.rootNodeId]).toMatchObject({
-      title: "Seeded root node",
-      titleManuallyEdited: false,
     });
   } finally {
     if (projectIdToDelete) {
@@ -2309,7 +2274,7 @@ test("copies, edits, and retries conversation messages", async ({ page }, testIn
       { timeout: 12_000 },
     );
     await expect(page.getByTestId("message-streaming-status")).toHaveCount(0);
-    await expect(page.getByTestId("workspace-header")).toContainText(editedInstruction);
+    await expect(page.getByTestId("workspace-header")).toHaveCount(0);
 
     const assistantMessage = page.getByTestId("conversation-message").last();
     await assistantMessage.getByLabel("Copy assistant message").click();
