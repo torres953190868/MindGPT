@@ -1,5 +1,6 @@
 import { createId } from "@/lib/ids";
 import { normalizeChatAttachments } from "@/lib/chat-attachments";
+import { normalizeChatCitations } from "@/lib/chat-citations";
 import type {
   BranchType,
   ChatMessage,
@@ -116,6 +117,7 @@ function normalizeMessages(
         createId: () => createUniqueId("attachment", usedIds),
         fallbackCreatedAt: timestamp,
       }),
+      citations: normalizeChatCitations(message.citations),
       createdAt: isoString(message.createdAt, timestamp),
     };
   });

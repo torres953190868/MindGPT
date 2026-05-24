@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { indexDocumentForOwner } from "@/lib/server/rag/indexer";
-import type { RagDocument } from "@/lib/server/rag/types";
+import { enqueueRagProcessingJob } from "@/lib/server/rag/jobs";
 
 const checkRateLimitAsyncMock = vi.hoisted(() => vi.fn());
 
@@ -16,8 +15,8 @@ vi.mock("@/lib/server/rate-limit", () => ({
   checkRateLimitAsync: checkRateLimitAsyncMock,
 }));
 
-vi.mock("@/lib/server/rag/indexer", () => ({
-  indexDocumentForOwner: vi.fn(),
+vi.mock("@/lib/server/rag/jobs", () => ({
+  enqueueRagProcessingJob: vi.fn(),
 }));
 
 function createIndexRequest(requestId = "req_index_route") {
@@ -30,30 +29,9 @@ function createIndexRequest(requestId = "req_index_route") {
   });
 }
 
-const indexedDocument: RagDocument = {
-  id: "doc_index",
-  userId: "user_index_route",
-  fileName: "index.pdf",
-  fileUrl: null,
-  storagePath: null,
-  mimeType: "application/pdf",
-  pageCount: 2,
-  title: "Index",
-  status: "indexed",
-  parserVersion: "pdf-text-v1",
-  chunkVersion: "heading-recursive-v1",
-  errorMessage: null,
-  errorCode: null,
-  errorStage: null,
-  errorRequestId: null,
-  errorDetails: null,
-  createdAt: "2026-01-01T00:00:00.000Z",
-  updatedAt: "2026-01-01T00:00:00.000Z",
-};
-
 describe("document index route", () => {
   beforeEach(() => {
-    vi.mocked(indexDocumentForOwner).mockReset();
+    vi.mocked(enqueueRagProcessingJob).mockReset();
     checkRateLimitAsyncMock.mockReset();
     checkRateLimitAsyncMock.mockResolvedValue({
       allowed: true,
@@ -61,13 +39,13 @@ describe("document index route", () => {
     });
   });
 
-  it("indexes an owned document after passing the operation rate limit", async () => {
-    vi.mocked(indexDocumentForOwner).mockResolvedValue({
-      document: indexedDocument,
-      chunkCount: 3,
-      embeddingModel: "mock-embedding",
-      pageCount: 2,
-      sectionCount: 1,
+  it("queues indexing for an owned document after passing the operation rate limit", async () => {
+    vi.mocked(enqueueRagProcessingJob).mockResolvedValue({
+      action: "index",
+      documentId: "doc_index",
+      messageId: "msg_index",
+      requestId: "req_index_route",
+      topic: "rag-document-processing",
     });
     const { POST } = await import("@/app/api/documents/[documentId]/index/route");
 
@@ -76,16 +54,21 @@ describe("document index route", () => {
     });
     const body = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(body.chunkCount).toBe(3);
-    expect(indexDocumentForOwner).toHaveBeenCalledWith(
+    expect(response.status).toBe(202);
+    expect(body.job).toMatchObject({
+      action: "index",
+      documentId: "doc_index",
+      messageId: "msg_index",
+    });
+    expect(enqueueRagProcessingJob).toHaveBeenCalledWith(
       "user_index_route",
       "doc_index",
-      { requestId: "req_index_route" },
+      "index",
+      "req_index_route",
     );
   });
 
-  it("rate limits document indexing before calling the indexer", async () => {
+  it("rate limits document indexing before queueing the job", async () => {
     checkRateLimitAsyncMock.mockResolvedValue({
       allowed: false,
       retryAfterSeconds: 23,
@@ -101,7 +84,7 @@ describe("document index route", () => {
     expect(response.headers.get("retry-after")).toBe("23");
     expect(body.error.code).toBe("TOO_MANY_REQUESTS");
     expect(body.error.requestId).toBe("req_index_limited");
-    expect(indexDocumentForOwner).not.toHaveBeenCalled();
+    expect(enqueueRagProcessingJob).not.toHaveBeenCalled();
     expect(checkRateLimitAsyncMock).toHaveBeenCalledWith(
       expect.any(NextRequest),
       expect.objectContaining({

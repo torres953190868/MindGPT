@@ -2,9 +2,11 @@ import type { NextRequest } from "next/server";
 import { getBranchMindAuthContext } from "@/lib/server/auth";
 import { jsonWithSession, safeErrorWithSession } from "@/lib/server/http";
 import { checkRateLimitAsync } from "@/lib/server/rate-limit";
+import { getOrCreateRequestId } from "@/lib/server/request";
 import { assertValidRequestOrigin } from "@/lib/server/security";
 import { getOrCreateSession } from "@/lib/server/session";
 import { RagError } from "@/lib/server/rag/errors";
+import { enqueueRagProcessingJob } from "@/lib/server/rag/jobs";
 import { uploadPdfForOwner } from "@/lib/server/rag/service";
 
 const UPLOAD_DOCUMENT_LIMIT = 10;
@@ -23,6 +25,7 @@ function getPdfFile(formData: FormData) {
 
 export async function POST(request: NextRequest) {
   const fallbackSession = getOrCreateSession(request);
+  const requestId = getOrCreateRequestId(request);
 
   try {
     assertValidRequestOrigin(request, {
@@ -44,6 +47,7 @@ export async function POST(request: NextRequest) {
           status: 429,
           headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
         },
+        { requestId },
       );
     }
 
@@ -51,9 +55,20 @@ export async function POST(request: NextRequest) {
       principal.id,
       getPdfFile(await request.formData()),
     );
+    const job = await enqueueRagProcessingJob(
+      principal.id,
+      document.id,
+      "index",
+      requestId,
+    );
 
-    return jsonWithSession({ document }, session);
+    return jsonWithSession(
+      { document: { ...document, status: "queued" }, job },
+      session,
+      { status: 202 },
+      { requestId },
+    );
   } catch (error) {
-    return safeErrorWithSession(error, fallbackSession);
+    return safeErrorWithSession(error, fallbackSession, { requestId });
   }
 }

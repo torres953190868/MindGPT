@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -H 127.0.0.1 -p 3002",
+    "dev": "PORT=3002 next dev -H 127.0.0.1 -p 3002",
     "build": "next build",
     "start": "next start",
     "test": "vitest run --configLoader native --pool threads",
@@ -31,6 +31,7 @@
     "@tiptap/pm": "^3.23.1",
     "@tiptap/react": "^3.23.1",
     "@tiptap/starter-kit": "^3.23.1",
+    "@vercel/queue": "^0.2.0",
     "@xyflow/react": "^12.8.4",
     "katex": "^0.16.45",
     "lucide-react": "^0.468.0",

@@ -23,6 +23,8 @@ import {
   Minus,
   Pencil,
   Plus,
+  RefreshCcw,
+  Send,
   Trash2,
   Upload,
   X,
@@ -35,6 +37,7 @@ import {
 import { formatRequestReference, readJsonApi } from "@/lib/client/api";
 
 type DocumentStatus =
+  | "queued"
   | "uploaded"
   | "parsing"
   | "parsed"
@@ -70,6 +73,38 @@ type RagPage = {
   pageNumber: number;
   cleanText: string;
   tokenCount: number;
+};
+
+type RagChunk = {
+  id: string;
+  chunkIndex: number;
+  pageStart: number;
+  pageEnd: number;
+  headingPath: string[];
+  tokenCount: number;
+  content: string;
+  metadata: unknown;
+};
+
+type RagCitation = {
+  pageStart: number;
+  pageEnd: number;
+  chunkId: string;
+  headingPath: string[];
+  quote: string;
+};
+
+type RagQueryResponse = {
+  answer: string;
+  citations: RagCitation[];
+  retrievedChunks: Array<{
+    chunkId: string;
+    score: number;
+    pageStart: number;
+    pageEnd: number;
+    headingPath: string[];
+    preview: string;
+  }>;
 };
 
 type DocumentDetails = {
@@ -117,9 +152,17 @@ type ReaderActionOptions = {
   loadExtractedText?: boolean;
 };
 
+type LocalPdfPreview = {
+  fileName: string;
+  url: string;
+};
+
 type PdfJsModule = {
   getDocument: (options: {
     url: string;
+    disableAutoFetch?: boolean;
+    disableStream?: boolean;
+    rangeChunkSize?: number;
     withCredentials?: boolean;
   }) => PdfLoadingTask;
   GlobalWorkerOptions: {
@@ -130,6 +173,8 @@ type PdfJsModule = {
 const MIN_SCALE = 0.65;
 const MAX_SCALE = 2.25;
 const SCALE_STEP = 0.15;
+const PDF_RANGE_CHUNK_SIZE = 256 * 1024;
+const PDF_PROCESSING_POLL_INTERVAL_MS = 2_500;
 const PDF_DOCUMENTS_SIDEBAR_DEFAULT_WIDTH = 280;
 const PDF_TOOLS_SIDEBAR_DEFAULT_WIDTH = 260;
 const PDF_SIDEBAR_MIN_WIDTH = 210;
@@ -149,6 +194,7 @@ let pdfJsModulePromise: Promise<PdfJsModule> | null = null;
 
 function statusLabel(status: DocumentStatus) {
   const labels: Record<DocumentStatus, string> = {
+    queued: "Queued",
     uploaded: "Uploaded",
     parsing: "Parsing",
     parsed: "Parsed",
@@ -204,10 +250,16 @@ function isRenderCancellation(error: unknown) {
 
 function hasExtractedPages(details: DocumentDetails | null) {
   return Boolean(
-    details &&
+      details &&
       details.document.pageCount > 0 &&
-      (details.document.status === "parsed" || details.document.status === "indexed"),
+      (details.document.status === "parsed" ||
+        details.document.status === "indexing" ||
+        details.document.status === "indexed"),
   );
+}
+
+function isDocumentProcessing(status: DocumentStatus | undefined) {
+  return status === "queued" || status === "parsing" || status === "indexing";
 }
 
 function sortSectionsForToc(sections: RagSection[]) {
@@ -279,6 +331,7 @@ export function PdfReader() {
   const searchParams = useSearchParams();
   const documentParam = searchParams.get("document");
   const pageParam = searchParams.get("page");
+  const chunkParam = searchParams.get("chunk");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
@@ -289,8 +342,11 @@ export function PdfReader() {
   const selectedIdRef = useRef<string | null>(null);
   const readerActionIdRef = useRef(0);
   const pageRequestIdRef = useRef(0);
+  const sourceChunkRequestIdRef = useRef(0);
   const pageParamRef = useRef<string | null>(pageParam);
+  const chunkParamRef = useRef<string | null>(chunkParam);
   const pageNumberRef = useRef<number | null>(null);
+  const sourceChunkIdRef = useRef<string | null>(null);
 
   const [documents, setDocuments] = useState<RagDocument[]>([]);
   const [documentsReady, setDocumentsReady] = useState(false);
@@ -301,9 +357,12 @@ export function PdfReader() {
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [details, setDetails] = useState<DocumentDetails | null>(null);
   const [, setPage] = useState<RagPage | null>(null);
+  const [sourceChunk, setSourceChunk] = useState<RagChunk | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [parsing, setParsing] = useState(false);
+  const [indexing, setIndexing] = useState(false);
+  const [sourceLoading, setSourceLoading] = useState(false);
+  const [localPreview, setLocalPreview] = useState<LocalPdfPreview | null>(null);
 
   const [pdfDocument, setPdfDocument] = useState<PdfDocumentProxy | null>(null);
   const [pdfPageCount, setPdfPageCount] = useState(0);
@@ -319,6 +378,10 @@ export function PdfReader() {
   const [toolsSidebarWidth, setToolsSidebarWidth] = useState(
     PDF_TOOLS_SIDEBAR_DEFAULT_WIDTH,
   );
+  const [askQuestion, setAskQuestion] = useState("");
+  const [askResult, setAskResult] = useState<RagQueryResponse | null>(null);
+  const [askLoading, setAskLoading] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
   const [expandedTocRootIds, setExpandedTocRootIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -327,19 +390,29 @@ export function PdfReader() {
   const selectedDocumentErrorReference = formatRequestReference(
     selectedDocument?.errorRequestId,
   );
+  const hasActivePdf = Boolean(localPreview || selectedDocument);
+  const pdfSourceUrl = localPreview?.url ?? (selectedId ? `/api/documents/${selectedId}/file` : null);
+  const isSavedPdfSource = Boolean(!localPreview && selectedId);
   const pageCount = pdfPageCount || selectedDocument?.pageCount || 0;
   const selectedDocumentTitle =
-    selectedDocument?.title || selectedDocument?.fileName || "Select a PDF";
-  const busy = uploading || parsing;
+    localPreview?.fileName ||
+    selectedDocument?.title ||
+    selectedDocument?.fileName ||
+    "Select a PDF";
+  const busy = uploading || indexing;
+  const canAskPdf = selectedDocument?.status === "indexed";
+  const askDisabled =
+    !selectedDocument || !canAskPdf || askLoading || !askQuestion.trim();
   const pdfReaderGridStyle = {
-    "--pdf-reader-grid-columns": `${documentsSidebarWidth}px ${PDF_RESIZE_HANDLE_WIDTH}px minmax(${PDF_VIEWER_MIN_WIDTH}px,1fr) ${PDF_RESIZE_HANDLE_WIDTH}px ${toolsSidebarWidth}px`,
+    "--pdf-reader-grid-columns": `${toolsSidebarWidth}px ${PDF_RESIZE_HANDLE_WIDTH}px minmax(${PDF_VIEWER_MIN_WIDTH}px,1fr) ${PDF_RESIZE_HANDLE_WIDTH}px ${documentsSidebarWidth}px`,
   } as CSSProperties;
 
   const updateReaderUrl = useCallback(
-    (documentId: string, nextPage: number | null) => {
+    (documentId: string, nextPage: number | null, chunkId?: string | null) => {
       const params = new URLSearchParams();
       params.set("document", documentId);
       if (nextPage) params.set("page", String(nextPage));
+      if (chunkId) params.set("chunk", chunkId);
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [pathname, router],
@@ -421,7 +494,7 @@ export function PdfReader() {
       });
 
       function resizeTo(clientX: number) {
-        const deltaX = side === "documents" ? clientX - startX : startX - clientX;
+        const deltaX = side === "tools" ? clientX - startX : startX - clientX;
         const nextWidth = clampNumber(
           startWidth + deltaX,
           bounds.minWidth,
@@ -521,18 +594,69 @@ export function PdfReader() {
     [isCurrentReaderAction, nextReaderActionId],
   );
 
+  const loadSourceChunk = useCallback(
+    async (
+      documentId: string,
+      chunkId: string,
+      options: ReaderActionOptions = {},
+    ) => {
+      const actionId = options.actionId ?? nextReaderActionId();
+      const sourceChunkRequestId = sourceChunkRequestIdRef.current + 1;
+      sourceChunkRequestIdRef.current = sourceChunkRequestId;
+      setSourceLoading(true);
+
+      try {
+        const data = await readJsonApi<{ chunks: RagChunk[] }>(
+          `/api/documents/${documentId}/chunks`,
+        );
+        if (
+          !isCurrentReaderAction(actionId, documentId) ||
+          sourceChunkRequestIdRef.current !== sourceChunkRequestId
+        ) {
+          return null;
+        }
+
+        const chunk = data.chunks.find((item) => item.id === chunkId) ?? null;
+        if (!chunk) throw new Error("Source chunk was not found.");
+        setSourceChunk(chunk);
+        return chunk;
+      } catch (chunkError) {
+        if (
+          isCurrentReaderAction(actionId, documentId) &&
+          sourceChunkRequestIdRef.current === sourceChunkRequestId
+        ) {
+          throw chunkError;
+        }
+        return null;
+      } finally {
+        if (sourceChunkRequestIdRef.current === sourceChunkRequestId) {
+          setSourceLoading(false);
+        }
+      }
+    },
+    [isCurrentReaderAction, nextReaderActionId],
+  );
+
   const selectDocument = useCallback(
     async (
       documentId: string,
       options: {
         pageNumber?: number | null;
+        chunkId?: string | null;
         updateUrl?: boolean;
       } = {},
     ) => {
       const actionId = nextReaderActionId();
+      const isDifferentDocument = selectedIdRef.current !== documentId;
       selectedIdRef.current = documentId;
+      setLocalPreview(null);
       setSelectedId(documentId);
       setError(null);
+      setSourceChunk(null);
+      if (isDifferentDocument) {
+        setAskResult(null);
+        setAskError(null);
+      }
 
       try {
         const nextDetails = await readJsonApi<DocumentDetails>(
@@ -544,7 +668,16 @@ export function PdfReader() {
         const fallbackPage =
           nextDetails.sections[0]?.pageStart ??
           (nextDetails.document.pageCount > 0 ? 1 : null);
-        const nextPage = options.pageNumber ?? fallbackPage;
+        let sourceChunkForPage: RagChunk | null = null;
+        if (options.chunkId) {
+          sourceChunkForPage = await loadSourceChunk(documentId, options.chunkId, {
+            actionId,
+          });
+          if (!isCurrentReaderAction(actionId, documentId)) return;
+        }
+
+        const nextPage =
+          options.pageNumber ?? sourceChunkForPage?.pageStart ?? fallbackPage;
         const clampedPage = nextPage
           ? clampPageNumber(nextPage, nextDetails.document.pageCount)
           : null;
@@ -566,13 +699,19 @@ export function PdfReader() {
           clampedPage &&
           isCurrentReaderAction(actionId, documentId)
         ) {
-          updateReaderUrl(documentId, clampedPage);
+          updateReaderUrl(documentId, clampedPage, options.chunkId ?? null);
         }
       } catch (loadError) {
         if (isCurrentReaderAction(actionId, documentId)) throw loadError;
       }
     },
-    [isCurrentReaderAction, loadPage, nextReaderActionId, updateReaderUrl],
+    [
+      isCurrentReaderAction,
+      loadPage,
+      loadSourceChunk,
+      nextReaderActionId,
+      updateReaderUrl,
+    ],
   );
 
   useEffect(() => {
@@ -626,11 +765,23 @@ export function PdfReader() {
 
   useEffect(() => {
     pageParamRef.current = pageParam;
-  }, [pageParam]);
+    chunkParamRef.current = chunkParam;
+  }, [chunkParam, pageParam]);
 
   useEffect(() => {
     pageNumberRef.current = pageNumber;
   }, [pageNumber]);
+
+  useEffect(() => {
+    sourceChunkIdRef.current = sourceChunk?.id ?? null;
+  }, [sourceChunk?.id]);
+
+  useEffect(() => {
+    const previewUrl = localPreview?.url;
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [localPreview?.url]);
 
   useEffect(() => {
     if (!documentsReady) return;
@@ -640,6 +791,7 @@ export function PdfReader() {
       setSelectedId(null);
       setDetails(null);
       setPage(null);
+      setSourceChunk(null);
       setPageNumber(null);
       setPageInput("");
       selectedIdRef.current = null;
@@ -660,6 +812,7 @@ export function PdfReader() {
 
     selectDocument(requestedDocument, {
       pageNumber: parsePageNumber(pageParamRef.current),
+      chunkId: chunkParamRef.current,
       updateUrl: requestedDocument !== documentParam,
     }).catch((loadError: unknown) => {
       setError(loadError instanceof Error ? loadError.message : "Load failed.");
@@ -677,13 +830,49 @@ export function PdfReader() {
     if (!documentsReady || !selectedId || documentParam !== selectedId) return;
     if (!details || details.document.id !== selectedId) return;
 
+    const chunkId = chunkParam?.trim() || null;
     const requestedPage = parsePageNumber(pageParam);
-    if (!requestedPage) return;
+    if (!requestedPage && !chunkId) return;
 
     const effectivePageCount = pageCount || details.document.pageCount;
     const clampedPage = requestedPage
       ? clampPageNumber(requestedPage, effectivePageCount)
       : null;
+
+    if (chunkId) {
+      if (
+        sourceChunkIdRef.current === chunkId &&
+        (!clampedPage || pageNumberRef.current === clampedPage)
+      ) {
+        return;
+      }
+
+      const actionId = nextReaderActionId();
+      setError(null);
+      loadSourceChunk(selectedId, chunkId, { actionId })
+        .then((chunk) => {
+          if (!chunk || !isCurrentReaderAction(actionId, selectedId)) return null;
+          const nextPage = clampPageNumber(
+            clampedPage ?? chunk.pageStart,
+            effectivePageCount,
+          );
+          if (pageNumberRef.current === nextPage) return null;
+          return loadPage(selectedId, nextPage, {
+            actionId,
+            loadExtractedText: hasExtractedPages(details),
+          });
+        })
+        .catch((loadError: unknown) => {
+          if (isCurrentReaderAction(actionId, selectedId)) {
+            setError(loadError instanceof Error ? loadError.message : "Load failed.");
+          }
+        });
+      return;
+    }
+
+    if (sourceChunkIdRef.current) {
+      setSourceChunk(null);
+    }
 
     if (clampedPage && pageNumberRef.current !== clampedPage) {
       const actionId = nextReaderActionId();
@@ -698,11 +887,13 @@ export function PdfReader() {
       });
     }
   }, [
+    chunkParam,
     details,
     documentParam,
     documentsReady,
     isCurrentReaderAction,
     loadPage,
+    loadSourceChunk,
     nextReaderActionId,
     pageCount,
     pageParam,
@@ -718,7 +909,7 @@ export function PdfReader() {
     setPdfPageCount(0);
     setPdfError(null);
 
-    if (!selectedId) {
+    if (!pdfSourceUrl) {
       setPdfLoading(false);
       return undefined;
     }
@@ -732,8 +923,14 @@ export function PdfReader() {
       .then((pdfjs) => {
         if (cancelled) return null;
         loadingTask = pdfjs.getDocument({
-          url: `/api/documents/${selectedId}/file`,
-          withCredentials: true,
+          url: pdfSourceUrl,
+          ...(isSavedPdfSource
+            ? {
+                disableAutoFetch: true,
+                disableStream: true,
+                rangeChunkSize: PDF_RANGE_CHUNK_SIZE,
+              }
+            : {}),
         });
         return loadingTask.promise;
       })
@@ -769,7 +966,7 @@ export function PdfReader() {
       }
       loadedDocument?.destroy();
     };
-  }, [selectedId]);
+  }, [isSavedPdfSource, pdfSourceUrl]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -820,16 +1017,70 @@ export function PdfReader() {
     };
   }, [pageNumber, pdfDocument, scale]);
 
+  useEffect(() => {
+    if (
+      !selectedId ||
+      !selectedDocument ||
+      selectedDocument.id !== selectedId ||
+      !isDocumentProcessing(selectedDocument.status)
+    ) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const interval = window.setInterval(() => {
+      loadDocuments()
+        .then(() => {
+          if (cancelled || selectedIdRef.current !== selectedId) return;
+          return selectDocument(selectedId, {
+            pageNumber: pageNumberRef.current,
+          });
+        })
+        .catch((pollError: unknown) => {
+          if (!cancelled && selectedIdRef.current === selectedId) {
+            setError(
+              pollError instanceof Error
+                ? pollError.message
+                : "PDF status failed to refresh.",
+            );
+          }
+        });
+    }, PDF_PROCESSING_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [
+    loadDocuments,
+    selectedDocument,
+    selectedDocument?.status,
+    selectedId,
+    selectDocument,
+  ]);
+
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const file = fileInputRef.current?.files?.[0];
     if (!file || busy) return;
 
+    const previewUrl = URL.createObjectURL(file);
     const formData = new FormData();
     formData.set("file", file);
     let uploadedId: string | null = null;
 
     try {
+      nextReaderActionId();
+      selectedIdRef.current = null;
+      setSelectedId(null);
+      setDetails(null);
+      setPage(null);
+      setSourceChunk(null);
+      setPageNumber(1);
+      setPageInput("1");
+      setAskResult(null);
+      setAskError(null);
+      setLocalPreview({ fileName: file.name, url: previewUrl });
       setError(null);
       setUploading(true);
       const upload = await readJsonApi<{ document: RagDocument }>(
@@ -842,12 +1093,8 @@ export function PdfReader() {
       uploadedId = upload.document.id;
       setUploading(false);
       await loadDocuments();
+      setLocalPreview(null);
       await selectDocument(uploadedId, { updateUrl: true });
-
-      setParsing(true);
-      await readJsonApi(`/api/documents/${uploadedId}/parse`, { method: "POST" });
-      await loadDocuments();
-      await selectDocument(uploadedId, { pageNumber: pageNumber ?? 1, updateUrl: true });
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (uploadError) {
       setError(
@@ -858,18 +1105,21 @@ export function PdfReader() {
       }
     } finally {
       setUploading(false);
-      setParsing(false);
     }
   }
 
   function clearSelectedDocument() {
     nextReaderActionId();
     selectedIdRef.current = null;
+    setLocalPreview(null);
     setSelectedId(null);
     setDetails(null);
     setPage(null);
+    setSourceChunk(null);
     setPageNumber(null);
     setPageInput("");
+    setAskResult(null);
+    setAskError(null);
     router.replace(pathname, { scroll: false });
   }
 
@@ -952,24 +1202,108 @@ export function PdfReader() {
     }
   }
 
+  async function handleReindex() {
+    if (!selectedId || indexing) return;
+
+    try {
+      setError(null);
+      setAskError(null);
+      setIndexing(true);
+      await readJsonApi(`/api/documents/${selectedId}/index`, { method: "POST" });
+      await loadDocuments();
+      await selectDocument(selectedId, {
+        pageNumber: pageNumberRef.current,
+        chunkId: sourceChunkIdRef.current,
+      });
+    } catch (indexError) {
+      setError(indexError instanceof Error ? indexError.message : "Index failed.");
+      await selectDocument(selectedId, { pageNumber }).catch(() => undefined);
+    } finally {
+      setIndexing(false);
+    }
+  }
+
   async function goToPage(nextPage: number) {
+    if (!pageCount) return;
+    const clampedPage = clampPageNumber(nextPage, pageCount);
+    if (localPreview && !selectedId) {
+      setPageNumber(clampedPage);
+      setPageInput(String(clampedPage));
+      return;
+    }
+    if (!selectedId) return;
+    const actionId = nextReaderActionId();
+
+    try {
+      setError(null);
+      setSourceChunk(null);
+      const loadedPage = await loadPage(selectedId, clampedPage, {
+        actionId,
+        loadExtractedText: hasExtractedPages(details),
+      });
+      if (loadedPage && isCurrentReaderAction(actionId, selectedId)) {
+        updateReaderUrl(selectedId, clampedPage, null);
+      }
+    } catch (pageError) {
+      if (isCurrentReaderAction(actionId, selectedId)) {
+        setError(pageError instanceof Error ? pageError.message : "Page failed to load.");
+      }
+    }
+  }
+
+  async function goToSourcePage(nextPage: number, chunkId: string | null = null) {
     if (!selectedId || !pageCount) return;
     const clampedPage = clampPageNumber(nextPage, pageCount);
     const actionId = nextReaderActionId();
 
     try {
       setError(null);
+      if (chunkId) {
+        const chunk = await loadSourceChunk(selectedId, chunkId, { actionId });
+        if (!chunk || !isCurrentReaderAction(actionId, selectedId)) return;
+      } else {
+        setSourceChunk(null);
+      }
       const loadedPage = await loadPage(selectedId, clampedPage, {
         actionId,
         loadExtractedText: hasExtractedPages(details),
       });
       if (loadedPage && isCurrentReaderAction(actionId, selectedId)) {
-        updateReaderUrl(selectedId, clampedPage);
+        updateReaderUrl(selectedId, clampedPage, chunkId);
       }
     } catch (pageError) {
       if (isCurrentReaderAction(actionId, selectedId)) {
         setError(pageError instanceof Error ? pageError.message : "Page failed to load.");
       }
+    }
+  }
+
+  async function handleAskPdf(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const question = askQuestion.trim();
+    if (!selectedId || !selectedDocument || selectedDocument.status !== "indexed") return;
+    if (!question || askLoading) return;
+
+    try {
+      setAskError(null);
+      setAskLoading(true);
+      const result = await readJsonApi<RagQueryResponse>(
+        `/api/documents/${selectedId}/query`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question }),
+        },
+      );
+      setAskResult(result);
+    } catch (askRequestError) {
+      setAskError(
+        askRequestError instanceof Error
+          ? askRequestError.message
+          : "Ask PDF failed.",
+      );
+    } finally {
+      setAskLoading(false);
     }
   }
 
@@ -1061,7 +1395,7 @@ export function PdfReader() {
     >
       <aside
         data-testid="pdf-documents-sidebar"
-        className="min-w-0 border-b border-neutral-200 bg-neutral-50 p-4 lg:max-h-[calc(100vh-92px)] lg:overflow-hidden lg:border-b-0 lg:border-r"
+        className="min-w-0 border-b border-neutral-200 bg-neutral-50 p-4 lg:order-5 lg:max-h-[calc(100vh-92px)] lg:overflow-hidden lg:border-b-0 lg:border-l"
       >
         <div className="mb-4">
           <h2 className="text-xs font-black uppercase tracking-wider text-neutral-800">
@@ -1095,7 +1429,7 @@ export function PdfReader() {
             ) : (
               <Upload size={15} />
             )}
-            {uploading ? "Uploading" : parsing ? "Parsing" : "Upload PDF"}
+            {uploading ? "Uploading" : "Upload PDF"}
           </button>
         </form>
 
@@ -1248,19 +1582,26 @@ export function PdfReader() {
 
       <WorkspaceResizeHandle
         orientation="vertical"
+        className="lg:order-4"
         ariaLabel="Resize documents sidebar"
         testId="resize-pdf-documents-sidebar"
         onResizeStart={handleDocumentsSidebarResizeStart}
       />
 
-      <main className="flex min-w-0 flex-col bg-white lg:min-h-[calc(100vh-92px)]">
+      <main className="flex min-w-0 flex-col bg-white lg:order-3 lg:min-h-[calc(100vh-92px)]">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-neutral-200 px-4 py-3">
           <div className="min-w-[180px] flex-1">
             <h2 className="truncate text-sm font-black text-neutral-900">
               {selectedDocumentTitle}
             </h2>
             <p className="mt-1 truncate text-[11px] font-bold text-neutral-600">
-              {selectedDocument ? statusLabel(selectedDocument.status) : "No PDF selected"}
+              {localPreview
+                ? uploading
+                  ? "Local preview - uploading"
+                  : "Local preview"
+                : selectedDocument
+                  ? statusLabel(selectedDocument.status)
+                  : "No PDF selected"}
               {pageCount ? ` - ${pageCount} pages` : ""}
             </p>
           </div>
@@ -1269,7 +1610,7 @@ export function PdfReader() {
             <div className="inline-flex h-9 items-center overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50">
               <button
                 type="button"
-                disabled={!selectedDocument || !pageNumber || pageNumber <= 1}
+                disabled={!hasActivePdf || !pageNumber || pageNumber <= 1}
                 onClick={() =>
                   pageNumber ? goToPage(pageNumber - 1).catch(() => undefined) : undefined
                 }
@@ -1287,7 +1628,7 @@ export function PdfReader() {
                   else setPageInput(pageNumber ? String(pageNumber) : "");
                 }}
                 onKeyDown={handlePageInputKeyDown}
-                disabled={!selectedDocument || !pageCount}
+                disabled={!hasActivePdf || !pageCount}
                 aria-label="Page number"
                 className="h-7 w-10 rounded-md border border-transparent bg-white text-center text-xs font-black text-neutral-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
               />
@@ -1296,7 +1637,7 @@ export function PdfReader() {
               </span>
               <button
                 type="button"
-                disabled={!selectedDocument || !pageNumber || pageNumber >= pageCount}
+                disabled={!hasActivePdf || !pageNumber || pageNumber >= pageCount}
                 onClick={() =>
                   pageNumber ? goToPage(pageNumber + 1).catch(() => undefined) : undefined
                 }
@@ -1392,14 +1733,14 @@ export function PdfReader() {
           data-testid="pdf-viewer"
           className="relative flex-1 overflow-auto bg-[#f4f4f7] px-4 py-5"
         >
-          {!selectedDocument && (
+          {!hasActivePdf && (
             <div className="flex flex-col items-center justify-center gap-3 min-h-[520px] rounded-xl border-2 border-dashed border-neutral-300 bg-white/60 text-sm font-bold text-neutral-600">
               <FileText size={32} className="text-neutral-300" />
               <span>Select a PDF to start reading</span>
             </div>
           )}
 
-          {selectedDocument && (
+          {hasActivePdf && (
             <div className="flex min-w-max justify-center">
               <canvas
                 ref={canvasRef}
@@ -1411,7 +1752,7 @@ export function PdfReader() {
             </div>
           )}
 
-          {(pdfLoading || pdfRendering) && selectedDocument && (
+          {(pdfLoading || pdfRendering) && hasActivePdf && (
             <div className="pointer-events-none absolute inset-0 grid place-items-center bg-[#f4f4f7]/70">
               <p className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-3 text-sm font-black text-neutral-700 shadow-md">
                 <Loader2 size={16} className="animate-spin" />
@@ -1420,7 +1761,7 @@ export function PdfReader() {
             </div>
           )}
 
-          {pdfError && selectedDocument && (
+          {pdfError && hasActivePdf && (
             <div className="absolute inset-4 grid place-items-center rounded-xl border border-danger-200 bg-danger-50 p-5 text-center text-sm font-bold text-danger-700">
               <span className="inline-flex items-start gap-2">
                 <AlertCircle size={17} className="mt-0.5 shrink-0" />
@@ -1433,6 +1774,7 @@ export function PdfReader() {
 
       <WorkspaceResizeHandle
         orientation="vertical"
+        className="lg:order-2"
         ariaLabel="Resize PDF tools sidebar"
         testId="resize-pdf-tools-sidebar"
         onResizeStart={handleToolsSidebarResizeStart}
@@ -1440,18 +1782,18 @@ export function PdfReader() {
 
       <aside
         data-testid="pdf-tools-sidebar"
-        className="flex min-w-0 flex-col border-t border-neutral-200 bg-neutral-50 lg:max-h-[calc(100vh-92px)] lg:overflow-hidden lg:border-l lg:border-t-0"
+        className="flex min-w-0 flex-col border-t border-neutral-200 bg-neutral-50 lg:order-1 lg:max-h-[calc(100vh-92px)] lg:overflow-hidden lg:border-r lg:border-t-0"
       >
         <div
           data-testid="pdf-toc-section"
-          className="min-h-0 flex-1 p-4"
+          className="flex min-h-0 flex-1 flex-col p-4"
         >
           <h2 className="text-[11px] font-black uppercase tracking-wider text-neutral-800">
             Table of Contents
           </h2>
           <div
             data-testid="pdf-toc-list"
-            className="mt-3 max-h-72 space-y-1 overflow-auto pr-1 lg:max-h-[calc(100vh-160px)]"
+            className="mt-3 min-h-0 flex-1 space-y-1 overflow-auto px-1"
           >
             {tocTree.map((node) => {
               const section = node.section;
@@ -1528,6 +1870,148 @@ export function PdfReader() {
                   No sections detected yet.
                 </p>
               </div>
+            )}
+          </div>
+        </div>
+
+        <div
+          data-testid="pdf-ask-section"
+          className="flex min-h-0 flex-col border-t border-neutral-200 p-4"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-[11px] font-black uppercase tracking-wider text-neutral-800">
+              Ask PDF
+            </h2>
+            {sourceLoading && (
+              <Loader2 size={14} className="shrink-0 animate-spin text-neutral-500" />
+            )}
+          </div>
+
+          {selectedDocument && !canAskPdf && (
+            <button
+              type="button"
+              onClick={() => handleReindex().catch(() => undefined)}
+              disabled={indexing || isDocumentProcessing(selectedDocument.status)}
+              data-testid="enable-ask-pdf-button"
+              className="mt-3 inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-md border border-success-200 bg-success-50 px-3 text-xs font-black text-success-700 transition hover:bg-success-100 disabled:cursor-not-allowed disabled:opacity-55"
+            >
+              {indexing ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <RefreshCcw size={14} />
+              )}
+              {isDocumentProcessing(selectedDocument.status)
+                ? "Preparing PDF"
+                : "Enable Ask PDF"}
+            </button>
+          )}
+
+          <form
+            onSubmit={(event) => handleAskPdf(event).catch(() => undefined)}
+            data-testid="ask-pdf-form"
+            className="mt-3 space-y-2"
+          >
+            <textarea
+              value={askQuestion}
+              onChange={(event) => setAskQuestion(event.target.value)}
+              disabled={!selectedDocument || !canAskPdf || askLoading}
+              data-testid="ask-pdf-input"
+              placeholder="Ask anything about this PDF..."
+              rows={3}
+              className="min-h-20 w-full resize-none rounded-md border border-neutral-200 bg-white p-3 text-xs font-bold leading-5 text-neutral-800 outline-none placeholder:text-neutral-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-60"
+            />
+            <button
+              type="submit"
+              disabled={askDisabled}
+              data-testid="ask-pdf-button"
+              className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-md bg-brand-600 px-3 text-xs font-black text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {askLoading ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Send size={14} />
+              )}
+              Ask
+            </button>
+          </form>
+
+          {askError && (
+            <p className="mt-3 flex items-start gap-2 rounded-md bg-danger-50 px-3 py-3 text-xs font-bold leading-5 text-danger-700">
+              <AlertCircle size={15} className="mt-0.5 shrink-0" />
+              {askError}
+            </p>
+          )}
+
+          <div className="mt-3 max-h-80 min-h-0 overflow-auto pr-1">
+            {askResult && (
+              <div data-testid="ask-pdf-answer" className="space-y-3">
+                <p className="whitespace-pre-wrap rounded-md bg-white p-3 text-xs font-bold leading-6 text-neutral-700">
+                  {askResult.answer}
+                </p>
+                {askResult.citations.length > 0 && (
+                  <div className="space-y-2">
+                    {askResult.citations.map((citation, index) => (
+                      <button
+                        key={`${citation.chunkId}-${citation.pageStart}`}
+                        type="button"
+                        data-testid="ask-pdf-citation"
+                        onClick={() =>
+                          goToSourcePage(citation.pageStart, citation.chunkId).catch(
+                            () => undefined,
+                          )
+                        }
+                        className="flex w-full min-w-0 gap-2 rounded-md border border-neutral-200 bg-white px-3 py-2 text-left transition hover:border-brand-200 hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                      >
+                        <span className="mt-0.5 grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-brand-600 px-1.5 text-[11px] font-black leading-none text-white">
+                          {index + 1}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[11px] font-black text-brand-700">
+                            {pagesLabel(citation.pageStart, citation.pageEnd)}
+                          </span>
+                          {citation.headingPath.length > 0 && (
+                            <span className="mt-1 block truncate text-[11px] font-bold text-neutral-500">
+                              {citation.headingPath.join(" / ")}
+                            </span>
+                          )}
+                          <span className="mt-1 block line-clamp-3 text-xs font-bold leading-5 text-neutral-700">
+                            {citation.quote}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {sourceChunk && (
+              <div
+                data-testid="source-evidence"
+                className="mt-3 rounded-md border border-success-200 bg-success-50 p-3"
+              >
+                <p className="text-[11px] font-black text-success-700">
+                  {pagesLabel(sourceChunk.pageStart, sourceChunk.pageEnd)}
+                </p>
+                {sourceChunk.headingPath.length > 0 && (
+                  <p className="mt-1 truncate text-[11px] font-bold text-success-700/80">
+                    {sourceChunk.headingPath.join(" / ")}
+                  </p>
+                )}
+                <p className="mt-2 whitespace-pre-wrap text-xs font-bold leading-6 text-neutral-700">
+                  {sourceChunk.content}
+                </p>
+              </div>
+            )}
+
+            {!askResult && !sourceChunk && !sourceLoading && (
+              <p className="rounded-md bg-white px-3 py-4 text-xs font-bold leading-5 text-neutral-600">
+                {selectedDocument?.status === "indexed"
+                  ? "Ready"
+                  : selectedDocument
+                    ? "Index this PDF to ask grounded questions."
+                    : "Select a PDF to ask questions."}
+              </p>
             )}
           </div>
         </div>

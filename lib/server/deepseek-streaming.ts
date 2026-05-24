@@ -11,6 +11,7 @@ import {
   parseStreamingReply,
   RETRY_DELAY_MS,
   type BranchMindReplyRequest,
+  withReplyCitations,
 } from "@/lib/server/deepseek-core";
 import {
   getLlmProviderApiKey,
@@ -313,10 +314,13 @@ export async function* streamDeepSeekReply(
           yield { type: "delta", contentDelta };
         }
 
-        const reply = parseStreamingReply(
-          rawReply,
-          body.instruction,
-          visibleContent,
+        const reply = withReplyCitations(
+          parseStreamingReply(
+            rawReply,
+            body.instruction,
+            visibleContent,
+          ),
+          body.documentContexts,
         );
         if (reply.content.length > visibleContent.length) {
           emittedDelta = true;

@@ -4,7 +4,10 @@ type ApiErrorObject = {
   requestId?: unknown;
 };
 
-const GENERIC_ERROR_MESSAGES = new Set(["Request failed."]);
+const GENERIC_ERROR_MESSAGES = new Set([
+  "Request failed.",
+  "Upstream request failed.",
+]);
 
 export class ApiRequestError extends Error {
   code: string | null;

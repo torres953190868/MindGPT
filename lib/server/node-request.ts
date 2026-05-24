@@ -2,6 +2,7 @@ import { z } from "zod";
 import { MAX_CHAT_ATTACHMENTS } from "@/lib/chat-attachments";
 
 const documentStatusSchema = z.enum([
+  "queued",
   "uploaded",
   "parsing",
   "parsed",
@@ -23,6 +24,17 @@ export const chatAttachmentSchema = z.object({
   documentStatus: documentStatusSchema.optional(),
   errorMessage: z.string().trim().max(500).nullable().optional(),
   errorRequestId: z.string().trim().max(160).nullable().optional(),
+});
+
+export const chatCitationSchema = z.object({
+  index: z.number().int().min(1).max(999),
+  documentId: z.string().trim().min(1).max(160),
+  documentName: z.string().trim().min(1).max(260),
+  chunkId: z.string().trim().min(1).max(160),
+  pageStart: z.number().int().min(1),
+  pageEnd: z.number().int().min(1),
+  headingPath: z.array(z.string().trim().min(1).max(180)).max(8).default([]),
+  quote: z.string().trim().min(1).max(700),
 });
 
 export const chatModelSelectionSchema = z.object({

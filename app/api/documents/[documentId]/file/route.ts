@@ -1,10 +1,13 @@
+import { createReadStream } from "node:fs";
+import { Readable } from "node:stream";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getBranchMindAuthContext } from "@/lib/server/auth";
 import { safeErrorWithSession } from "@/lib/server/http";
 import { getOrCreateRequestId, withRequestIdHeader } from "@/lib/server/request";
 import { commitSessionCookie, getOrCreateSession } from "@/lib/server/session";
-import { getDocumentFileForOwner } from "@/lib/server/rag/service";
+import { getDocumentFileSourceForOwner } from "@/lib/server/rag/service";
+import type { RagDocumentFileSource } from "@/lib/server/rag/store";
 
 export const runtime = "nodejs";
 
@@ -77,23 +80,62 @@ function parseByteRange(rangeHeader: string | null, byteLength: number) {
   } satisfies ByteRange;
 }
 
-function createPdfBody(bytes: Uint8Array, range?: ByteRange) {
+function createBytePdfBody(bytes: Uint8Array, range?: ByteRange) {
   const responseBytes = range ? bytes.slice(range.start, range.end + 1) : bytes;
   return responseBytes.slice().buffer as ArrayBuffer;
 }
 
-export async function GET(request: NextRequest, context: FileRouteContext) {
+function createLocalPdfBody(
+  source: Extract<RagDocumentFileSource, { kind: "local" }>,
+  range?: ByteRange,
+) {
+  const nodeStream = createReadStream(
+    source.filePath,
+    range ? { start: range.start, end: range.end } : undefined,
+  );
+
+  return Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
+}
+
+function getSourceByteLength(source: RagDocumentFileSource) {
+  if (source.kind === "bytes") return source.bytes.byteLength;
+  if (source.kind === "local") return source.byteLength;
+  return null;
+}
+
+function createPdfBody(source: RagDocumentFileSource, range?: ByteRange) {
+  if (source.kind === "bytes") return createBytePdfBody(source.bytes, range);
+  if (source.kind === "local") return createLocalPdfBody(source, range);
+  return null;
+}
+
+async function servePdfFile(
+  request: NextRequest,
+  context: FileRouteContext,
+  method: "GET" | "HEAD",
+) {
   const fallbackSession = getOrCreateSession(request);
   const requestId = getOrCreateRequestId(request);
 
   try {
     const { principal, session } = await getBranchMindAuthContext(request);
     const { documentId } = await context.params;
-    const { document, bytes } = await getDocumentFileForOwner(
+    const { document, source } = await getDocumentFileSourceForOwner(
       principal.id,
       documentId,
     );
-    const byteLength = bytes.byteLength;
+
+    if (source.kind === "redirect") {
+      const response = NextResponse.redirect(source.signedUrl, 307);
+      response.headers.set("Cache-Control", PDF_CACHE_CONTROL);
+      response.headers.set("X-Request-Id", requestId);
+      return commitSessionCookie(response, session);
+    }
+
+    const byteLength = getSourceByteLength(source);
+    if (byteLength === null) {
+      throw new Error("PDF source does not expose a byte length.");
+    }
 
     const contentType = document.mimeType || "application/pdf";
     const headers = withRequestIdHeader(
@@ -125,21 +167,35 @@ export async function GET(request: NextRequest, context: FileRouteContext) {
         "Content-Range",
         `bytes ${range.start}-${range.end}/${byteLength}`,
       );
-      const response = new NextResponse(createPdfBody(bytes, range), {
-        status: 206,
-        headers: rangeHeaders,
-      });
+      const response = new NextResponse(
+        method === "HEAD" ? null : createPdfBody(source, range),
+        {
+          status: 206,
+          headers: rangeHeaders,
+        },
+      );
       return commitSessionCookie(response, session);
     }
 
     const fullHeaders = new Headers(headers);
     fullHeaders.set("Content-Length", String(byteLength));
-    const response = new NextResponse(createPdfBody(bytes), {
-      headers: fullHeaders,
-    });
+    const response = new NextResponse(
+      method === "HEAD" ? null : createPdfBody(source),
+      {
+        headers: fullHeaders,
+      },
+    );
 
     return commitSessionCookie(response, session);
   } catch (error) {
     return safeErrorWithSession(error, fallbackSession, { requestId });
   }
+}
+
+export async function GET(request: NextRequest, context: FileRouteContext) {
+  return servePdfFile(request, context, "GET");
+}
+
+export async function HEAD(request: NextRequest, context: FileRouteContext) {
+  return servePdfFile(request, context, "HEAD");
 }

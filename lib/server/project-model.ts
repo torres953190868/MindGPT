@@ -3,6 +3,7 @@ import { createId } from "@/lib/ids";
 import type {
   BranchType,
   ChatAttachment,
+  ChatCitation,
   ChatMessage,
   MindNode,
   MockReply,
@@ -21,14 +22,18 @@ function makeMessage(
   role: ChatMessage["role"],
   content: string,
   attachments: ChatAttachment[] = [],
+  citations: ChatCitation[] = [],
 ): ChatMessage {
-  return {
+  const message: ChatMessage = {
     id: createId("msg"),
     role,
     content,
     attachments,
     createdAt: now(),
   };
+
+  if (citations.length > 0) message.citations = citations;
+  return message;
 }
 
 export function createRootProject(
@@ -48,7 +53,7 @@ export function createRootProject(
     summary: reply.summary,
     messages: [
       makeMessage("user", topic, attachments),
-      makeMessage("assistant", reply.content),
+      makeMessage("assistant", reply.content, [], reply.citations ?? []),
     ],
     children: [],
     position: ROOT_POSITION,
@@ -130,7 +135,7 @@ export function addChildNode(
     summary: reply.summary,
     messages: [
       makeMessage("user", instruction, attachments),
-      makeMessage("assistant", reply.content),
+      makeMessage("assistant", reply.content, [], reply.citations ?? []),
     ],
     children: [],
     position: getChildPosition(
@@ -232,7 +237,7 @@ export function populateBlankNode(
     summary: reply.summary,
     messages: [
       makeMessage("user", trimmed, attachments),
-      makeMessage("assistant", reply.content),
+      makeMessage("assistant", reply.content, [], reply.citations ?? []),
     ],
     updatedAt: timestamp,
   };
@@ -291,7 +296,11 @@ export function regenerateNode(
     }
 
     if (index === assistantMessageIndex) {
-      return { ...message, content: update.reply.content };
+      return {
+        ...message,
+        content: update.reply.content,
+        citations: update.reply.citations,
+      };
     }
 
     return message;

@@ -1,8 +1,7 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RagError } from "@/lib/server/rag/errors";
-import { parseDocumentForOwner } from "@/lib/server/rag/indexer";
-import type { RagDocument } from "@/lib/server/rag/types";
+import { enqueueRagProcessingJob } from "@/lib/server/rag/jobs";
 
 const checkRateLimitAsyncMock = vi.hoisted(() => vi.fn());
 
@@ -17,8 +16,8 @@ vi.mock("@/lib/server/rate-limit", () => ({
   checkRateLimitAsync: checkRateLimitAsyncMock,
 }));
 
-vi.mock("@/lib/server/rag/indexer", () => ({
-  parseDocumentForOwner: vi.fn(),
+vi.mock("@/lib/server/rag/jobs", () => ({
+  enqueueRagProcessingJob: vi.fn(),
 }));
 
 function createParseRequest(requestId = "req_parse_route") {
@@ -33,7 +32,7 @@ function createParseRequest(requestId = "req_parse_route") {
 
 describe("document parse route", () => {
   beforeEach(() => {
-    vi.mocked(parseDocumentForOwner).mockReset();
+    vi.mocked(enqueueRagProcessingJob).mockReset();
     checkRateLimitAsyncMock.mockReset();
     checkRateLimitAsyncMock.mockResolvedValue({
       allowed: true,
@@ -41,31 +40,13 @@ describe("document parse route", () => {
     });
   });
 
-  it("parses an owned document and returns the request id", async () => {
-    const parsedDocument: RagDocument = {
-      id: "doc_parse",
-      userId: "user_parse_route",
-      fileName: "parse.pdf",
-      fileUrl: null,
-      storagePath: null,
-      mimeType: "application/pdf",
-      pageCount: 2,
-      title: "Parsed",
-      status: "parsed",
-      parserVersion: "pdf-text-v1",
-      chunkVersion: "heading-recursive-v1",
-      errorMessage: null,
-      errorCode: null,
-      errorStage: null,
-      errorRequestId: null,
-      errorDetails: null,
-      createdAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
-    };
-    vi.mocked(parseDocumentForOwner).mockResolvedValue({
-      document: parsedDocument,
-      pageCount: 2,
-      sectionCount: 1,
+  it("queues parsing for an owned document and returns the request id", async () => {
+    vi.mocked(enqueueRagProcessingJob).mockResolvedValue({
+      action: "parse",
+      documentId: "doc_parse",
+      messageId: "msg_parse",
+      requestId: "req_parse_route",
+      topic: "rag-document-processing",
     });
     const { POST } = await import("@/app/api/documents/[documentId]/parse/route");
 
@@ -74,21 +55,26 @@ describe("document parse route", () => {
     });
     const body = await response.json();
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
     expect(response.headers.get("x-request-id")).toBe("req_parse_route");
-    expect(body).toMatchObject({ pageCount: 2, sectionCount: 1 });
-    expect(parseDocumentForOwner).toHaveBeenCalledWith(
+    expect(body.job).toMatchObject({
+      action: "parse",
+      documentId: "doc_parse",
+      messageId: "msg_parse",
+    });
+    expect(enqueueRagProcessingJob).toHaveBeenCalledWith(
       "user_parse_route",
       "doc_parse",
-      { requestId: "req_parse_route" },
+      "parse",
+      "req_parse_route",
     );
   });
 
-  it("returns parse failures with a stable request id", async () => {
-    vi.mocked(parseDocumentForOwner).mockRejectedValue(
-      new RagError("This PDF does not contain enough selectable text.", {
-        code: "PDF_TEXT_EMPTY",
-        status: 422,
+  it("returns queueing failures with a stable request id", async () => {
+    vi.mocked(enqueueRagProcessingJob).mockRejectedValue(
+      new RagError("Document was not found.", {
+        code: "DOCUMENT_NOT_FOUND",
+        status: 404,
       }),
     );
     const { POST } = await import("@/app/api/documents/[documentId]/parse/route");
@@ -98,10 +84,10 @@ describe("document parse route", () => {
     });
     const body = await response.json();
 
-    expect(response.status).toBe(422);
+    expect(response.status).toBe(404);
     expect(response.headers.get("x-request-id")).toBe("req_parse_fail");
     expect(body.error).toMatchObject({
-      code: "PDF_TEXT_EMPTY",
+      code: "DOCUMENT_NOT_FOUND",
       requestId: "req_parse_fail",
     });
   });

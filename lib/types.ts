@@ -14,7 +14,14 @@ export type ChatAttachment = {
   size: number;
   createdAt: string;
   documentId?: string;
-  documentStatus?: "uploaded" | "parsing" | "parsed" | "indexing" | "indexed" | "failed";
+  documentStatus?:
+    | "queued"
+    | "uploaded"
+    | "parsing"
+    | "parsed"
+    | "indexing"
+    | "indexed"
+    | "failed";
   errorMessage?: string | null;
   errorRequestId?: string | null;
 };
@@ -30,6 +37,17 @@ export type ChatDocumentContext = {
     headingPath: string[];
     content: string;
   }>;
+};
+
+export type ChatCitation = {
+  index: number;
+  documentId: string;
+  documentName: string;
+  chunkId: string;
+  pageStart: number;
+  pageEnd: number;
+  headingPath: string[];
+  quote: string;
 };
 
 export type ChatModelSelection = {
@@ -108,6 +126,7 @@ export type ChatMessage = {
   role: ChatRole;
   content: string;
   attachments: ChatAttachment[];
+  citations?: ChatCitation[];
   createdAt: string;
 };
 
@@ -144,4 +163,5 @@ export type MockReply = {
   title: string;
   summary: string;
   content: string;
+  citations?: ChatCitation[];
 };

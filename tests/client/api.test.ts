@@ -30,6 +30,20 @@ describe("client API errors", () => {
         500,
       ),
     ).toBe("Request failed. (HTTP 500, RAG_SUPABASE_ERROR, requestId: req_generic)");
+    expect(
+      formatApiErrorMessage(
+        {
+          error: {
+            code: "RAG_QUEUE_ENQUEUE_FAILED",
+            message: "Upstream request failed.",
+            requestId: "req_queue",
+          },
+        },
+        502,
+      ),
+    ).toBe(
+      "Request failed. (HTTP 502, RAG_QUEUE_ENQUEUE_FAILED, requestId: req_queue)",
+    );
   });
 
   it("formats request references for user-facing PDF failure cards", () => {

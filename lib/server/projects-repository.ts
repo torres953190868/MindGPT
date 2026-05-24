@@ -1,4 +1,5 @@
 import { normalizeChatAttachments } from "@/lib/chat-attachments";
+import { normalizeChatCitations } from "@/lib/chat-citations";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   getSupabaseAdminClient,
@@ -22,6 +23,7 @@ export type ProjectsBackend = "file" | "supabase";
 
 type SupabaseProjectSchemaCapabilities = {
   messageAttachments: boolean;
+  messageCitations: boolean;
   nodeManualTitles: boolean;
   projectNotes: boolean;
 };
@@ -90,12 +92,17 @@ async function getSchemaCapabilities(
       .select("id,attachments")
       .limit(1),
     client
+      .from("branchmind_messages")
+      .select("id,citations")
+      .limit(1),
+    client
       .from("branchmind_nodes")
       .select("id,title_manually_edited")
       .limit(1),
-  ]).then(([projectsResult, messagesResult, nodesResult]) => ({
+  ]).then(([projectsResult, messagesResult, citationsResult, nodesResult]) => ({
     projectNotes: !isMissingColumnError(projectsResult.error),
     messageAttachments: !isMissingColumnError(messagesResult.error),
+    messageCitations: !isMissingColumnError(citationsResult.error),
     nodeManualTitles: !isMissingColumnError(nodesResult.error),
   }));
 
@@ -120,6 +127,9 @@ function getSchemaCapabilitiesAfterMissingColumnError(
   if (/branchmind_messages|attachments/i.test(text)) {
     nextCapabilities.messageAttachments = false;
   }
+  if (/branchmind_messages|citations/i.test(text)) {
+    nextCapabilities.messageCitations = false;
+  }
   if (/branchmind_nodes|title_manually_edited/i.test(text)) {
     nextCapabilities.nodeManualTitles = false;
   }
@@ -127,6 +137,7 @@ function getSchemaCapabilitiesAfterMissingColumnError(
   if (
     nextCapabilities.projectNotes === capabilities.projectNotes &&
     nextCapabilities.messageAttachments === capabilities.messageAttachments &&
+    nextCapabilities.messageCitations === capabilities.messageCitations &&
     nextCapabilities.nodeManualTitles === capabilities.nodeManualTitles
   ) {
     return null;
@@ -210,6 +221,7 @@ export function projectToRows(project: Project) {
       role: message.role,
       content: message.content,
       attachments: normalizeChatAttachments(message.attachments) as unknown as Json,
+      citations: normalizeChatCitations(message.citations) as unknown as Json,
       sort_order: index,
       created_at: message.createdAt,
     })),
@@ -238,6 +250,7 @@ function projectRowsForSchemaCapabilities(
       ...messageRow,
     } as MessageInsert & Record<string, unknown>;
     if (!capabilities.messageAttachments) delete supportedMessageRow.attachments;
+    if (!capabilities.messageCitations) delete supportedMessageRow.citations;
     return supportedMessageRow as MessageInsert;
   });
 
@@ -295,6 +308,9 @@ export function composeProjectsFromRows(
       attachments: normalizeChatAttachments((messageRow as Partial<MessageRow>).attachments, {
         fallbackCreatedAt: messageRow.created_at,
       }),
+      citations: normalizeChatCitations(
+        (messageRow as Partial<MessageRow> & { citations?: unknown }).citations,
+      ),
       createdAt: messageRow.created_at,
     });
     messagesByNode.set(messageRow.node_id, messages);

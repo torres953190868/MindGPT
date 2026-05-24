@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getChatCitationMarkerIndexes } from "@/lib/chat-citations";
 import {
   CHAT_COMPLETIONS_PROVIDERS,
   DEEPSEEK_CHAT_COMPLETIONS_URL,
@@ -13,6 +14,7 @@ import {
   type ChatCompletionsProvider,
 } from "@/lib/server/ai-provider";
 import type {
+  ChatCitation,
   ChatDocumentContext,
   ChatModelSelection,
   LlmRouteTask,
@@ -169,6 +171,57 @@ function safeReply(instruction: string, content: string): MockReply {
     summary: compact(content, 96),
     content,
   };
+}
+
+function citationKey(documentId: string, chunkId: string) {
+  return `${documentId}:${chunkId}`;
+}
+
+export function buildChatCitations(
+  documentContexts: ChatDocumentContext[] = [],
+): ChatCitation[] {
+  const citations: ChatCitation[] = [];
+  const seen = new Map<string, ChatCitation>();
+
+  for (const document of documentContexts) {
+    for (const snippet of document.snippets) {
+      const key = citationKey(document.documentId, snippet.chunkId);
+      if (seen.has(key)) continue;
+
+      const citation: ChatCitation = {
+        index: citations.length + 1,
+        documentId: document.documentId,
+        documentName: document.title || document.fileName,
+        chunkId: snippet.chunkId,
+        pageStart: snippet.pageStart,
+        pageEnd: snippet.pageEnd,
+        headingPath: snippet.headingPath,
+        quote: compact(snippet.content, 220),
+      };
+      citations.push(citation);
+      seen.set(key, citation);
+    }
+  }
+
+  return citations;
+}
+
+export function withReplyCitations(
+  reply: MockReply,
+  documentContexts: ChatDocumentContext[] = [],
+): MockReply {
+  const citations = buildChatCitations(documentContexts);
+  if (citations.length === 0) return reply;
+
+  const usedIndexes = getChatCitationMarkerIndexes(reply.content);
+
+  const usedCitations = citations.filter((citation) =>
+    usedIndexes.has(citation.index),
+  );
+
+  return usedCitations.length > 0
+    ? { ...reply, citations: usedCitations }
+    : reply;
 }
 
 function isEnabled(value: string | undefined) {
@@ -336,6 +389,7 @@ export function createProviderHttpError(
 
 export function getMockReply(body: BranchMindReplyRequest): MockReply {
   const mode = body.mode ?? "root";
+  const citations = buildChatCitations(body.documentContexts);
   const context = body.contextTitles?.length
     ? body.contextTitles.join(" / ")
     : "No prior path.";
@@ -349,29 +403,48 @@ export function getMockReply(body: BranchMindReplyRequest): MockReply {
     `Mock mode is enabled for ${mode} mode.`,
     `Current path: ${context}.${source}${documents}`,
     `Instruction received: ${body.instruction}`,
+    citations.length > 0
+      ? `PDF context citation available [[cite:${citations[0].index}]].`
+      : "",
     "Use this deterministic response for local development without sending data to DeepSeek.",
-  ].join("\n\n");
+  ].filter(Boolean).join("\n\n");
 
-  return safeReply(body.instruction, content);
+  return withReplyCitations(safeReply(body.instruction, content), body.documentContexts);
 }
 
 function formatPageRange(pageStart: number, pageEnd: number) {
   return pageStart === pageEnd ? `p. ${pageStart}` : `pp. ${pageStart}-${pageEnd}`;
 }
 
-function formatDocumentContexts(documentContexts: ChatDocumentContext[] = []) {
+function formatDocumentContexts(
+  documentContexts: ChatDocumentContext[] = [],
+  citations = buildChatCitations(documentContexts),
+) {
   if (documentContexts.length === 0) return "";
+
+  const citationByChunk = new Map(
+    citations.map((citation) => [
+      citationKey(citation.documentId, citation.chunkId),
+      citation,
+    ]),
+  );
 
   return documentContexts
     .map((document) => {
       const title = document.title ? ` (${document.title})` : "";
       const snippets = document.snippets
-        .map((snippet, index) => {
+        .map((snippet) => {
           const section = snippet.headingPath.length
             ? snippet.headingPath.join(" > ")
             : "Untitled section";
+          const citation = citationByChunk.get(
+            citationKey(document.documentId, snippet.chunkId),
+          );
+          const citationLabel = citation
+            ? `source ${citation.index}; cite as [[cite:${citation.index}]]`
+            : "uncited source";
           return [
-            `[${index + 1}] ${formatPageRange(
+            `[${citationLabel}] ${formatPageRange(
               snippet.pageStart,
               snippet.pageEnd,
             )} | ${section} | chunk ${snippet.chunkId}`,
@@ -521,16 +594,20 @@ export function buildMessages(body: BranchMindReplyRequest): ApiMessage[] {
     : "No prior path.";
   const history = body.messages?.slice(-8) ?? [];
   const source = body.sourceText ? `\nSelected source text: ${body.sourceText}` : "";
-  const documentContexts = formatDocumentContexts(body.documentContexts);
+  const citationCatalog = buildChatCitations(body.documentContexts);
+  const documentContexts = formatDocumentContexts(body.documentContexts, citationCatalog);
   const pdfContext = documentContexts
     ? `\nRetrieved PDF context:\n${documentContexts}`
+    : "";
+  const citationInstruction = citationCatalog.length
+    ? " When retrieved PDF context is provided, use it as evidence, cite factual claims with the exact [[cite:N]] markers shown in the context, do not invent citation numbers, and do not replace those markers with plain page citations."
     : "";
 
   return [
     {
       role: "system",
       content:
-        "You are BranchMind, a concise learning assistant. Return only valid JSON with keys title, summary, content. Match the user's language: answer in English when the user writes in English, and answer in Chinese when the user writes in Chinese. The title must be short. The summary must be concise. The content should be 300-600 characters unless the user asks otherwise. When retrieved PDF context is provided, use it as evidence, cite PDF file names and page numbers for factual claims, and say when the provided snippets do not contain enough evidence.",
+        `You are BranchMind, a concise learning assistant. Return only valid JSON with keys title, summary, content. Match the user's language: answer in English when the user writes in English, and answer in Chinese when the user writes in Chinese. The title must be short. The summary must be concise. The content should be 300-600 characters unless the user asks otherwise.${citationInstruction} Say when the provided snippets do not contain enough evidence.`,
     },
     {
       role: "user",

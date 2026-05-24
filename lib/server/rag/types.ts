@@ -1,6 +1,7 @@
 import type { Json } from "@/lib/supabase/database.types";
 
 export type DocumentStatus =
+  | "queued"
   | "uploaded"
   | "parsing"
   | "parsed"

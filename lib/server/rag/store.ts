@@ -1,4 +1,11 @@
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  rename,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { createId } from "@/lib/ids";
 import {
@@ -44,6 +51,21 @@ export type SaveParsedResult = {
   sections: RagSection[];
 };
 
+export type RagDocumentFileSource =
+  | {
+      kind: "local";
+      byteLength: number;
+      filePath: string;
+    }
+  | {
+      kind: "redirect";
+      signedUrl: string;
+    }
+  | {
+      kind: "bytes";
+      bytes: Uint8Array;
+    };
+
 export type RagRepository = {
   backend: RagBackend;
   createUploadedDocument: (upload: RagUpload) => Promise<RagDocument>;
@@ -55,6 +77,9 @@ export type RagRepository = {
   ) => Promise<RagDocument>;
   deleteDocument: (document: RagDocument) => Promise<void>;
   getDocumentFilePath: (document: RagDocument) => string | null;
+  getDocumentFileSource: (
+    document: RagDocument,
+  ) => Promise<RagDocumentFileSource | null>;
   readDocumentFile: (document: RagDocument) => Promise<Uint8Array | null>;
   setDocumentStatus: (
     documentId: string,
@@ -91,6 +116,7 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const DATA_FILE = path.join(DATA_DIR, "branchmind-rag.json");
 const RAG_FILES_DIR = path.join(DATA_DIR, "rag-files");
 const SUPABASE_RAG_FILES_BUCKET = "branchmind-rag-files";
+const SUPABASE_INSERT_BATCH_SIZE = 25;
 let writeQueue: Promise<unknown> = Promise.resolve();
 
 function emptyDataFile(): RagDataFile {
@@ -101,8 +127,21 @@ function now() {
   return new Date().toISOString();
 }
 
-function isSupabaseSchemaError(error: { code?: string; message: string }) {
+type SupabaseErrorLike = {
+  code?: string;
+  details?: string | null;
+  hint?: string | null;
+  message: string;
+};
+
+function isSupabaseQueuedStatusConstraintError(error: SupabaseErrorLike) {
+  const text = `${error.message} ${error.details ?? ""}`;
+  return error.code === "23514" && /documents_status_check/i.test(text);
+}
+
+function isSupabaseSchemaError(error: SupabaseErrorLike) {
   return (
+    isSupabaseQueuedStatusConstraintError(error) ||
     error.code === "42P01" ||
     error.code === "42703" ||
     error.code === "PGRST204" ||
@@ -112,14 +151,19 @@ function isSupabaseSchemaError(error: { code?: string; message: string }) {
 }
 
 function assertNoError(
-  error: { code?: string; message: string } | null,
+  error: SupabaseErrorLike | null,
   operation: string,
 ) {
   if (!error) return;
   const schemaError = isSupabaseSchemaError(error);
-  const hint = schemaError
-    ? " Apply the SQL files in supabase/migrations, including 20260516010000_pdf_rag_diagnostics.sql, then retry."
-    : "";
+  let hint = "";
+  if (isSupabaseQueuedStatusConstraintError(error)) {
+    hint =
+      " Apply supabase/migrations/20260524000000_pdf_rag_queued_status.sql, then retry.";
+  } else if (schemaError) {
+    hint =
+      " Apply the SQL files in supabase/migrations, including 20260516010000_pdf_rag_diagnostics.sql, then retry.";
+  }
 
   throw new RagError(`Supabase ${operation} failed: ${error.message}.${hint}`, {
     code: schemaError ? "RAG_SUPABASE_SCHEMA_ERROR" : "RAG_SUPABASE_ERROR",
@@ -438,6 +482,24 @@ async function readLocalDocumentFile(document: RagDocument) {
   }
 }
 
+async function getLocalDocumentFileSource(document: RagDocument) {
+  const filePath = requireFilePath(document) ?? localDocumentFilePath(document);
+  if (!filePath) return null;
+
+  try {
+    const fileStat = await stat(filePath);
+    if (!fileStat.isFile()) return null;
+    return {
+      kind: "local",
+      byteLength: fileStat.size,
+      filePath,
+    } satisfies RagDocumentFileSource;
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
 async function deleteDocumentFile(document: RagDocument) {
   const filePath = requireFilePath(document);
   if (!filePath) return;
@@ -540,6 +602,10 @@ class FileRagRepository implements RagRepository {
 
   getDocumentFilePath(document: RagDocument) {
     return requireFilePath(document);
+  }
+
+  async getDocumentFileSource(document: RagDocument) {
+    return getLocalDocumentFileSource(document);
   }
 
   async readDocumentFile(document: RagDocument) {
@@ -782,6 +848,36 @@ class SupabaseRagRepository implements RagRepository {
     return null;
   }
 
+  async getDocumentFileSource(document: RagDocument) {
+    const localSource = await getLocalDocumentFileSource(document);
+    if (localSource) return localSource;
+    if (!document.storagePath) return null;
+
+    const { data, error } = await getSupabaseRagStorage().createSignedUrl(
+      document.storagePath,
+      5 * 60,
+    );
+    if (error) {
+      if (isStorageNotFoundError(error)) {
+        return getLocalDocumentFileSource(document);
+      }
+      assertNoStorageError(error, "create signed URL for document file");
+    }
+
+    if (!data?.signedUrl) {
+      throw new RagError("Supabase Storage did not return a signed PDF URL.", {
+        code: "RAG_SUPABASE_SIGNED_URL_MISSING",
+        expose: true,
+        status: 500,
+      });
+    }
+
+    return {
+      kind: "redirect",
+      signedUrl: data.signedUrl,
+    } satisfies RagDocumentFileSource;
+  }
+
   async readDocumentFile(document: RagDocument) {
     const localBytes = await readLocalDocumentFile(document);
     if (localBytes) return localBytes;
@@ -849,18 +945,36 @@ class SupabaseRagRepository implements RagRepository {
     );
 
     if (pages.length > 0) {
-      assertNoError(
-        (await client.from("document_pages").insert(pages.map(pageToInsert))).error,
-        "insert document pages",
-      );
+      for (let index = 0; index < pages.length; index += SUPABASE_INSERT_BATCH_SIZE) {
+        assertNoError(
+          (
+            await client
+              .from("document_pages")
+              .insert(
+                pages
+                  .slice(index, index + SUPABASE_INSERT_BATCH_SIZE)
+                  .map(pageToInsert),
+              )
+          ).error,
+          "insert document pages",
+        );
+      }
     }
     if (sections.length > 0) {
-      assertNoError(
-        (await client
-          .from("document_sections")
-          .insert(sections.map(sectionToInsert))).error,
-        "insert document sections",
-      );
+      for (let index = 0; index < sections.length; index += SUPABASE_INSERT_BATCH_SIZE) {
+        assertNoError(
+          (
+            await client
+              .from("document_sections")
+              .insert(
+                sections
+                  .slice(index, index + SUPABASE_INSERT_BATCH_SIZE)
+                  .map(sectionToInsert),
+              )
+          ).error,
+          "insert document sections",
+        );
+      }
     }
 
     const { data, error } = await client
@@ -929,10 +1043,20 @@ class SupabaseRagRepository implements RagRepository {
       "delete document chunks",
     );
     if (chunks.length > 0) {
-      assertNoError(
-        (await client.from("document_chunks").insert(chunks.map(chunkToInsert))).error,
-        "insert document chunks",
-      );
+      for (let index = 0; index < chunks.length; index += SUPABASE_INSERT_BATCH_SIZE) {
+        assertNoError(
+          (
+            await client
+              .from("document_chunks")
+              .insert(
+                chunks
+                  .slice(index, index + SUPABASE_INSERT_BATCH_SIZE)
+                  .map(chunkToInsert),
+              )
+          ).error,
+          "insert document chunks",
+        );
+      }
     }
     assertNoError(
       (

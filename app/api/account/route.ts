@@ -10,6 +10,12 @@ import { parseJsonBody } from "@/lib/server/validation";
 import { z } from "zod";
 
 const READ_ONLY_LOCAL_SESSION = { id: "", isNew: false };
+const PLAN_LIMITS_DISABLED = {
+  projects: null,
+  nodes: null,
+  documents: null,
+  aiMessages: null,
+} as const;
 
 const updateAccountSchema = z.object({
   displayName: z.string().trim().min(1).max(100).nullable().optional(),
@@ -44,58 +50,19 @@ async function getFileAccountData(sessionId: string): Promise<AccountDto> {
     displayName: null,
     authMode: "local",
     authConfigured: false,
-    plan: "free",
+    plan: "unlimited",
     subscriptionStatus: "inactive",
     usage: {
-      projects: { used: projectCount, limit: 5 },
-      nodes: { used: nodeCount, limit: 100 },
-      documents: { used: documentCount, limit: 3 },
-      aiMessages: { used: 0, limit: 50 },
+      projects: { used: projectCount, limit: PLAN_LIMITS_DISABLED.projects },
+      nodes: { used: nodeCount, limit: PLAN_LIMITS_DISABLED.nodes },
+      documents: { used: documentCount, limit: PLAN_LIMITS_DISABLED.documents },
+      aiMessages: { used: 0, limit: PLAN_LIMITS_DISABLED.aiMessages },
     },
   };
 }
 
 async function getSupabaseAccountData(userId: string, email: string | null): Promise<AccountDto> {
   const supabase = getSupabaseAdminClient();
-
-  // Ensure user plan exists
-  const { data: existingPlan } = await supabase
-    .from("branchmind_user_plans")
-    .select("*")
-    .eq("user_id", userId)
-    .single();
-
-  if (!existingPlan) {
-    await supabase.from("branchmind_user_plans").insert({ user_id: userId, plan: "free" });
-  }
-
-  const { data: planRow, error: planError } = await supabase
-    .from("branchmind_user_plans")
-    .select("plan, display_name, subscription_status")
-    .eq("user_id", userId)
-    .single();
-
-  if (planError) {
-    throw new HttpError("Failed to load account plan.", { status: 500 });
-  }
-
-  const plan = planRow?.plan ?? "free";
-
-  // Get plan limits
-  const { data: limitRow } = await supabase
-    .from("branchmind_plan_limits")
-    .select("*")
-    .eq("plan", plan)
-    .single();
-
-  // Get today's usage
-  const today = new Date().toISOString().slice(0, 10);
-  const { data: usageRow } = await supabase
-    .from("branchmind_user_usage")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("date", today)
-    .single();
 
   // Count actual resources
   const { count: projectCount } = await supabase
@@ -126,19 +93,16 @@ async function getSupabaseAccountData(userId: string, email: string | null): Pro
 
   return {
     email,
-    displayName: planRow?.display_name ?? null,
+    displayName: null,
     authMode: "supabase",
     authConfigured: true,
-    plan,
-    subscriptionStatus: planRow?.subscription_status ?? "inactive",
+    plan: "unlimited",
+    subscriptionStatus: "inactive",
     usage: {
-      projects: { used: projectCount ?? 0, limit: limitRow?.max_projects ?? null },
-      nodes: { used: nodeCount ?? 0, limit: limitRow?.max_nodes ?? null },
-      documents: { used: documentCount ?? 0, limit: limitRow?.max_documents ?? null },
-      aiMessages: {
-        used: usageRow?.ai_message_count ?? 0,
-        limit: limitRow?.max_ai_messages_per_day ?? null,
-      },
+      projects: { used: projectCount ?? 0, limit: PLAN_LIMITS_DISABLED.projects },
+      nodes: { used: nodeCount, limit: PLAN_LIMITS_DISABLED.nodes },
+      documents: { used: documentCount ?? 0, limit: PLAN_LIMITS_DISABLED.documents },
+      aiMessages: { used: 0, limit: PLAN_LIMITS_DISABLED.aiMessages },
     },
   };
 }
@@ -154,13 +118,13 @@ export async function GET(request: NextRequest) {
           displayName: null,
           authMode: "local",
           authConfigured: false,
-          plan: "free",
+          plan: "unlimited",
           subscriptionStatus: "inactive",
           usage: {
-            projects: { used: 0, limit: 5 },
-            nodes: { used: 0, limit: 100 },
-            documents: { used: 0, limit: 3 },
-            aiMessages: { used: 0, limit: 50 },
+            projects: { used: 0, limit: PLAN_LIMITS_DISABLED.projects },
+            nodes: { used: 0, limit: PLAN_LIMITS_DISABLED.nodes },
+            documents: { used: 0, limit: PLAN_LIMITS_DISABLED.documents },
+            aiMessages: { used: 0, limit: PLAN_LIMITS_DISABLED.aiMessages },
           },
         },
         READ_ONLY_LOCAL_SESSION,
@@ -176,13 +140,13 @@ export async function GET(request: NextRequest) {
             displayName: null,
             authMode: "guest",
             authConfigured: true,
-            plan: "free",
+            plan: "unlimited",
             subscriptionStatus: "inactive",
             usage: {
-              projects: { used: 0, limit: 5 },
-              nodes: { used: 0, limit: 100 },
-              documents: { used: 0, limit: 3 },
-              aiMessages: { used: 0, limit: 50 },
+              projects: { used: 0, limit: PLAN_LIMITS_DISABLED.projects },
+              nodes: { used: 0, limit: PLAN_LIMITS_DISABLED.nodes },
+              documents: { used: 0, limit: PLAN_LIMITS_DISABLED.documents },
+              aiMessages: { used: 0, limit: PLAN_LIMITS_DISABLED.aiMessages },
             },
           },
           fallbackSession,
@@ -213,20 +177,11 @@ export async function PATCH(request: NextRequest) {
         throw new HttpError("Sign in is required.", { code: "AUTH_REQUIRED", expose: true, status: 401 });
       }
 
-      const supabase = getSupabaseAdminClient();
-
-      if (body.displayName !== undefined) {
-        const { error } = await supabase
-          .from("branchmind_user_plans")
-          .upsert({ user_id: user.id, display_name: body.displayName });
-
-        if (error) {
-          throw new HttpError("Failed to update display name.", { status: 500 });
-        }
-      }
-
       const data = await getSupabaseAccountData(user.id, user.email ?? null);
-      return jsonWithSession(data, fallbackSession);
+      return jsonWithSession(
+        body.displayName !== undefined ? { ...data, displayName: body.displayName } : data,
+        fallbackSession,
+      );
     }
 
     // Local file mode - no-op but return success

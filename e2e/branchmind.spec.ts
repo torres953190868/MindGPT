@@ -763,7 +763,7 @@ test("home launcher opens the workspace while the initial root answer streams", 
   }
 });
 
-test("home launcher uploads and indexes PDF attachments before creating a project", async ({
+test("home launcher uploads queued PDF attachments before creating a project once indexed", async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Home PDF upload is covered once.");
@@ -773,6 +773,7 @@ test("home launcher uploads and indexes PDF attachments before creating a projec
   const instruction = `Create a PDF-attached project ${seed}.`;
   let syncPayload: unknown = null;
   let uploadRequests = 0;
+  let documentDetailsRequests = 0;
   let indexRequests = 0;
 
   await mockHomeModelCatalog(page);
@@ -791,21 +792,35 @@ test("home launcher uploads and indexes PDF attachments before creating a projec
   await page.route("**/api/documents/upload", async (route) => {
     uploadRequests += 1;
     await route.fulfill({
-      status: 200,
+      status: 202,
       contentType: "application/json",
       body: JSON.stringify({
         document: {
           id: documentId,
           fileName: "home-source.pdf",
           mimeType: "application/pdf",
-          status: "uploaded",
+          status: "queued",
           errorMessage: null,
+          errorRequestId: null,
+        },
+        job: {
+          action: "index",
+          documentId,
+          messageId: null,
+          requestId: `req-home-upload-${seed}`,
+          topic: "rag-document-processing",
         },
       }),
     });
   });
-  await page.route("**/api/documents/**/index", async (route) => {
-    indexRequests += 1;
+  await page.route(`**/api/documents/${documentId}`, async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fallback();
+      return;
+    }
+
+    documentDetailsRequests += 1;
+    const status = documentDetailsRequests === 1 ? "queued" : "indexed";
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -814,10 +829,20 @@ test("home launcher uploads and indexes PDF attachments before creating a projec
           id: documentId,
           fileName: "home-source.pdf",
           mimeType: "application/pdf",
-          status: "indexed",
+          status,
           errorMessage: null,
+          errorRequestId: null,
         },
+        sections: [],
+        chunkCount: 1,
       }),
+    });
+  });
+  await page.route("**/api/documents/**/index", async (route) => {
+    indexRequests += 1;
+    await route.fulfill({
+      status: 500,
+      body: "Unexpected manual index request",
     });
   });
   await page.route("**/api/projects", async (route) => {
@@ -856,6 +881,7 @@ test("home launcher uploads and indexes PDF attachments before creating a projec
   await expect(page.getByTestId("pending-attachment-chip")).toContainText(
     "home-source.pdf",
   );
+  await expect(page.getByTestId("pending-attachment-chip")).toContainText("Ingesting");
   await page.getByTestId("message-instruction-input").fill(instruction);
   await page.getByTestId("send-message-button").click();
 
@@ -872,7 +898,8 @@ test("home launcher uploads and indexes PDF attachments before creating a projec
     }),
   ]);
   expect(uploadRequests).toBe(1);
-  expect(indexRequests).toBe(1);
+  expect(documentDetailsRequests).toBeGreaterThanOrEqual(1);
+  expect(indexRequests).toBe(0);
 });
 
 test("home launcher selects an indexed knowledge PDF without re-uploading", async ({
@@ -1420,12 +1447,10 @@ test("reader opens an owned PDF at a source chunk URL", async ({ page }, testInf
     "Ask PDF section",
   );
 
-  expect(documentsSidebarBox.height).toBeLessThan(readerBox.height * 0.65);
-  expect(toolsSidebarBox.height).toBeLessThan(readerBox.height * 0.95);
-  expect(documentsHandleBox.height).toBeGreaterThan(96);
-  expect(documentsHandleBox.height).toBeLessThan(readerBox.height * 0.35);
-  expect(toolsHandleBox.height).toBeGreaterThan(96);
-  expect(toolsHandleBox.height).toBeLessThan(readerBox.height * 0.35);
+  expect(documentsSidebarBox.height).toBeGreaterThan(readerBox.height * 0.9);
+  expect(toolsSidebarBox.height).toBeGreaterThan(readerBox.height * 0.9);
+  expect(documentsHandleBox.height).toBeGreaterThan(readerBox.height * 0.9);
+  expect(toolsHandleBox.height).toBeGreaterThan(readerBox.height * 0.9);
   expect(Math.abs(tocSectionBox.y + tocSectionBox.height - askSectionBox.y)).toBeLessThanOrEqual(
     1,
   );
@@ -1478,7 +1503,7 @@ test("reader opens an owned PDF at a source chunk URL", async ({ page }, testInf
   expect(documentDetailsRequests).toBe(1);
 });
 
-test("reader upload parses for reading before explicit Ask PDF indexing", async ({
+test("reader upload previews the queued PDF before background indexing finishes", async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Reader upload flow is covered once.");
@@ -1534,11 +1559,17 @@ test("reader upload parses for reading before explicit Ask PDF indexing", async 
   });
   await page.route("**/api/documents/upload", async (route) => {
     uploadRequests += 1;
-    document = { ...document, status: "uploaded" };
+    document = { ...document, status: "queued" };
     await route.fulfill({
-      status: 200,
+      status: 202,
       contentType: "application/json",
-      body: JSON.stringify({ document }),
+      body: JSON.stringify({
+        document,
+        job: {
+          topic: "rag-document-processing",
+          status: "enqueued",
+        },
+      }),
     });
   });
   await page.route("**/api/documents/doc-reader-upload-e2e", async (route) => {
@@ -1617,20 +1648,43 @@ test("reader upload parses for reading before explicit Ask PDF indexing", async 
   });
   await page.getByRole("button", { name: "Upload PDF", exact: true }).click();
 
-  await expect.poll(() => parseRequests).toBe(1);
+  await expect.poll(() => uploadRequests).toBe(1);
+  expect(parseRequests).toBe(0);
   expect(indexRequests).toBe(0);
   const canvas = page.getByTestId("pdf-page-canvas");
   await expect(canvas).toBeVisible();
   await expect
     .poll(() => canvas.evaluate((element) => (element as HTMLCanvasElement).width))
     .toBeGreaterThan(0);
-  await expect(page.getByTestId("toc-section-button")).toContainText("Reader Upload");
   await expect(page.getByTestId("ask-pdf-input")).toBeDisabled();
   await expect(page.getByTestId("ask-pdf-button")).toBeDisabled();
+  await expect(page.getByTestId("enable-ask-pdf-button")).toBeDisabled();
 
-  await page.getByTestId("enable-ask-pdf-button").click();
-  await expect.poll(() => indexRequests).toBe(1);
+  document = {
+    ...document,
+    pageCount: 2,
+    title: "Reader Upload",
+    status: "indexed",
+  };
+  sections = [
+    {
+      id: "section-reader-upload-e2e",
+      title: "Reader Upload",
+      headingPath: ["Reader Upload"],
+      level: 1,
+      pageStart: 1,
+      pageEnd: 2,
+      source: "regex",
+    },
+  ];
+
+  await expect(page.getByTestId("toc-section-button")).toContainText(
+    "Reader Upload",
+    { timeout: 7_000 },
+  );
   await expect(page.getByTestId("ask-pdf-input")).toBeEnabled();
+  expect(parseRequests).toBe(0);
+  expect(indexRequests).toBe(0);
 });
 
 test("shows signed-in account menu state", async ({ page }) => {

@@ -12,6 +12,7 @@ import {
   RETRY_DELAY_MS,
   type BranchMindReplyRequest,
   createProviderHttpError,
+  withReplyCitations,
 } from "@/lib/server/deepseek-core";
 import {
   getLlmProviderApiKey,
@@ -117,7 +118,10 @@ export async function requestDeepSeekReply(
           });
         }
 
-        return parseReply(content, body.instruction);
+        return withReplyCitations(
+          parseReply(content, body.instruction),
+          body.documentContexts,
+        );
       } catch (error) {
         if (!(error instanceof DeepSeekError)) throw error;
         lastError = error;

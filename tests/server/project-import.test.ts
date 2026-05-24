@@ -68,6 +68,63 @@ describe("project import", () => {
 
     const rootNode = result.projects[0].nodes[result.projects[0].rootNodeId];
     expect(rootNode.messages[0].attachments).toEqual([]);
+    expect(rootNode.messages[0].citations).toEqual([]);
+  });
+
+  it("preserves valid message citations during import", () => {
+    const timestamp = "2026-01-01T00:00:00.000Z";
+    const result = prepareProjectImport({
+      id: "citation-project",
+      title: "Citation project",
+      rootNodeId: "citation-root",
+      nodes: {
+        "citation-root": {
+          id: "citation-root",
+          projectId: "citation-project",
+          parentId: null,
+          title: "Citation root",
+          summary: "Imported with citations.",
+          messages: [
+            {
+              id: "citation-message",
+              role: "assistant",
+              content: "Answer [[cite:1]]",
+              citations: [
+                {
+                  index: 1,
+                  documentId: "document-import-test",
+                  documentName: "source.pdf",
+                  chunkId: "chunk-import-test",
+                  pageStart: 4,
+                  pageEnd: 4,
+                  headingPath: ["Evidence"],
+                  quote: "Imported citation text.",
+                },
+              ],
+              createdAt: timestamp,
+            },
+          ],
+          children: [],
+          position: { x: 0, y: 0 },
+          branchType: "root",
+          collapsed: false,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+      },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+
+    const rootNode = result.projects[0].nodes[result.projects[0].rootNodeId];
+    expect(rootNode.messages[0].citations).toEqual([
+      expect.objectContaining({
+        index: 1,
+        documentId: "document-import-test",
+        chunkId: "chunk-import-test",
+        pageStart: 4,
+      }),
+    ]);
   });
 
   it("preserves imported manual title flags", () => {

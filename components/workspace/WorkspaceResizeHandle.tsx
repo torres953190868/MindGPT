@@ -14,6 +14,7 @@ type WorkspaceResizeHandleProps = {
   orientation: "vertical" | "horizontal";
   desktopBreakpoint?: "lg" | "xl";
   variant?: "full" | "compact";
+  className?: string;
   ariaLabel: string;
   testId: string;
   onResizeStart: (event: ResizeStartEvent) => void;
@@ -35,6 +36,7 @@ export function WorkspaceResizeHandle({
   orientation,
   desktopBreakpoint = "lg",
   variant = "full",
+  className = "",
   ariaLabel,
   testId,
   onResizeStart,
@@ -70,7 +72,7 @@ export function WorkspaceResizeHandle({
     <div
       className={`relative ${
         isVertical ? verticalWrapperClassName : "h-6 cursor-row-resize lg:hidden"
-      }`}
+      } ${className}`}
     >
       {!isVertical && (
         <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-neutral-200" />

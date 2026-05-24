@@ -28,6 +28,17 @@ const childReply: MockReply = {
   content: "Child content",
 };
 
+const citation = {
+  index: 1,
+  documentId: "document-citation-test",
+  documentName: "source.pdf",
+  chunkId: "chunk-citation-test",
+  pageStart: 7,
+  pageEnd: 7,
+  headingPath: ["Chapter 1"],
+  quote: "Citation source text.",
+};
+
 function expectConsistentGraph(project: ReturnType<typeof createRootProject>) {
   expect(project.nodes[project.rootNodeId]).toBeDefined();
 
@@ -88,6 +99,29 @@ describe("project model helpers", () => {
 
     expect(rootNode.messages[0].attachments).toEqual([attachment]);
     expect(rootNode.messages[1].attachments).toEqual([]);
+  });
+
+  it("stores assistant citation metadata from generated replies", () => {
+    const project = createRootProject("Graph search", {
+      ...rootReply,
+      content: "Root content [[cite:1]]",
+      citations: [citation],
+    });
+    const rootNode = project.nodes[project.rootNodeId];
+
+    expect(rootNode.messages[1].citations).toEqual([citation]);
+
+    const regenerated = regenerateNode(project, project.rootNodeId, {
+      reply: {
+        ...rootReply,
+        content: "Updated content [[cite:1]]",
+        citations: [{ ...citation, pageStart: 8, pageEnd: 9 }],
+      },
+    });
+
+    expect(regenerated?.node.messages[1].citations).toEqual([
+      { ...citation, pageStart: 8, pageEnd: 9 },
+    ]);
   });
 
   it("creates a pending root project with an empty assistant message for streaming", () => {

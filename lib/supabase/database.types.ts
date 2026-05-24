@@ -110,6 +110,7 @@ export type Database = {
           role: ChatRole;
           content: string;
           attachments: Json;
+          citations: Json;
           sort_order: number;
           created_at: string;
         };
@@ -120,6 +121,7 @@ export type Database = {
           role: ChatRole;
           content: string;
           attachments?: Json;
+          citations?: Json;
           sort_order?: number;
           created_at?: string;
         };
@@ -130,6 +132,7 @@ export type Database = {
           role?: ChatRole;
           content?: string;
           attachments?: Json;
+          citations?: Json;
           sort_order?: number;
           created_at?: string;
         };
@@ -158,7 +161,14 @@ export type Database = {
           mime_type: string;
           page_count: number;
           title: string | null;
-          status: "uploaded" | "parsing" | "parsed" | "indexing" | "indexed" | "failed";
+          status:
+            | "queued"
+            | "uploaded"
+            | "parsing"
+            | "parsed"
+            | "indexing"
+            | "indexed"
+            | "failed";
           parser_version: string;
           chunk_version: string;
           error_message: string | null;
@@ -178,7 +188,14 @@ export type Database = {
           mime_type: string;
           page_count?: number;
           title?: string | null;
-          status?: "uploaded" | "parsing" | "parsed" | "indexing" | "indexed" | "failed";
+          status?:
+            | "queued"
+            | "uploaded"
+            | "parsing"
+            | "parsed"
+            | "indexing"
+            | "indexed"
+            | "failed";
           parser_version: string;
           chunk_version: string;
           error_message?: string | null;
@@ -198,7 +215,14 @@ export type Database = {
           mime_type?: string;
           page_count?: number;
           title?: string | null;
-          status?: "uploaded" | "parsing" | "parsed" | "indexing" | "indexed" | "failed";
+          status?:
+            | "queued"
+            | "uploaded"
+            | "parsing"
+            | "parsed"
+            | "indexing"
+            | "indexed"
+            | "failed";
           parser_version?: string;
           chunk_version?: string;
           error_message?: string | null;

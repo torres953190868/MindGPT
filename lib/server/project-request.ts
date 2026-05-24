@@ -3,6 +3,7 @@ import { MAX_CHAT_ATTACHMENTS } from "@/lib/chat-attachments";
 import { PROJECT_NOTES_MAX_LENGTH } from "@/lib/project-notes";
 import {
   chatAttachmentSchema,
+  chatCitationSchema,
   chatModelSelectionSchema,
 } from "@/lib/server/node-request";
 
@@ -34,6 +35,7 @@ const chatMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
   content: z.string().max(120_000),
   attachments: z.array(chatAttachmentSchema).max(MAX_CHAT_ATTACHMENTS).default([]),
+  citations: z.array(chatCitationSchema).max(30).optional().default([]),
   createdAt: isoDateStringSchema,
 });
 

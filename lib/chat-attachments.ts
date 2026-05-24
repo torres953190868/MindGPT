@@ -8,6 +8,7 @@ const MAX_ATTACHMENT_MIME_TYPE_LENGTH = 120;
 const MAX_ATTACHMENT_ERROR_LENGTH = 500;
 const MAX_ATTACHMENT_REQUEST_ID_LENGTH = 160;
 const DOCUMENT_STATUSES = new Set([
+  "queued",
   "uploaded",
   "parsing",
   "parsed",

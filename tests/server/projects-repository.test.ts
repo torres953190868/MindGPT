@@ -38,6 +38,25 @@ function makeProject(): Project {
             ],
             createdAt: timestamp,
           },
+          {
+            id: "message-with-citation",
+            role: "assistant",
+            content: "Answer with source [[cite:1]]",
+            attachments: [],
+            citations: [
+              {
+                index: 1,
+                documentId: "document-repository-test",
+                documentName: "source.pdf",
+                chunkId: "chunk-repository-test",
+                pageStart: 2,
+                pageEnd: 3,
+                headingPath: ["Chapter 1"],
+                quote: "Repository citation text.",
+              },
+            ],
+            createdAt: timestamp,
+          },
         ],
         children: [],
         position: { x: 0, y: 0 },
@@ -83,6 +102,7 @@ describe("projects repository row mapping", () => {
       messageRows.map((messageRow) => ({
         ...messageRow,
         attachments: messageRow.attachments ?? [],
+        citations: messageRow.citations ?? [],
         sort_order: messageRow.sort_order ?? 0,
         created_at: messageRow.created_at ?? timestamp,
       })),
@@ -93,6 +113,9 @@ describe("projects repository row mapping", () => {
     expect(rootNode.titleManuallyEdited).toBe(true);
     expect(rootNode.messages[0].attachments).toEqual(
       project.nodes[project.rootNodeId].messages[0].attachments,
+    );
+    expect(rootNode.messages[1].citations).toEqual(
+      project.nodes[project.rootNodeId].messages[1].citations,
     );
   });
 });

@@ -72,9 +72,26 @@ type KnowledgeDocument = {
 
 type UploadPdfResponse = {
   document: UploadedDocument;
+  job?: {
+    action: "parse" | "index";
+    documentId: string;
+    messageId: string | null;
+    requestId: string;
+    topic: string;
+  };
 };
 
 type IndexPdfResponse = {
+  job: {
+    action: "parse" | "index";
+    documentId: string;
+    messageId: string | null;
+    requestId: string;
+    topic: string;
+  };
+};
+
+type DocumentDetailsResponse = {
   document: UploadedDocument;
 };
 
@@ -88,6 +105,8 @@ const FALLBACK_MODEL_SELECTION: ChatModelSelection = {
 };
 
 const MODEL_SELECTION_STORAGE_KEY = "branchmind.chatModelSelection.v1";
+const PDF_INDEX_POLL_INTERVAL_MS = 2_500;
+const PDF_INDEX_POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
 const FALLBACK_MODEL_OPTIONS: ChatModelOption[] = [
   {
@@ -165,7 +184,9 @@ export function getAttachmentDetailLabel(attachment: ChatAttachment) {
 
 function getPendingAttachmentStatusLabel(attachment: PendingChatAttachment) {
   if (attachment.uploadStatus === "uploading") return "Uploading";
-  if (attachment.uploadStatus === "indexing") return "Indexing";
+  if (attachment.uploadStatus === "queued" || attachment.uploadStatus === "indexing") {
+    return "Ingesting";
+  }
   if (attachment.uploadStatus === "indexed") return "Indexed";
   if (attachment.uploadStatus === "failed") return "Failed";
   if (attachment.documentId && attachment.documentStatus === "indexed") return "Indexed";
@@ -178,6 +199,113 @@ function isPdfAttachment(attachment: PendingChatAttachment) {
     attachment.mimeType.toLowerCase() === "application/pdf" ||
     attachment.name.toLowerCase().endsWith(".pdf")
   );
+}
+
+function isIndexingStatus(status: DocumentStatus | undefined) {
+  return status === "queued" || status === "parsing" || status === "indexing";
+}
+
+function shouldEnqueueIndex(status: DocumentStatus | undefined) {
+  return (
+    status !== "queued" &&
+    status !== "parsing" &&
+    status !== "indexing" &&
+    status !== "indexed"
+  );
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function waitForIndexedDocument(documentId: string) {
+  const deadline = Date.now() + PDF_INDEX_POLL_TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    const details = await readJsonApi<DocumentDetailsResponse>(
+      `/api/documents/${documentId}`,
+    );
+    const document = details.document;
+
+    if (document.status === "indexed") return document;
+    if (document.status === "failed") {
+      const reference = document.errorRequestId
+        ? ` (Reference: ${document.errorRequestId})`
+        : "";
+      throw new Error(
+        `${document.errorMessage || "PDF indexing failed."}${reference}`,
+      );
+    }
+
+    await wait(PDF_INDEX_POLL_INTERVAL_MS);
+  }
+
+  throw new Error("PDF indexing is still running. Please try sending again shortly.");
+}
+
+async function ingestPdfAttachment(
+  attachment: PendingChatAttachment,
+  onProgress: (next: PendingChatAttachment) => void,
+) {
+  let current: PendingChatAttachment = {
+    ...attachment,
+    uploadStatus: attachment.documentId
+      ? isIndexingStatus(attachment.documentStatus)
+        ? "indexing"
+        : "queued"
+      : "uploading",
+    errorMessage: null,
+    errorRequestId: null,
+  };
+  onProgress(current);
+
+  if (!current.documentId) {
+    const formData = new FormData();
+    formData.set("file", attachment.file as File);
+    const upload = await readJsonApi<UploadPdfResponse>("/api/documents/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    current = {
+      ...current,
+      documentId: upload.document.id,
+      documentStatus: upload.document.status,
+      mimeType: upload.document.mimeType || current.mimeType || "application/pdf",
+      uploadStatus: "queued",
+    };
+    onProgress(current);
+  }
+
+  if (!current.documentId) {
+    throw new Error("PDF upload did not return a document id.");
+  }
+
+  const documentId = current.documentId;
+  if (shouldEnqueueIndex(current.documentStatus)) {
+    await readJsonApi<IndexPdfResponse>(
+      `/api/documents/${documentId}/index`,
+      { method: "POST" },
+    );
+  }
+
+  current = {
+    ...current,
+    uploadStatus: "indexing",
+  };
+  onProgress(current);
+
+  const indexed = await waitForIndexedDocument(documentId);
+  current = {
+    ...current,
+    documentStatus: indexed.status,
+    errorMessage: indexed.errorMessage,
+    errorRequestId: indexed.errorRequestId,
+    uploadStatus: "indexed",
+  };
+  onProgress(current);
+
+  return current;
 }
 
 function toSendableAttachment(attachment: PendingChatAttachment): ChatAttachment {
@@ -332,6 +460,11 @@ export function useChatComposerControls({
   const [isLoadingKnowledgeDocuments, setIsLoadingKnowledgeDocuments] = useState(false);
   const [knowledgeDocumentError, setKnowledgeDocumentError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingAttachmentsRef = useRef<PendingChatAttachment[]>([]);
+  const inFlightIngestionRef = useRef(new Map<string, Promise<PendingChatAttachment>>());
+  const ingestionRunIdsRef = useRef(new Map<string, number>());
+  const nextIngestionRunIdRef = useRef(0);
+  const isMountedRef = useRef(true);
   const modelMenuRef = useRef<HTMLDivElement>(null);
   const attachmentMenuRef = useRef<HTMLDivElement>(null);
   const selectedModelOption = modelOptions.find((option) =>
@@ -344,6 +477,21 @@ export function useChatComposerControls({
   const indexedKnowledgeDocuments = knowledgeDocuments.filter(
     (document) => document.status === "indexed",
   );
+
+  useEffect(() => {
+    pendingAttachmentsRef.current = pendingAttachments;
+  }, [pendingAttachments]);
+
+  useEffect(() => {
+    const inFlightIngestion = inFlightIngestionRef.current;
+    const ingestionRunIds = ingestionRunIdsRef.current;
+
+    return () => {
+      isMountedRef.current = false;
+      inFlightIngestion.clear();
+      ingestionRunIds.clear();
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -475,6 +623,78 @@ export function useChatComposerControls({
     };
   }, [isAttachmentMenuOpen]);
 
+  function setAttachmentIngestionProgress(next: PendingChatAttachment) {
+    setPendingAttachments((current) => replacePendingAttachment(current, next));
+  }
+
+  function hasPendingAttachment(attachmentId: string) {
+    return pendingAttachmentsRef.current.some(
+      (attachment) => attachment.id === attachmentId,
+    );
+  }
+
+  function isCurrentIngestionRun(attachmentId: string, runId: number) {
+    return ingestionRunIdsRef.current.get(attachmentId) === runId;
+  }
+
+  function startPdfIngestion(attachment: PendingChatAttachment) {
+    if (
+      !isPdfAttachment(attachment) ||
+      !attachment.file ||
+      attachment.documentStatus === "indexed" ||
+      inFlightIngestionRef.current.has(attachment.id)
+    ) {
+      return;
+    }
+
+    const runId = nextIngestionRunIdRef.current + 1;
+    nextIngestionRunIdRef.current = runId;
+    ingestionRunIdsRef.current.set(attachment.id, runId);
+
+    const ingestion = ingestPdfAttachment(attachment, (next) => {
+      if (!isMountedRef.current || !isCurrentIngestionRun(attachment.id, runId)) {
+        return;
+      }
+      setAttachmentIngestionProgress(next);
+    });
+
+    inFlightIngestionRef.current.set(attachment.id, ingestion);
+
+    void ingestion
+      .catch((ingestionError) => {
+        if (
+          !isMountedRef.current ||
+          !isCurrentIngestionRun(attachment.id, runId) ||
+          !hasPendingAttachment(attachment.id)
+        ) {
+          return;
+        }
+
+        const message =
+          ingestionError instanceof Error ? ingestionError.message : "PDF upload failed.";
+        const errorRequestId =
+          ingestionError instanceof ApiRequestError ? ingestionError.requestId : null;
+        setAttachmentError(message);
+        setPendingAttachments((current) =>
+          current.map((item) =>
+            item.id === attachment.id
+              ? {
+                  ...item,
+                  uploadStatus: "failed",
+                  errorMessage: message,
+                  errorRequestId,
+                }
+              : item,
+          ),
+        );
+      })
+      .finally(() => {
+        if (isCurrentIngestionRun(attachment.id, runId)) {
+          inFlightIngestionRef.current.delete(attachment.id);
+        }
+      });
+  }
+
   async function prepareAttachmentsForSend() {
     if (isPreparingAttachments) return null;
 
@@ -504,47 +724,16 @@ export function useChatComposerControls({
           continue;
         }
 
-        let current: PendingChatAttachment = {
-          ...attachment,
-          uploadStatus: attachment.documentId ? "indexing" : "uploading",
-          errorMessage: null,
-        };
-        prepared = replacePendingAttachment(prepared, current);
-        setPendingAttachments(prepared);
-
-        if (!current.documentId) {
-          const formData = new FormData();
-          formData.set("file", attachment.file);
-          const upload = await readJsonApi<UploadPdfResponse>("/api/documents/upload", {
-            method: "POST",
-            body: formData,
-          });
-
-          current = {
-            ...current,
-            documentId: upload.document.id,
-            documentStatus: upload.document.status,
-            mimeType: upload.document.mimeType || current.mimeType || "application/pdf",
-            uploadStatus: "indexing",
-          };
-          prepared = replacePendingAttachment(prepared, current);
-          setPendingAttachments(prepared);
-        }
-
-        if (!current.documentId) {
-          throw new Error("PDF upload did not return a document id.");
-        }
-
-        const indexed = await readJsonApi<IndexPdfResponse>(
-          `/api/documents/${current.documentId}/index`,
-          { method: "POST" },
-        );
-
-        current = {
-          ...current,
-          documentStatus: indexed.document.status,
-          errorMessage: indexed.document.errorMessage,
-          uploadStatus: "indexed",
+        const inFlightIngestion = inFlightIngestionRef.current.get(attachment.id);
+        const indexed = inFlightIngestion
+          ? await inFlightIngestion
+          : await ingestPdfAttachment(attachment, (next) => {
+              prepared = replacePendingAttachment(prepared, next);
+              setPendingAttachments(prepared);
+            });
+        const current = {
+          ...indexed,
+          uploadStatus: "indexed" as const,
         };
         prepared = replacePendingAttachment(prepared, current);
         setPendingAttachments(prepared);
@@ -559,7 +748,9 @@ export function useChatComposerControls({
       setAttachmentError(message);
       setPendingAttachments((current) =>
         current.map((attachment) =>
-          attachment.uploadStatus === "uploading" || attachment.uploadStatus === "indexing"
+          attachment.uploadStatus === "uploading" ||
+          attachment.uploadStatus === "indexing" ||
+          attachment.uploadStatus === "queued"
             ? {
                 ...attachment,
                 uploadStatus: "failed",
@@ -641,38 +832,44 @@ export function useChatComposerControls({
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
 
-    setAttachmentError(null);
-    setPendingAttachments((current) => {
-      const remainingSlots = Math.max(0, maxAttachments - current.length);
-      const createdAt = new Date().toISOString();
-      const nextAttachments: PendingChatAttachment[] = files
-        .slice(0, remainingSlots)
-        .map((file) => ({
-          id: createId("attachment"),
-          name: file.name,
-          mimeType: file.type,
-          size: file.size,
-          createdAt,
-          file,
-          uploadStatus:
-            file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
-              ? "queued"
-              : undefined,
-        }));
+    const remainingSlots = Math.max(0, maxAttachments - pendingAttachments.length);
+    const createdAt = new Date().toISOString();
+    const nextAttachments: PendingChatAttachment[] = files
+      .slice(0, remainingSlots)
+      .map((file) => ({
+        id: createId("attachment"),
+        name: file.name,
+        mimeType: file.type,
+        size: file.size,
+        createdAt,
+        file,
+      }));
 
+    setAttachmentError(null);
+    pendingAttachmentsRef.current = [...pendingAttachmentsRef.current, ...nextAttachments];
+    setPendingAttachments((current) => {
       return [...current, ...nextAttachments];
     });
+    nextAttachments.forEach(startPdfIngestion);
     event.target.value = "";
   }
 
   function removePendingAttachment(attachmentId: string) {
     setAttachmentError(null);
+    ingestionRunIdsRef.current.delete(attachmentId);
+    inFlightIngestionRef.current.delete(attachmentId);
+    pendingAttachmentsRef.current = pendingAttachmentsRef.current.filter(
+      (attachment) => attachment.id !== attachmentId,
+    );
     setPendingAttachments((current) =>
       current.filter((attachment) => attachment.id !== attachmentId),
     );
   }
 
   const resetAttachments = useCallback(() => {
+    inFlightIngestionRef.current.clear();
+    ingestionRunIdsRef.current.clear();
+    pendingAttachmentsRef.current = [];
     setPendingAttachments([]);
     setAttachmentError(null);
     setIsAttachmentMenuOpen(false);
@@ -743,6 +940,7 @@ export function PendingAttachmentChips({
           className="inline-flex max-w-full items-center gap-2 rounded-full bg-white/75 px-3 py-1.5 text-xs font-bold text-neutral-700"
         >
           {attachment.uploadStatus === "uploading" ||
+          attachment.uploadStatus === "queued" ||
           attachment.uploadStatus === "indexing" ? (
             <Loader2 size={14} className="shrink-0 animate-spin" />
           ) : isKnowledgeAttachment(attachment) ? (

@@ -119,7 +119,7 @@ describe("requestDeepSeekReply", () => {
                 content: JSON.stringify({
                   title: "PDF answer",
                   summary: "Uses PDF context.",
-                  content: "The attached PDF discusses retrieval cues on page 3.",
+                  content: "The attached PDF discusses retrieval cues [[cite:1]].",
                 }),
               },
             },
@@ -130,7 +130,7 @@ describe("requestDeepSeekReply", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await requestDeepSeekReply({
+    const reply = await requestDeepSeekReply({
       instruction: "Summarize the attached PDF.",
       documentContexts: [
         {
@@ -154,14 +154,79 @@ describe("requestDeepSeekReply", () => {
     expect(requestBody.messages[0].content).toContain(
       "When retrieved PDF context is provided",
     );
+    expect(requestBody.messages[0].content).toContain("[[cite:N]]");
     expect(requestBody.messages[1].content).toContain("Retrieved PDF context:");
     expect(requestBody.messages[1].content).toContain("PDF: memory.pdf (Memory Systems)");
     expect(requestBody.messages[1].content).toContain(
-      "p. 3 | Chapter 1 > Retrieval | chunk chunk_memory",
+      "[source 1; cite as [[cite:1]]] p. 3 | Chapter 1 > Retrieval | chunk chunk_memory",
     );
     expect(requestBody.messages[1].content).toContain(
       "Retrieval cues help long term memory recall.",
     );
+    expect(reply.citations).toEqual([
+      expect.objectContaining({
+        index: 1,
+        documentId: "doc_memory",
+        documentName: "Memory Systems",
+        chunkId: "chunk_memory",
+        pageStart: 3,
+        pageEnd: 3,
+      }),
+    ]);
+  });
+
+  it("accepts single-bracket PDF citation markers from model replies", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  title: "PDF answer",
+                  summary: "Uses PDF context.",
+                  content: "The attached PDF discusses retrieval cues [cite:1].",
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const reply = await requestDeepSeekReply({
+      instruction: "Summarize the attached PDF.",
+      documentContexts: [
+        {
+          documentId: "doc_memory",
+          fileName: "memory.pdf",
+          title: "Memory Systems",
+          snippets: [
+            {
+              chunkId: "chunk_memory",
+              pageStart: 3,
+              pageEnd: 3,
+              headingPath: ["Chapter 1", "Retrieval"],
+              content: "Retrieval cues help long term memory recall.",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(reply.citations).toEqual([
+      expect.objectContaining({
+        index: 1,
+        documentId: "doc_memory",
+        documentName: "Memory Systems",
+        chunkId: "chunk_memory",
+      }),
+    ]);
   });
 
   it("uses a per-request provider and model selection", async () => {

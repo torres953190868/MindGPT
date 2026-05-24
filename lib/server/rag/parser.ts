@@ -1,5 +1,4 @@
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { cleanPageText, removeRepeatedHeadersAndFooters } from "./cleaner";
 import { PDF_PARSER_VERSION } from "./config";
 import { RagError } from "./errors";
@@ -63,7 +62,7 @@ let pdfjsModulePromise: Promise<PdfModule> | null = null;
 
 function pdfAssetUrl(...segments: string[]) {
   const resolvedPath = path.resolve(process.cwd(), "node_modules", "pdfjs-dist", ...segments);
-  return pathToFileURL(`${resolvedPath}${path.sep}`).toString();
+  return `${resolvedPath}${path.sep}`;
 }
 
 async function loadPdfJs() {

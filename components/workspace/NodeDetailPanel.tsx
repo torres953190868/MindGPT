@@ -784,6 +784,7 @@ export function NodeDetailPanel({
                       content={
                         message.content || (isStreamingAssistant ? "Generating answer..." : "")
                       }
+                      citations={message.citations ?? []}
                       isStreaming={isStreamingAssistant}
                     />
                   )}

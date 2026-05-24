@@ -62,12 +62,19 @@ SUPABASE_SERVICE_ROLE_KEY=
 
 `auto` uses Supabase when configured and local file storage under `data/` otherwise. Production requires Supabase configuration.
 
+PDF indexing uses Vercel Queues in production. In local `next dev`, BranchMind
+runs indexing inline in the dev server process by default, avoiding Vercel OIDC
+requirements. Set `BRANCHMIND_RAG_QUEUE_MODE=queue` to force queue-only behavior,
+or `BRANCHMIND_RAG_QUEUE_MODE=inline` to force inline processing explicitly.
+
 ## Database
 
 Apply Supabase migrations in `supabase/migrations`, including:
 
 - `20260514010000_pdf_rag_foundation.sql`
 - `20260516010000_pdf_rag_diagnostics.sql`
+- `20260524000000_pdf_rag_queued_status.sql`
+- `20260524010000_branchmind_message_citations.sql`
 
 The RAG migration creates:
 

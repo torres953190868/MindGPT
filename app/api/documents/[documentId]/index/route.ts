@@ -5,7 +5,7 @@ import { checkRateLimitAsync } from "@/lib/server/rate-limit";
 import { getOrCreateRequestId } from "@/lib/server/request";
 import { assertValidRequestOrigin } from "@/lib/server/security";
 import { getOrCreateSession } from "@/lib/server/session";
-import { indexDocumentForOwner } from "@/lib/server/rag/indexer";
+import { enqueueRagProcessingJob } from "@/lib/server/rag/jobs";
 
 type IndexRouteContext = {
   params: Promise<{ documentId: string }>;
@@ -43,10 +43,13 @@ export async function POST(request: NextRequest, context: IndexRouteContext) {
       );
     }
 
-    const result = await indexDocumentForOwner(principal.id, documentId, {
-      requestId,
-    });
-    return jsonWithSession(result, session, undefined, { requestId });
+    const job = await enqueueRagProcessingJob(principal.id, documentId, "index", requestId);
+    return jsonWithSession(
+      { job },
+      session,
+      { status: 202 },
+      { requestId },
+    );
   } catch (error) {
     return safeErrorWithSession(error, fallbackSession, { requestId });
   }

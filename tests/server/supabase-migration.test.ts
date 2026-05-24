@@ -17,6 +17,13 @@ const messageAttachmentsMigration = readFileSync(
   ),
   "utf8",
 );
+const messageCitationsMigration = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/20260524010000_branchmind_message_citations.sql",
+  ),
+  "utf8",
+);
 const ragFoundationMigration = readFileSync(
   join(process.cwd(), "supabase/migrations/20260514010000_pdf_rag_foundation.sql"),
   "utf8",
@@ -70,6 +77,12 @@ describe("Supabase foundation migration", () => {
   it("adds message attachment metadata persistence", () => {
     expect(messageAttachmentsMigration).toContain(
       "add column if not exists attachments jsonb not null default '[]'::jsonb",
+    );
+  });
+
+  it("adds message citation metadata persistence", () => {
+    expect(messageCitationsMigration).toContain(
+      "add column if not exists citations jsonb not null default '[]'::jsonb",
     );
   });
 

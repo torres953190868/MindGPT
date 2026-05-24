@@ -150,6 +150,21 @@ export async function getDocumentFileForOwner(userId: string, documentId: string
   return { document, bytes };
 }
 
+export async function getDocumentFileSourceForOwner(
+  userId: string,
+  documentId: string,
+) {
+  const repository = getRagRepository();
+  const document = await requireOwnedDocument(userId, documentId);
+  const source = await repository.getDocumentFileSource(document);
+
+  if (!source) {
+    throwPdfFileNotFound();
+  }
+
+  return { document, source };
+}
+
 export async function getDocumentChunksForOwner(userId: string, documentId: string) {
   const repository = getRagRepository();
   await requireOwnedDocument(userId, documentId);
