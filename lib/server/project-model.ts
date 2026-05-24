@@ -1,5 +1,6 @@
 import { collectDescendantIds, getChildPosition, ROOT_POSITION } from "@/lib/graph";
 import { createId } from "@/lib/ids";
+import { resolveRegenerateTargets } from "@/lib/message-regeneration";
 import type {
   BranchType,
   ChatAttachment,
@@ -272,30 +273,16 @@ export function regenerateNode(
     typeof update.instruction === "string" ? update.instruction.trim() : undefined;
   if (typeof update.instruction === "string" && !instruction) return null;
 
-  const userMessageIndex =
-    typeof update.userMessageId === "string"
-      ? node.messages.findIndex(
-          (message) => message.id === update.userMessageId && message.role === "user",
-        )
-      : node.messages.findIndex((message) => message.role === "user");
-  const assistantMessageIndex =
-    typeof update.assistantMessageId === "string"
-      ? node.messages.findIndex(
-          (message) =>
-            message.id === update.assistantMessageId && message.role === "assistant",
-        )
-      : node.messages.findLastIndex((message) => message.role === "assistant");
-
-  if ((instruction || update.userMessageId) && userMessageIndex < 0) return null;
-  if (assistantMessageIndex < 0) return null;
+  const targets = resolveRegenerateTargets(node.messages, update);
+  if (!targets) return null;
 
   const timestamp = now();
   const nextMessages = node.messages.map((message, index) => {
-    if (instruction && index === userMessageIndex) {
+    if (instruction && index === targets.userMessageIndex) {
       return { ...message, content: instruction };
     }
 
-    if (index === assistantMessageIndex) {
+    if (index === targets.assistantMessageIndex) {
       return {
         ...message,
         content: update.reply.content,
@@ -307,15 +294,18 @@ export function regenerateNode(
   });
   const nextNode = {
     ...node,
-    title: node.titleManuallyEdited ? node.title : update.reply.title,
-    summary: update.reply.summary,
+    title:
+      targets.isLatestAssistant && !node.titleManuallyEdited
+        ? update.reply.title
+        : node.title,
+    summary: targets.isLatestAssistant ? update.reply.summary : node.summary,
     messages: nextMessages,
     updatedAt: timestamp,
   };
   const nextProjectTitle =
-    nodeId === project.rootNodeId && nextNode.titleManuallyEdited
+    targets.isLatestAssistant && nodeId === project.rootNodeId && nextNode.titleManuallyEdited
       ? nextNode.title
-      : instruction && nodeId === project.rootNodeId
+      : targets.isLatestAssistant && instruction && nodeId === project.rootNodeId
         ? instruction
         : project.title;
 

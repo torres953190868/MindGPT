@@ -290,6 +290,7 @@ describe("prepareRegenerateNodeContext", () => {
 
     expect(context.instruction).toBe("Edited first prompt");
     expect(context.attachments).toEqual([attachmentA]);
+    expect(context.messages.map((message) => message.content)).toEqual([]);
   });
 
   it("uses the nearest preceding user message attachments when retrying an assistant reply", async () => {
@@ -304,6 +305,28 @@ describe("prepareRegenerateNodeContext", () => {
 
     expect(context.instruction).toBe("Second prompt");
     expect(context.attachments).toEqual([attachmentB]);
+    expect(context.messages.map((message) => message.content)).toEqual([
+      "First prompt",
+      "First answer",
+    ]);
+  });
+
+  it("rejects explicit regenerate targets from different turns", async () => {
+    await expect(
+      prepareRegenerateNodeContext(
+        "owner_regenerate",
+        "project_regenerate",
+        "node_regenerate",
+        {
+          instruction: "Edited first prompt",
+          userMessageId: "user_a",
+          assistantMessageId: "assistant_b",
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "REGENERATE_TARGET_MISMATCH",
+      status: 400,
+    });
   });
 });
 

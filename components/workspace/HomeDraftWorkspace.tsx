@@ -151,6 +151,7 @@ export function HomeDraftWorkspace() {
       aiError={aiError}
       creatingNodeId={null}
       streamingNodeId={creatingProject ? DRAFT_ROOT_NODE_ID : null}
+      streamingMessageId={null}
       onSelectNode={handleSelectNode}
       onQuickCreateNode={ignoreQuickCreateNode}
       onCreateNode={ignoreCreateNode}

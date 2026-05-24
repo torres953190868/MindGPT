@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { getOptionalSupabaseUser } from "@/lib/server/auth";
 import { HttpError } from "@/lib/server/http";
+import { assertValidRequestOrigin } from "@/lib/server/security";
 
 export type AdminAccess =
   | {
@@ -78,8 +79,11 @@ export async function getAdminAccess(): Promise<AdminAccess> {
   };
 }
 
-export async function requireAdminAccess(_request?: NextRequest) {
-  void _request;
+export async function requireAdminAccess(request: NextRequest) {
+  assertValidRequestOrigin(request, {
+    allowMissingOrigin: process.env.NODE_ENV !== "production",
+  });
+
   const access = await getAdminAccess();
   if (access.allowed) return access;
 

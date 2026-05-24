@@ -108,6 +108,7 @@ type WorkspaceCanvasShellProps = {
   aiError: string | null;
   creatingNodeId: string | null;
   streamingNodeId: string | null;
+  streamingMessageId: string | null;
   onSelectNode: (nodeId: string) => void;
   onQuickCreateNode: (nodeId: string, mode: "continue" | "branch") => void;
   onCreateNode: CreateNodeHandler;
@@ -304,6 +305,7 @@ export function WorkspaceCanvasShell({
   aiError,
   creatingNodeId,
   streamingNodeId,
+  streamingMessageId,
   onSelectNode,
   onQuickCreateNode,
   onCreateNode,
@@ -1052,6 +1054,7 @@ export function WorkspaceCanvasShell({
               onToggleNode={onToggleNode}
               onDeleteNode={onDeleteNode}
               isCreating={isSelectedNodeCreating}
+              streamingMessageId={streamingMessageId}
               isNotesOpen={isProjectNotesSidePanelOpen || isProjectNotesMobileViewOpen}
               error={aiError}
               onToggleNotes={handleToggleProjectNotesPanel}

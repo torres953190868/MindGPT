@@ -57,6 +57,52 @@ function expectConsistentGraph(project: ReturnType<typeof createRootProject>) {
   }
 }
 
+function createMultiTurnProject() {
+  const project = createRootProject("Original first prompt", rootReply);
+  const node = project.nodes[project.rootNodeId];
+  const timestamp = "2026-01-01T00:00:00.000Z";
+
+  return {
+    ...project,
+    nodes: {
+      ...project.nodes,
+      [project.rootNodeId]: {
+        ...node,
+        messages: [
+          {
+            id: "user_a",
+            role: "user" as const,
+            content: "First prompt",
+            attachments: [],
+            createdAt: timestamp,
+          },
+          {
+            id: "assistant_a",
+            role: "assistant" as const,
+            content: "First answer",
+            attachments: [],
+            createdAt: timestamp,
+          },
+          {
+            id: "user_b",
+            role: "user" as const,
+            content: "Second prompt",
+            attachments: [],
+            createdAt: timestamp,
+          },
+          {
+            id: "assistant_b",
+            role: "assistant" as const,
+            content: "Second answer",
+            attachments: [],
+            createdAt: timestamp,
+          },
+        ],
+      },
+    },
+  };
+}
+
 describe("project model helpers", () => {
   it("creates a root project with the initial user and assistant messages", () => {
     const project = createRootProject("  Graph search  ", rootReply);
@@ -363,6 +409,69 @@ describe("project model helpers", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("edits an earlier user message by replacing its paired assistant reply", () => {
+    const project = createMultiTurnProject();
+    const rootId = project.rootNodeId;
+
+    const regenerated = regenerateNode(project, rootId, {
+      instruction: "Edited first prompt",
+      userMessageId: "user_a",
+      reply: {
+        title: "Replacement title",
+        summary: "Replacement summary",
+        content: "Replacement first answer",
+      },
+    });
+
+    expect(regenerated?.node.title).toBe("Root concept");
+    expect(regenerated?.node.summary).toBe("Root summary");
+    expect(regenerated?.project.title).toBe("Original first prompt");
+    expect(regenerated?.node.messages.map((message) => message.content)).toEqual([
+      "Edited first prompt",
+      "Replacement first answer",
+      "Second prompt",
+      "Second answer",
+    ]);
+  });
+
+  it("retries a later assistant reply while preserving earlier turns", () => {
+    const project = createMultiTurnProject();
+    const rootId = project.rootNodeId;
+
+    const regenerated = regenerateNode(project, rootId, {
+      assistantMessageId: "assistant_b",
+      reply: {
+        title: "Latest replacement title",
+        summary: "Latest replacement summary",
+        content: "Replacement second answer",
+      },
+    });
+
+    expect(regenerated?.node).toMatchObject({
+      title: "Latest replacement title",
+      summary: "Latest replacement summary",
+    });
+    expect(regenerated?.node.messages.map((message) => message.content)).toEqual([
+      "First prompt",
+      "First answer",
+      "Second prompt",
+      "Replacement second answer",
+    ]);
+  });
+
+  it("rejects explicit regenerate targets from different turns", () => {
+    const project = createMultiTurnProject();
+
+    expect(
+      regenerateNode(project, project.rootNodeId, {
+        instruction: "Edited first prompt",
+        userMessageId: "user_a",
+        assistantMessageId: "assistant_b",
+        reply: childReply,
+      }),
+    ).toBeNull();
   });
 
   it("rejects regenerate targets with mismatched message roles", () => {

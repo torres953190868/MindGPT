@@ -1,5 +1,10 @@
 import { getContextTitles, getNodeConversationMessages } from "@/lib/graph";
 import {
+  getRegenerateConversationPrefix,
+  resolveRegenerateTargets,
+  type RegenerateTargets,
+} from "@/lib/message-regeneration";
+import {
   createRootProject,
   createPendingRootProject,
   addBlankChildNode,
@@ -25,7 +30,6 @@ import {
 import type {
   BranchType,
   ChatAttachment,
-  ChatMessage,
   MockReply,
   NodePosition,
   Project,
@@ -88,74 +92,54 @@ function getContextSummaries(project: Project, nodeId: string) {
   });
 }
 
-function findLastAssistantMessage(node: Project["nodes"][string]) {
-  for (let index = node.messages.length - 1; index >= 0; index -= 1) {
-    const message = node.messages[index];
-    if (message.role === "assistant") return message;
-  }
-
-  return null;
-}
-
 function resolveRegenerateInstruction(
   node: Project["nodes"][string],
   update: PrepareRegenerateNodeUpdate,
+  targets: RegenerateTargets,
 ) {
   if (typeof update.instruction === "string") return update.instruction.trim();
 
-  const message = findRegenerateUserMessage(node, update);
-
-  if (!message || message.role !== "user") {
+  if (targets.userMessage.role !== "user") {
     badRequest("User message was not found.", "USER_MESSAGE_NOT_FOUND");
   }
 
-  return message.content.trim();
+  return targets.userMessage.content.trim();
 }
 
-function assertRegenerateTargets(
+function getRegenerateTargetsOrBadRequest(
   node: Project["nodes"][string],
   update: PrepareRegenerateNodeUpdate,
 ) {
-  if (update.userMessageId) {
-    const userMessage = node.messages.find((message) => message.id === update.userMessageId);
-    if (!userMessage || userMessage.role !== "user") {
-      badRequest("User message was not found.", "USER_MESSAGE_NOT_FOUND");
-    }
+  const targets = resolveRegenerateTargets(node.messages, update);
+  if (targets) return targets;
+
+  if (
+    update.userMessageId &&
+    !node.messages.some(
+      (message) => message.id === update.userMessageId && message.role === "user",
+    )
+  ) {
+    badRequest("User message was not found.", "USER_MESSAGE_NOT_FOUND");
   }
 
-  const assistantMessage = update.assistantMessageId
-    ? node.messages.find((message) => message.id === update.assistantMessageId)
-    : findLastAssistantMessage(node);
-
-  if (!assistantMessage || assistantMessage.role !== "assistant") {
+  if (
+    update.assistantMessageId &&
+    !node.messages.some(
+      (message) =>
+        message.id === update.assistantMessageId && message.role === "assistant",
+    )
+  ) {
     badRequest("Assistant message was not found.", "ASSISTANT_MESSAGE_NOT_FOUND");
   }
-}
 
-function findRegenerateUserMessage(
-  node: Project["nodes"][string],
-  update: PrepareRegenerateNodeUpdate,
-): ChatMessage | null {
-  if (update.userMessageId) {
-    return (
-      node.messages.find(
-        (message) => message.id === update.userMessageId && message.role === "user",
-      ) ?? null
+  if (update.userMessageId && update.assistantMessageId) {
+    badRequest(
+      "User and assistant messages are not a regeneration pair.",
+      "REGENERATE_TARGET_MISMATCH",
     );
   }
 
-  if (update.assistantMessageId) {
-    const assistantIndex = node.messages.findIndex(
-      (message) => message.id === update.assistantMessageId && message.role === "assistant",
-    );
-
-    for (let index = assistantIndex - 1; index >= 0; index -= 1) {
-      const message = node.messages[index];
-      if (message.role === "user") return message;
-    }
-  }
-
-  return node.messages.find((message) => message.role === "user") ?? null;
+  badRequest("Assistant message was not found.", "ASSISTANT_MESSAGE_NOT_FOUND");
 }
 
 export async function listProjects(ownerId: string) {
@@ -565,24 +549,28 @@ export async function prepareRegenerateNodeContext(
   const node = project?.nodes[nodeId];
   if (!project || !node) notFound();
 
-  assertRegenerateTargets(node, update);
-  const instruction = resolveRegenerateInstruction(node, update);
+  const targets = getRegenerateTargetsOrBadRequest(node, update);
+  const instruction = resolveRegenerateInstruction(node, update, targets);
   if (!instruction) {
     badRequest("User instruction is required.", "USER_INSTRUCTION_REQUIRED");
   }
 
   const parentId = node.parentId;
-  const userMessage = findRegenerateUserMessage(node, update);
+  const ancestorMessages = parentId
+    ? getNodeConversationMessages(project, parentId).map((item) => item.message)
+    : [];
+  const currentMessages = getRegenerateConversationPrefix(
+    node.messages,
+    targets,
+  );
 
   return {
     node,
     instruction,
-    attachments: userMessage?.attachments ?? [],
+    attachments: targets.userMessage.attachments,
     mode: node.branchType,
     contextSummaries: parentId ? getContextSummaries(project, parentId) : [],
-    messages: parentId
-      ? getNodeConversationMessages(project, parentId).map((item) => item.message)
-      : [],
+    messages: [...ancestorMessages, ...currentMessages],
   };
 }
 

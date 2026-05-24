@@ -7,6 +7,7 @@ import {
 } from "@/lib/client/api";
 import { getChildPosition } from "@/lib/graph";
 import { createId } from "@/lib/ids";
+import { resolveRegenerateTargets } from "@/lib/message-regeneration";
 import type {
   BranchType,
   ChatAttachment,
@@ -211,15 +212,6 @@ export function appendDraftAssistantDelta(
   };
 }
 
-function findLastAssistantMessageId(node: MindNode) {
-  for (let index = node.messages.length - 1; index >= 0; index -= 1) {
-    const message = node.messages[index];
-    if (message.role === "assistant") return message.id;
-  }
-
-  return null;
-}
-
 export function createRegeneratingNodeProject(
   project: Project,
   nodeId: string,
@@ -236,32 +228,21 @@ export function createRegeneratingNodeProject(
     typeof update.instruction === "string" ? update.instruction.trim() : undefined;
   if (typeof update.instruction === "string" && !instruction) return null;
 
-  const assistantMessageId =
-    update.assistantMessageId ?? findLastAssistantMessageId(node);
-  if (!assistantMessageId) return null;
+  const targets = resolveRegenerateTargets(node.messages, update);
+  if (!targets) return null;
 
-  let hasUserTarget = !instruction && !update.userMessageId;
-  let hasAssistantTarget = false;
   const timestamp = now();
-  const messages = node.messages.map((message) => {
-    if (
-      instruction &&
-      message.role === "user" &&
-      (!update.userMessageId || message.id === update.userMessageId)
-    ) {
-      hasUserTarget = true;
+  const messages = node.messages.map((message, index) => {
+    if (instruction && index === targets.userMessageIndex) {
       return { ...message, content: instruction };
     }
 
-    if (message.id === assistantMessageId && message.role === "assistant") {
-      hasAssistantTarget = true;
+    if (index === targets.assistantMessageIndex) {
       return { ...message, content: "" };
     }
 
     return message;
   });
-
-  if (!hasUserTarget || !hasAssistantTarget) return null;
 
   const nextNode = {
     ...node,
@@ -270,12 +251,14 @@ export function createRegeneratingNodeProject(
   };
 
   return {
-    assistantMessageId,
     node: nextNode,
     project: {
       ...project,
       title:
-        instruction && nodeId === project.rootNodeId && !node.titleManuallyEdited
+        targets.isLatestAssistant &&
+        instruction &&
+        nodeId === project.rootNodeId &&
+        !node.titleManuallyEdited
           ? instruction
           : project.title,
       nodes: {
@@ -284,6 +267,7 @@ export function createRegeneratingNodeProject(
       },
       updatedAt: timestamp,
     },
+    assistantMessageId: targets.assistantMessage.id,
   };
 }
 

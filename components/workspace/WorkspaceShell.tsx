@@ -18,6 +18,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
   const selectedNodeId = useBranchMindStore((state) => state.selectedNodeId);
   const creatingNodeId = useBranchMindStore((state) => state.creatingNodeId);
   const streamingNodeId = useBranchMindStore((state) => state.streamingNodeId);
+  const streamingMessageId = useBranchMindStore((state) => state.streamingMessageId);
   const pendingProjectSync = useBranchMindStore(
     (state) => state.pendingProjectSyncs[projectId] ?? null,
   );
@@ -68,6 +69,9 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
   const pendingSyncNodeId = isProjectSyncBlocking ? pendingProjectSync.nodeId : null;
   const effectiveCreatingNodeId = creatingNodeId ?? pendingSyncNodeId;
   const effectiveStreamingNodeId = streamingNodeId ?? pendingSyncNodeId;
+  const effectiveStreamingMessageId =
+    streamingMessageId ??
+    (isProjectSyncBlocking ? pendingProjectSync.assistantMessageId : null);
 
   const handleQuickCreate = useCallback(
     (nodeId: string, mode: "continue" | "branch") => {
@@ -151,6 +155,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
       aiError={aiError}
       creatingNodeId={effectiveCreatingNodeId}
       streamingNodeId={effectiveStreamingNodeId}
+      streamingMessageId={effectiveStreamingMessageId}
       onSelectNode={selectNode}
       onQuickCreateNode={handleQuickCreate}
       onCreateNode={handleCreateFromPanel}

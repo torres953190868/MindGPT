@@ -81,6 +81,7 @@ type NodeDetailPanelProps = {
   onToggleNode: (nodeId: string) => void;
   onDeleteNode: (nodeId: string) => void;
   isCreating: boolean;
+  streamingMessageId?: string | null;
   isNotesOpen: boolean;
   error: string | null;
   onToggleNotes: () => void;
@@ -229,6 +230,7 @@ export function NodeDetailPanel({
   onToggleNode,
   onDeleteNode,
   isCreating,
+  streamingMessageId,
   isNotesOpen,
   error,
   onToggleNotes,
@@ -262,10 +264,8 @@ export function NodeDetailPanel({
   const messagesRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const copyTimeoutRef = useRef<number | null>(null);
-  const lastMessage = node?.messages[node.messages.length - 1] ?? null;
-  const streamingMessageId =
-    isCreating && lastMessage?.role === "assistant" ? lastMessage.id : null;
-  const streamingContent = streamingMessageId ? lastMessage?.content ?? "" : "";
+  const streamingContent =
+    node?.messages.find((message) => message.id === streamingMessageId)?.content ?? "";
   const displayMessages =
     node && conversationMessages
       ? conversationMessages
@@ -720,7 +720,10 @@ export function NodeDetailPanel({
           displayMessages.map(({ sourceNodeId, message, inherited }) => {
             const messageKey = `${sourceNodeId}:${message.id}`;
             const isStreamingAssistant =
-              sourceNodeId === node.id && message.id === streamingMessageId;
+              isCreating &&
+              sourceNodeId === node.id &&
+              message.id === streamingMessageId &&
+              message.role === "assistant";
             const isEditingMessage =
               !inherited && message.role === "user" && message.id === editingMessageId;
             const isCopied = copiedMessageKey === messageKey;

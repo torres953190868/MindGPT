@@ -72,6 +72,7 @@ type BranchMindState = {
   creatingProject: boolean;
   creatingNodeId: string | null;
   streamingNodeId: string | null;
+  streamingMessageId: string | null;
   pendingInitialProjectStream: PendingInitialProjectStream | null;
   pendingProjectSyncs: Record<string, PendingProjectSyncRecord>;
   aiError: string | null;
@@ -744,6 +745,7 @@ async function regenerateNodeInPlace(
     selectedNodeId: nodeId,
     creatingNodeId: nodeId,
     streamingNodeId: nodeId,
+    streamingMessageId: draft.assistantMessageId,
     aiError: null,
   });
 
@@ -779,7 +781,7 @@ async function regenerateNodeInPlace(
           body: JSON.stringify({
             instruction,
             userMessageId,
-            assistantMessageId,
+            assistantMessageId: draft.assistantMessageId,
             modelSelection,
           }),
         },
@@ -805,6 +807,7 @@ async function regenerateNodeInPlace(
           selectedNodeId: event.node.id,
           creatingNodeId: null,
           streamingNodeId: null,
+          streamingMessageId: null,
           pendingProjectSyncs:
             pendingSync?.nodeId === nodeId &&
             pendingSync.assistantMessageId === draft.assistantMessageId
@@ -847,6 +850,7 @@ async function regenerateNodeInPlace(
         selectedNodeId: nodeId,
         creatingNodeId: null,
         streamingNodeId: null,
+        streamingMessageId: null,
         pendingProjectSyncs: failedPendingSync
           ? {
               ...current.pendingProjectSyncs,
@@ -906,6 +910,7 @@ async function populateBlankNodeInPlace(
     selectedNodeId: nodeId,
     creatingNodeId: nodeId,
     streamingNodeId: nodeId,
+    streamingMessageId: draft.assistantMessageId,
     aiError: null,
   });
 
@@ -959,6 +964,7 @@ async function populateBlankNodeInPlace(
           selectedNodeId: event.node.id,
           creatingNodeId: null,
           streamingNodeId: null,
+          streamingMessageId: null,
         });
       });
 
@@ -972,6 +978,7 @@ async function populateBlankNodeInPlace(
         selectedNodeId: nodeId,
         creatingNodeId: null,
         streamingNodeId: null,
+        streamingMessageId: null,
         aiError: getErrorMessage(error),
       }));
     }
@@ -1070,6 +1077,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
   creatingProject: false,
   creatingNodeId: null,
   streamingNodeId: null,
+  streamingMessageId: null,
   pendingInitialProjectStream: null,
   pendingProjectSyncs: {},
   aiError: null,
@@ -1333,6 +1341,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
       selectedNodeId: draft.node.id,
       creatingNodeId: parentId,
       streamingNodeId: draft.node.id,
+      streamingMessageId: draft.assistantMessageId,
       aiError: null,
     });
 
@@ -1386,6 +1395,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
             selectedNodeId: event.node.id,
             creatingNodeId: null,
             streamingNodeId: null,
+            streamingMessageId: null,
           });
         });
 
@@ -1398,6 +1408,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
           set({
             creatingNodeId: null,
             streamingNodeId: null,
+            streamingMessageId: null,
             aiError: getErrorMessage(error),
           });
           return;
@@ -1416,6 +1427,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
               current.selectedNodeId === draft.node.id ? parentId : current.selectedNodeId,
             creatingNodeId: null,
             streamingNodeId: null,
+            streamingMessageId: null,
             aiError: getErrorMessage(error),
           };
         });
@@ -1446,6 +1458,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
       projects: replaceProject(state.projects, draft.project),
       selectedNodeId: draft.node.id,
       creatingNodeId: parentId,
+      streamingMessageId: null,
       aiError: null,
     });
 
@@ -1468,6 +1481,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
         projects: replaceProject(get().projects, data.project),
         selectedNodeId,
         creatingNodeId: null,
+        streamingMessageId: null,
       });
       return selectedNodeId;
     } catch (error) {
@@ -1476,6 +1490,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
         selectedNodeId:
           current.selectedNodeId === draft.node.id ? parentId : current.selectedNodeId,
         creatingNodeId: null,
+        streamingMessageId: null,
         aiError: getErrorMessage(error),
       }));
       return null;
