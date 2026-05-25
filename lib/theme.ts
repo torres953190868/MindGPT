@@ -24,7 +24,7 @@ export const BRANCHMIND_THEMES = [
 
 export type BranchMindTheme = (typeof BRANCHMIND_THEMES)[number]["id"];
 
-export const DEFAULT_THEME: BranchMindTheme = "mineral";
+export const DEFAULT_THEME: BranchMindTheme = "warm-limestone";
 
 export function isBranchMindTheme(value: unknown): value is BranchMindTheme {
   return (

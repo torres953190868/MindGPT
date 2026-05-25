@@ -1,0 +1,132 @@
+<svg width="430" height="932" viewBox="0 0 430 932" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="phoneShadow" x="0" y="0" width="430" height="932" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#1F2A24" flood-opacity="0.16"/>
+    </filter>
+    <filter id="nodeShadow" x="0" y="0" width="430" height="760" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#202824" flood-opacity="0.08"/>
+    </filter>
+    <filter id="composerShadow" x="20" y="730" width="390" height="188" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="-10" stdDeviation="20" flood-color="#202824" flood-opacity="0.10"/>
+    </filter>
+    <clipPath id="screenClip">
+      <rect x="28" y="26" width="374" height="880" rx="38"/>
+    </clipPath>
+    <pattern id="grid" width="22" height="22" patternUnits="userSpaceOnUse">
+      <path d="M22 0H0V22" stroke="#DDE8E4" stroke-opacity="0.58" stroke-width="1"/>
+      <circle cx="0" cy="0" r="1.1" fill="#C7D8D2" fill-opacity="0.65"/>
+    </pattern>
+    <linearGradient id="screenFade" x1="215" y1="606" x2="215" y2="802" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FBFCFB" stop-opacity="0"/>
+      <stop offset="0.8" stop-color="#FBFCFB"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="430" height="932" fill="#E8F0ED"/>
+  <g filter="url(#phoneShadow)">
+    <rect x="20" y="18" width="390" height="896" rx="46" fill="#111815"/>
+    <rect x="28" y="26" width="374" height="880" rx="38" fill="#FBFCFB"/>
+  </g>
+
+  <g clip-path="url(#screenClip)">
+    <rect x="28" y="26" width="374" height="880" fill="#FBFCFB"/>
+
+    <g>
+      <text x="52" y="56" fill="#202824" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="13" font-weight="700">9:41</text>
+      <rect x="195" y="38" width="40" height="5" rx="2.5" fill="#111815" opacity="0.9"/>
+      <path d="M338 50H351" stroke="#202824" stroke-width="2" stroke-linecap="round"/>
+      <path d="M356 47V53" stroke="#202824" stroke-width="2" stroke-linecap="round"/>
+      <rect x="364" y="45" width="21" height="10" rx="3" stroke="#202824" stroke-width="1.5"/>
+      <rect x="386" y="48" width="2" height="4" rx="1" fill="#202824"/>
+      <rect x="367" y="48" width="14" height="4" rx="2" fill="#202824"/>
+    </g>
+
+    <g>
+      <circle cx="63" cy="91" r="14" fill="#1D5B4D"/>
+      <circle cx="59" cy="88" r="2.4" fill="#FFFFFF"/>
+      <circle cx="67" cy="94" r="2.4" fill="#FFFFFF"/>
+      <path d="M61.5 89.5L65.5 92.5" stroke="#FFFFFF" stroke-width="1.4" stroke-linecap="round"/>
+      <text x="85" y="97" fill="#202824" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="18" font-weight="850">BranchMind</text>
+      <rect x="328" y="76" width="48" height="30" rx="15" fill="#F3F7F5" stroke="#DFE8E4"/>
+      <text x="352" y="96" text-anchor="middle" fill="#515F5A" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="13" font-weight="700">登录</text>
+    </g>
+
+    <g>
+      <text x="52" y="146" fill="#202824" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="25" font-weight="850" letter-spacing="0">从一个问题开始</text>
+      <text x="52" y="176" fill="#687873" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="14" font-weight="600">让思路自然分叉，再慢慢收束。</text>
+    </g>
+
+    <g>
+      <rect x="28" y="202" width="374" height="548" fill="url(#grid)"/>
+      <rect x="28" y="202" width="374" height="548" fill="#FFFFFF" opacity="0.14"/>
+
+      <path d="M155 390C162 442 172 470 203 486C229 499 258 489 281 482" stroke="#6EC097" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="6 7"/>
+      <path d="M155 390C195 381 213 353 239 323C261 297 285 285 323 283" stroke="#A984D8" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="6 7"/>
+      <path d="M155 390C197 426 223 453 244 516C260 566 281 594 330 609" stroke="#A984D8" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="6 7"/>
+      <path d="M116 321C124 342 134 363 155 390" stroke="#6EC097" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="6 7"/>
+
+      <g filter="url(#nodeShadow)">
+        <rect x="50" y="230" width="186" height="118" rx="18" fill="#FFFFFF"/>
+        <text x="70" y="258" fill="#6A6078" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="10" font-weight="850" letter-spacing="4">ROOT</text>
+        <circle cx="207" cy="256" r="16" fill="#FFEFB3"/>
+        <text x="207" y="261" text-anchor="middle" fill="#4E4432" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="850">1</text>
+        <text x="70" y="281" fill="#17131D" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="15" font-weight="850">深度学习概览</text>
+        <text x="70" y="313" fill="#51515F" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12.5" font-weight="500">从神经网络开始，拆出</text>
+        <text x="70" y="333" fill="#51515F" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12.5" font-weight="500">概念、问题和应用路径。</text>
+      </g>
+
+      <g filter="url(#nodeShadow)">
+        <rect x="229" y="248" width="154" height="118" rx="18" fill="#FFFFFF"/>
+        <text x="247" y="276" fill="#6A6078" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="10" font-weight="850" letter-spacing="3.5">BRANCH</text>
+        <circle cx="359" cy="274" r="16" fill="#FFEFB3"/>
+        <text x="359" y="279" text-anchor="middle" fill="#4E4432" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="850">0</text>
+        <text x="247" y="299" fill="#17131D" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="14" font-weight="850">定义问题</text>
+        <text x="247" y="330" fill="#51515F" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="500">先把目标和边界</text>
+        <text x="247" y="349" fill="#51515F" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="500">说清楚。</text>
+      </g>
+
+      <g filter="url(#nodeShadow)">
+        <rect x="50" y="368" width="207" height="120" rx="18" fill="#FFFFFF"/>
+        <text x="70" y="396" fill="#6A6078" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="10" font-weight="850" letter-spacing="3.5">CONTINUE</text>
+        <circle cx="226" cy="394" r="16" fill="#FFEFB3"/>
+        <text x="226" y="399" text-anchor="middle" fill="#4E4432" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="850">4</text>
+        <text x="70" y="419" fill="#17131D" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="15" font-weight="850">学习路线</text>
+        <text x="70" y="451" fill="#51515F" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12.5" font-weight="500">概念、训练、架构和应用</text>
+        <text x="70" y="471" fill="#51515F" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12.5" font-weight="500">按分支逐步展开。</text>
+      </g>
+
+      <g filter="url(#nodeShadow)">
+        <rect x="257" y="432" width="166" height="126" rx="18" fill="#FFFFFF" stroke="#C9A7EF" stroke-width="2.2"/>
+        <text x="275" y="461" fill="#6A6078" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="10" font-weight="850" letter-spacing="3.5">BRANCH</text>
+        <circle cx="394" cy="459" r="16" fill="#FFEFB3"/>
+        <text x="394" y="464" text-anchor="middle" fill="#4E4432" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="850">0</text>
+        <text x="275" y="484" fill="#17131D" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="14" font-weight="850">架构选择</text>
+        <text x="275" y="515" fill="#51515F" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="500">CNN、RNN、Transformer</text>
+        <text x="275" y="534" fill="#51515F" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="500">适合什么任务？</text>
+      </g>
+
+      <g filter="url(#nodeShadow)">
+        <rect x="84" y="544" width="176" height="112" rx="18" fill="#FFFFFF"/>
+        <text x="104" y="572" fill="#6A6078" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="10" font-weight="850" letter-spacing="3.5">BRANCH</text>
+        <circle cx="230" cy="570" r="16" fill="#FFEFB3"/>
+        <text x="230" y="575" text-anchor="middle" fill="#4E4432" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="850">2</text>
+        <text x="104" y="595" fill="#17131D" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="14" font-weight="850">关键假设</text>
+        <text x="104" y="626" fill="#51515F" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="12" font-weight="500">哪些判断需要被验证？</text>
+      </g>
+    </g>
+
+    <rect x="28" y="606" width="374" height="170" fill="url(#screenFade)"/>
+
+    <g filter="url(#composerShadow)">
+      <rect x="28" y="746" width="374" height="160" fill="#FBFCFB"/>
+      <rect x="44" y="762" width="342" height="112" rx="28" fill="#FFFFFF" stroke="#DFE8E4"/>
+      <text x="70" y="796" fill="#8A9893" font-family="Inter, -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif" font-size="15" font-weight="600">问一个问题，生成分支画布...</text>
+      <rect x="62" y="823" width="34" height="34" rx="17" fill="#F3F7F5"/>
+      <path d="M74 840H84M79 835V845" stroke="#687873" stroke-width="2" stroke-linecap="round"/>
+      <rect x="104" y="823" width="34" height="34" rx="17" fill="#F3F7F5"/>
+      <path d="M118 842L126 834C128.2 831.8 131.9 835.5 129.7 837.7L120.7 846.7C117.8 849.6 113.1 844.9 116 842L124 834" stroke="#687873" stroke-width="1.9" stroke-linecap="round"/>
+      <rect x="324" y="816" width="44" height="44" rx="22" fill="#1D5B4D"/>
+      <path d="M338 838H354M354 838L348 832M354 838L348 844" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+</svg>

@@ -415,7 +415,7 @@ test("home opens directly into a draft workspace", async ({ page }) => {
     "输入一个研究问题，BranchMind 会把理解路径拆成可探索的分支...",
   );
   await expect(page.getByTestId("home-prompt-suggestion")).toHaveCount(3);
-  await expect(page.getByTestId("send-message-button")).toContainText("Start");
+  await expect(page.getByTestId("send-message-button")).toContainText("开始");
   const mindMapCanvas = page.getByTestId("mind-map-canvas");
   const mapWidthWithPanelsCollapsed = await getElementWidth(mindMapCanvas);
   const mindMapCanvasBox = await getElementBox(mindMapCanvas, "mind map canvas");
@@ -507,6 +507,78 @@ test("home opens directly into a draft workspace", async ({ page }) => {
   await expect(
     page.getByTestId("project-grid").or(page.getByTestId("project-empty-state")),
   ).toBeVisible();
+});
+
+test("home shows a compact mobile launcher instead of the workspace canvas", async ({ page }) => {
+  await mockAuthSession(page, { configured: true, user: null });
+
+  for (const viewport of [
+    { width: 390, height: 780 },
+    { width: 375, height: 667 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+
+    await expect(page.getByTestId("mobile-home-shell")).toBeVisible();
+    await expect(page.getByTestId("home-hero")).toContainText("BranchMind");
+    await expect(page.getByTestId("workspace-mobile-view-tabs")).toHaveCount(0);
+    await expect(page.getByTestId("mind-map-canvas")).toHaveCount(0);
+    await expect(page.getByTestId("message-composer")).toBeVisible();
+    await expect(page.getByTestId("send-message-button")).toContainText("开始");
+    await expect(
+      page.getByTestId("send-message-button").locator(".mobile-home-send-label"),
+    ).toBeVisible();
+    await expect(page.getByTestId("home-prompt-suggestion")).toHaveCount(3);
+
+    const previewBox = await getElementBox(
+      page.getByTestId("mobile-home-map-preview"),
+      "mobile home map preview",
+    );
+    expect(previewBox.height).toBeGreaterThanOrEqual(220);
+    expect(previewBox.height).toBeLessThanOrEqual(260);
+
+    await expect(page.locator('[data-testid="account-sign-in-button"]:visible')).toHaveCount(0);
+  }
+});
+
+test("mobile home launcher starts a workspace from the compact composer", async ({ page }) => {
+  const instruction = `Mobile compact launcher ${makeSeed()}.`;
+  let syncPayload: unknown = null;
+
+  await mockHomeModelCatalog(page);
+  await page.route("**/api/projects", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ projects: [] }),
+      });
+      return;
+    }
+
+    await route.fallback();
+  });
+  await page.route("**/api/projects/**/sync", async (route) => {
+    syncPayload = route.request().postDataJSON();
+    const payload = syncPayload as { project: Project };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ project: payload.project }),
+    });
+  });
+
+  await page.setViewportSize({ width: 390, height: 780 });
+  await page.goto("/");
+  await expect(page.getByTestId("mobile-home-shell")).toBeVisible();
+  await page.getByTestId("message-instruction-input").fill(instruction);
+  await page.getByTestId("send-message-button").click();
+
+  await expect(page).toHaveURL(/\/workspace\/project_/);
+  await expect(page.getByTestId("workspace-mobile-view-tabs")).toBeVisible();
+  await expect.poll(() => syncPayload).not.toBeNull();
+  const payload = syncPayload as { project: Project };
+  expect(payload.project.title).toBe(instruction);
 });
 
 test("home draft workspace sidebars resize and snap like workspace", async ({
@@ -1069,20 +1141,14 @@ test("home launcher selects an indexed knowledge PDF without re-uploading", asyn
   expect(indexRequests).toBe(0);
 });
 
-test("shows compact account entry on desktop and responsive mobile navigation", async ({ page }) => {
+test("hides the home account entry and keeps responsive mobile navigation", async ({ page }) => {
   await mockAuthSession(page, { configured: true, user: null });
 
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
   await expect(page.getByTestId("auth-account-name-input")).toHaveCount(0);
-  const desktopSignIn = page.locator('[data-testid="account-sign-in-button"]:visible').first();
-  await expect(desktopSignIn).toBeVisible();
-  await expect(desktopSignIn).toHaveAttribute("href", /\/auth\/sign-in/);
-  await desktopSignIn.click();
-  await expect(page).toHaveURL(/\/auth\/sign-in/);
-  await expect(page.locator('[data-testid="auth-account-name-input"]:visible')).toBeVisible();
-  await expect(page.locator('[data-testid="auth-password-input"]:visible')).toBeVisible();
-  await expect(page.locator('[data-testid="google-sign-in-button"]:visible')).toBeVisible();
+  await expect(page.locator('[data-testid="account-sign-in-button"]:visible')).toHaveCount(0);
+  await expect(page.locator('[data-testid="account-menu-button"]:visible')).toHaveCount(0);
 
   await page.setViewportSize({ width: 390, height: 780 });
   await page.goto("/privacy");

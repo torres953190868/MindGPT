@@ -879,12 +879,6 @@ export function WorkspaceCanvasShell({
         {project.title}
       </h1>
 
-      {dataDraftWorkspace && (
-        <div className="absolute right-16 top-4 z-30 hidden lg:block">
-          <AuthPanel placement="bottom" />
-        </div>
-      )}
-
       {aiError && !selectedNode && (
         <p
           role="alert"

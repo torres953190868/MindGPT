@@ -387,6 +387,14 @@ textarea {
   background-size: 28px 28px;
 }
 
+.branchmind-mobile-home-shell {
+  background: var(--home-canvas-background);
+}
+
+.branchmind-mobile-home-preview {
+  background-color: var(--theme-surface-canvas);
+}
+
 .branchmind-projects-surface {
   background-color: var(--projects-surface-background);
   background-image:
