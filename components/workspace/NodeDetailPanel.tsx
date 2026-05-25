@@ -282,6 +282,7 @@ export function NodeDetailPanel({
             inherited: false,
           }))
         : [];
+  const shouldShowNodeBrief = Boolean(node && node.messages.length === 0);
   const isComposerBusy = composerControls.controlsBusy;
   const displayError = composerControls.attachmentError ?? error;
   const isInitialSubmit = initialSubmit;
@@ -555,7 +556,7 @@ export function NodeDetailPanel({
       <aside
         aria-label="Node details"
         data-testid="node-detail-panel"
-        className="node-detail-panel-surface flex h-full min-h-0 w-full max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-neutral-100 bg-white/90 p-4 shadow-lg lg:max-h-full lg:self-start lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
+        className="node-detail-panel-surface flex h-full min-h-0 w-full max-h-[calc(100svh-1rem)] flex-col overflow-hidden rounded-2xl border border-neutral-100 bg-white/90 p-4 shadow-lg sm:max-h-[calc(100svh-2rem)] lg:max-h-[calc(100dvh-6rem)] lg:self-center lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
       >
         {showCollapseButton && (
           <button
@@ -596,13 +597,13 @@ export function NodeDetailPanel({
     <aside
       aria-labelledby={titleId}
       data-testid="node-detail-panel"
-      className={`node-detail-panel-surface grid h-full min-h-0 w-full max-h-[calc(100vh-2rem)] overflow-hidden rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-brand-100/35 lg:max-h-full lg:self-start lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none ${
+      className={`node-detail-panel-surface grid h-full min-h-0 w-full max-h-[calc(100svh-1rem)] overflow-hidden rounded-[22px] border border-white/80 bg-white/72 p-3 shadow-lg shadow-brand-100/35 sm:max-h-[calc(100svh-2rem)] sm:rounded-[28px] sm:p-4 lg:max-h-[calc(100dvh-6rem)] lg:self-center lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none ${
         showComposer
           ? "grid-rows-[auto_minmax(0,1fr)_auto]"
           : "grid-rows-[auto_minmax(0,1fr)]"
       }`}
     >
-        <div className="node-detail-header shrink-0 space-y-3 border-b border-neutral-200 pb-4">
+      <div className="node-detail-header shrink-0 space-y-3 border-b border-neutral-200 pb-3 sm:pb-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1 space-y-3">
             <p className="text-[11px] font-black uppercase tracking-wider text-neutral-500">
@@ -620,7 +621,7 @@ export function NodeDetailPanel({
                   aria-label="Edit node title"
                   data-testid="node-title-edit-input"
                   maxLength={120}
-                  className="min-w-0 flex-1 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-xl font-black leading-snug text-neutral-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65"
+                  className="min-w-0 flex-1 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-lg font-black leading-snug text-neutral-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 sm:text-xl"
                 />
                 <div className="flex shrink-0 gap-1">
                   <button
@@ -648,7 +649,7 @@ export function NodeDetailPanel({
                 </div>
               </div>
             ) : (
-              <h2 id={titleId} className="text-xl font-black leading-snug text-neutral-900">
+              <h2 id={titleId} className="text-lg font-black leading-snug text-neutral-900 sm:text-xl">
                 {node.title}
               </h2>
             )}
@@ -761,10 +762,12 @@ export function NodeDetailPanel({
         onTouchEnd={captureSelectionAction}
         className="min-h-0 flex-1 space-y-3 overflow-auto overscroll-contain py-4 pr-1"
       >
-        {displayMessages.length === 0 ? (
+        {displayMessages.length === 0 && node ? (
           <NodeBriefCard node={node} />
         ) : (
-          displayMessages.map(({ sourceNodeId, message, inherited }) => {
+          <>
+            {shouldShowNodeBrief && node && <NodeBriefCard node={node} />}
+            {displayMessages.map(({ sourceNodeId, message, inherited }) => {
             const messageKey = `${sourceNodeId}:${message.id}`;
             const isStreamingAssistant =
               isCreating &&
@@ -785,8 +788,8 @@ export function NodeDetailPanel({
                 data-streaming={isStreamingAssistant ? "true" : undefined}
                 className={`group text-sm leading-6 ${
                   message.role === "user"
-                    ? "ml-6 text-success-800"
-                    : "mr-6 text-neutral-700"
+                    ? "text-success-800 sm:ml-6"
+                    : "text-neutral-700 sm:mr-6"
                 }`}
               >
                 <article
@@ -894,7 +897,8 @@ export function NodeDetailPanel({
                 )}
               </div>
             );
-          })
+          })}
+          </>
         )}
       </section>
 
@@ -915,12 +919,12 @@ export function NodeDetailPanel({
 
       {showComposer && (
         <form
-        aria-label="Message composer"
-        aria-busy={isComposerBusy}
-        aria-describedby={displayError ? errorId : isComposerBusy ? statusId : undefined}
-        data-testid="message-composer"
-        onSubmit={handleSubmit}
-        className="node-detail-composer shrink-0 space-y-3 border-t border-neutral-200 pt-4"
+          aria-label="Message composer"
+          aria-busy={isComposerBusy}
+          aria-describedby={displayError ? errorId : isComposerBusy ? statusId : undefined}
+          data-testid="message-composer"
+          onSubmit={handleSubmit}
+          className="node-detail-composer shrink-0 space-y-3 border-t border-neutral-200 pt-3 sm:pt-4"
       >
         {!isInitialSubmit && !isBlankNode && (
           <div
@@ -939,7 +943,7 @@ export function NodeDetailPanel({
               data-testid="continue-down-button"
               data-highlighted={modeHighlight.getDataHighlighted("continue")}
               {...modeHighlight.getPointerHoverHandlers("continue")}
-              className={`node-detail-mode-button node-detail-mode-continue inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 ${getHighlightedActionClass(
+              className={`node-detail-mode-button node-detail-mode-continue inline-flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 sm:h-11 ${getHighlightedActionClass(
                 isContinueModeHighlighted,
                 "bg-neutral-100 text-neutral-700",
               )}`}
@@ -956,7 +960,7 @@ export function NodeDetailPanel({
               data-testid="branch-right-button"
               data-highlighted={modeHighlight.getDataHighlighted("branch")}
               {...modeHighlight.getPointerHoverHandlers("branch")}
-              className={`node-detail-mode-button node-detail-mode-branch inline-flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 ${getHighlightedActionClass(
+              className={`node-detail-mode-button node-detail-mode-branch inline-flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 sm:h-11 ${getHighlightedActionClass(
                 isBranchModeHighlighted,
                 "bg-neutral-100 text-neutral-700",
               )}`}
@@ -1003,11 +1007,11 @@ export function NodeDetailPanel({
             data-testid="message-instruction-input"
             placeholder={composerPlaceholder}
             rows={3}
-            className={`w-full resize-none bg-transparent px-4 pb-16 text-sm leading-6 text-neutral-900 outline-none placeholder:text-neutral-400 transition disabled:cursor-not-allowed disabled:opacity-65 ${
+            className={`w-full resize-none bg-transparent px-3 pb-16 text-sm leading-6 text-neutral-900 outline-none placeholder:text-neutral-400 transition disabled:cursor-not-allowed disabled:opacity-65 sm:px-4 ${
               hasSelectedTextContext ? "pt-3" : "pt-4"
             }`}
           />
-          <div className="absolute bottom-3 left-3 flex items-center gap-2">
+          <div className="absolute bottom-3 left-3 flex max-w-[calc(100%-4.75rem)] items-center gap-2">
             <AttachmentMenuButton controls={composerControls} />
             <ModelSelectorButton controls={composerControls} />
           </div>
@@ -1017,20 +1021,22 @@ export function NodeDetailPanel({
               disabled={isComposerBusy || !input.trim()}
               aria-label="Send message"
               data-testid="send-message-button"
-              className="branchmind-primary-action inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="branchmind-primary-action inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-3 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
             >
               {composerControls.isPreparingAttachments ? (
                 <Loader2 size={14} className="animate-spin" />
               ) : (
                 <Send size={14} />
               )}
-              {composerControls.isPreparingAttachments
-                ? "Preparing..."
-                : isCreating
-                  ? isInitialSubmit
-                    ? "Creating..."
-                    : "Streaming..."
-                  : submitLabel}
+              <span className="node-detail-send-label">
+                {composerControls.isPreparingAttachments
+                  ? "Preparing..."
+                  : isCreating
+                    ? isInitialSubmit
+                      ? "Creating..."
+                      : "Streaming..."
+                    : submitLabel}
+              </span>
             </button>
           </div>
         </div>

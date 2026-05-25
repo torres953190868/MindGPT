@@ -970,6 +970,12 @@ textarea {
   }
 }
 
+@media (max-width: 380px) {
+  .node-detail-send-label {
+    display: none;
+  }
+}
+
 .project-notes-editor {
   height: 100%;
   min-height: 0;

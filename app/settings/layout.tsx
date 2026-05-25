@@ -5,9 +5,9 @@ import { SettingsNav } from "@/components/settings/SettingsNav";
 
 export default function SettingsLayout({ children }: { children: ReactNode }) {
   return (
-    <main className="settings-shell min-h-screen text-neutral-900">
-      <div className="mx-auto max-w-6xl px-4 py-7 md:px-6 md:py-10">
-        <div className="mb-6 flex flex-col gap-4 md:mb-8 md:flex-row md:items-end md:justify-between">
+    <main className="settings-shell min-h-[100svh] text-neutral-900">
+      <div className="mx-auto max-w-6xl px-3 py-5 sm:px-4 sm:py-7 lg:px-6 lg:py-10">
+        <div className="mb-5 flex flex-col gap-4 lg:mb-8 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <Link
               href="/projects"
@@ -17,12 +17,12 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
               <ArrowLeft size={16} />
               Back
             </Link>
-            <h1 className="text-3xl font-black tracking-normal text-neutral-900">Settings</h1>
+            <h1 className="text-2xl font-black tracking-normal text-neutral-900 sm:text-3xl">Settings</h1>
             <p className="mt-1.5 text-sm font-semibold text-neutral-600">
               Manage your account, usage, and billing preferences.
             </p>
           </div>
-          <div className="hidden rounded-full border border-neutral-200 bg-surface-elevated/90 px-3.5 py-2 text-xs font-black uppercase tracking-[0.16em] text-neutral-600 shadow-md md:block">
+          <div className="hidden rounded-full border border-neutral-200 bg-surface-elevated/90 px-3.5 py-2 text-xs font-black uppercase tracking-[0.16em] text-neutral-600 shadow-md lg:block">
             Account center
           </div>
         </div>

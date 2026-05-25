@@ -67,7 +67,7 @@ export function ResponsiveHeader({
         </div>
       </div>
 
-      <div className="hidden min-w-0 items-center justify-end gap-3 md:flex">
+      <div className="hidden min-w-0 items-center justify-end gap-3 lg:flex">
         <nav
           aria-label={navLabel}
           className="flex flex-wrap items-center justify-end gap-3"
@@ -80,7 +80,7 @@ export function ResponsiveHeader({
         {actions}
       </div>
 
-      <details className="group md:hidden">
+      <details className="group lg:hidden">
         <summary className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-[18px] border border-white/90 bg-white/80 px-4 py-2.5 text-sm font-black text-neutral-800 shadow-sm transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100 [&::-webkit-details-marker]:hidden">
           <Menu size={17} />
           Menu

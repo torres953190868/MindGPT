@@ -8,7 +8,7 @@ export default function ReaderPage() {
     <main
       aria-labelledby="reader-title"
       data-testid="reader-page"
-      className="branchmind-reader-surface min-h-screen bg-surface-bg px-4 py-5 text-text-primary sm:px-6"
+      className="branchmind-reader-surface min-h-[100svh] bg-surface-bg px-3 py-4 text-text-primary sm:px-6 sm:py-5"
     >
       <div className="mx-auto max-w-[1440px] space-y-3">
         <div className="flex min-w-0 items-center justify-between gap-3">
@@ -17,7 +17,7 @@ export default function ReaderPage() {
               3
             </span>
             <h1 id="reader-title" className="truncate text-lg font-black text-text-primary">
-              PDF Reader desktop
+              PDF Reader
             </h1>
           </div>
           <Link

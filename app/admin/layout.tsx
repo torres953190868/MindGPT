@@ -14,7 +14,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 
   if (!access.allowed) {
     return (
-      <main className="grid min-h-screen place-items-center bg-[#f7f5f0] px-5 text-[#25222b]">
+      <main className="grid min-h-[100svh] place-items-center bg-[#f7f5f0] px-4 text-[#25222b]">
         <section className="max-w-md rounded-lg border border-[#e4ddd4] bg-[#fffdf9] p-6 text-center shadow-[0_14px_34px_rgba(35,31,26,0.06)]">
           <h1 className="text-2xl font-black">Admin access required</h1>
           <p className="mt-2 text-sm font-semibold leading-6 text-[#7b717f]">
@@ -32,9 +32,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f5f0] text-[#25222b]">
-      <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-7 md:px-6 md:py-10">
-        <header className="mb-6 flex flex-col gap-4 md:mb-8 md:flex-row md:items-end md:justify-between">
+    <main className="min-h-[100svh] bg-[#f7f5f0] text-[#25222b]">
+      <div className="mx-auto flex min-h-[100svh] max-w-7xl flex-col px-3 py-5 sm:px-4 sm:py-7 lg:px-6 lg:py-10">
+        <header className="mb-5 flex flex-col gap-4 lg:mb-8 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <Link
               href="/projects"
@@ -44,7 +44,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
               <ArrowLeft size={16} />
               Back
             </Link>
-            <h1 className="text-3xl font-black tracking-normal text-[#25222b]">BranchMind Admin</h1>
+            <h1 className="text-2xl font-black tracking-normal text-[#25222b] sm:text-3xl">BranchMind Admin</h1>
             <p className="mt-1.5 text-sm font-semibold text-[#7b717f]">
               Models, routing, and user-reported bugs.
             </p>

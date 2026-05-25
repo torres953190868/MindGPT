@@ -47,8 +47,8 @@ const DESKTOP_MAP_MIN_WIDTH = 220;
 const WORKSPACE_SIDEBAR_DEFAULT_WIDTH = SIDE_PANEL_PREFERRED_MIN_WIDTH;
 const DESKTOP_RESIZE_HANDLE_WIDTH = 8;
 const WORKSPACE_GRID_GAP = 0;
-const MOBILE_MAP_DEFAULT_HEIGHT = 520;
-const MOBILE_MAP_MIN_HEIGHT = 320;
+const MOBILE_MAP_DEFAULT_HEIGHT = 500;
+const MOBILE_MAP_MIN_HEIGHT = 300;
 
 type MobileWorkspaceView = "map" | "outline" | "chat" | "notes";
 type ResizableSide = "left" | "right";
@@ -290,7 +290,7 @@ function CanvasCornerToggleButton({
       aria-label={ariaLabel}
       aria-expanded="false"
       data-testid={testId}
-      className={`branchmind-canvas-toggle absolute top-4 z-20 grid h-9 w-9 place-items-center rounded-md border border-neutral-200 bg-white/95 text-neutral-700 shadow-sm backdrop-blur transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40 ${
+      className={`branchmind-canvas-toggle absolute top-4 z-20 hidden h-9 w-9 place-items-center rounded-md border border-neutral-200 bg-white/95 text-neutral-700 shadow-sm backdrop-blur transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40 lg:grid ${
         side === "left" ? "left-4" : "right-4"
       }`}
     >
@@ -339,7 +339,7 @@ export function WorkspaceCanvasShell({
   );
   const [mobileMapHeight, setMobileMapHeight] = useState(MOBILE_MAP_DEFAULT_HEIGHT);
   const [mobileWorkspaceView, setMobileWorkspaceView] =
-    useState<MobileWorkspaceView>("map");
+    useState<MobileWorkspaceView>(() => (dataDraftWorkspace ? "map" : "chat"));
   const [isWorkspaceSidebarCollapsed, setIsWorkspaceSidebarCollapsed] = useState(
     initialWorkspaceSidebarCollapsed,
   );
@@ -393,11 +393,13 @@ export function WorkspaceCanvasShell({
   const canvasIntroStyle = {
     transform: `translate3d(0, ${canvasIntroPanOffsetY}px, 0)`,
   } as CSSProperties;
-  const workspaceGridClassName =
-    "branchmind-workspace-grid grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl lg:h-full lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:shadow-none";
+  const workspaceGridClassName = [
+    "branchmind-workspace-grid grid min-h-0 min-w-0 grid-cols-1 gap-3 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl md:gap-4 lg:h-full lg:flex-1 lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:shadow-none",
+    dataDraftWorkspace ? "" : "flex-1",
+  ].join(" ");
   const mobileTabsClassName = hasProjectNotes
-    ? "branchmind-mobile-tabs grid grid-cols-4 gap-2 rounded-[24px] border border-white/80 bg-white/68 p-2 shadow-sm lg:hidden"
-    : "branchmind-mobile-tabs grid grid-cols-3 gap-2 rounded-[24px] border border-white/80 bg-white/68 p-2 shadow-sm lg:hidden";
+    ? "branchmind-mobile-tabs grid grid-cols-4 gap-1.5 rounded-[18px] border border-white/80 bg-white/68 p-1.5 shadow-sm sm:gap-2 sm:rounded-[24px] sm:p-2 lg:hidden"
+    : "branchmind-mobile-tabs grid grid-cols-3 gap-1.5 rounded-[18px] border border-white/80 bg-white/68 p-1.5 shadow-sm sm:gap-2 sm:rounded-[24px] sm:p-2 lg:hidden";
 
   const getWorkspaceGridWidth = useCallback(() => {
     return workspaceGridRef.current?.clientWidth ?? 0;
@@ -755,7 +757,7 @@ export function WorkspaceCanvasShell({
 
     const startY = event.clientY;
     const startHeight = mobileMapHeight;
-    const maxHeight = Math.max(MOBILE_MAP_MIN_HEIGHT, window.innerHeight - 260);
+    const maxHeight = Math.max(MOBILE_MAP_MIN_HEIGHT, window.innerHeight - 220);
 
     function resizeTo(clientY: number) {
       const deltaY = clientY - startY;
@@ -871,11 +873,17 @@ export function WorkspaceCanvasShell({
       aria-labelledby="workspace-title"
       data-testid="workspace-shell"
       data-draft-workspace={dataDraftWorkspace ? "true" : undefined}
-      className="branchmind-workspace-surface flex min-h-screen flex-col bg-surface-bg p-3 text-neutral-900 lg:h-screen lg:min-h-[720px] lg:overflow-hidden lg:p-0"
+      className="branchmind-workspace-surface relative flex min-h-[100svh] flex-col bg-surface-bg p-2 text-neutral-900 sm:p-3 lg:h-[100dvh] lg:min-h-[640px] lg:overflow-hidden lg:p-0"
     >
       <h1 id="workspace-title" className="sr-only">
         {project.title}
       </h1>
+
+      {dataDraftWorkspace && (
+        <div className="absolute right-16 top-4 z-30 hidden lg:block">
+          <AuthPanel placement="bottom" />
+        </div>
+      )}
 
       {aiError && !selectedNode && (
         <p
@@ -925,7 +933,7 @@ export function WorkspaceCanvasShell({
               aria-selected={selected}
               data-testid={`workspace-mobile-view-${tab.id}`}
               onClick={() => handleSelectMobileWorkspaceView(tab.id)}
-              className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl text-xs font-black transition focus:outline-none focus:ring-2 focus:ring-brand-300 ${
+              className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-xl text-[11px] font-black transition focus:outline-none focus:ring-2 focus:ring-brand-300 sm:min-h-11 sm:gap-1.5 sm:text-xs ${
                 selected
                   ? "bg-brand-600 text-white shadow-md shadow-brand-200/30"
                   : "bg-white/80 text-neutral-700 hover:bg-white"
@@ -965,7 +973,7 @@ export function WorkspaceCanvasShell({
         <section
           aria-labelledby="mind-map-section-title"
           data-testid="mind-map-canvas"
-          className={`branchmind-map-shell relative h-[var(--mobile-map-height)] overflow-hidden rounded-lg border border-neutral-200 bg-surface-canvas shadow-sm lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none ${
+          className={`branchmind-map-shell relative h-[min(var(--mobile-map-height),calc(100svh-7rem))] min-h-[300px] overflow-hidden rounded-lg border border-neutral-200 bg-surface-canvas shadow-sm lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none ${
             mobileWorkspaceView === "map" ? "" : "hidden lg:block"
           }`}
         >
@@ -974,7 +982,7 @@ export function WorkspaceCanvasShell({
           </h2>
           {canvasIntro && (
             <div
-              className="branchmind-canvas-intro relative z-10 flex justify-center px-4 pt-6 lg:pointer-events-none lg:absolute lg:inset-x-4 lg:top-24 lg:p-0"
+              className="branchmind-canvas-intro relative z-10 flex justify-center px-3 pt-4 sm:px-4 sm:pt-6 lg:pointer-events-none lg:absolute lg:inset-x-4 lg:top-24 lg:p-0"
               style={canvasIntroStyle}
             >
               {canvasIntro}
@@ -1000,7 +1008,7 @@ export function WorkspaceCanvasShell({
               <PanelRightOpen size={18} />
             </CanvasCornerToggleButton>
           )}
-          <div className={canvasIntro ? "h-[calc(100%-7.75rem)] lg:h-full" : "h-full"}>
+          <div className={canvasIntro ? "h-[calc(100%-6.5rem)] sm:h-[calc(100%-7.75rem)] lg:h-full" : "h-full"}>
             <MindMap
               project={project}
               selectedNodeId={selectedNodeId}
@@ -1039,7 +1047,7 @@ export function WorkspaceCanvasShell({
           <div
             className={
               mobileWorkspaceView === "chat"
-                ? "h-[calc(100svh-12rem)] min-h-0 min-w-0 overflow-hidden lg:contents"
+                ? "h-[calc(100svh-9.75rem)] min-h-0 min-w-0 overflow-hidden sm:h-[calc(100svh-12rem)] lg:contents"
                 : "hidden lg:contents"
             }
           >
@@ -1084,7 +1092,7 @@ export function WorkspaceCanvasShell({
             data-testid="project-notes-window"
             className={
               isProjectNotesMobileViewOpen
-                ? "h-[calc(100svh-12rem)] max-h-[calc(100svh-12rem)] min-h-0 min-w-0 overflow-hidden lg:relative lg:inset-auto lg:z-auto lg:h-full lg:max-h-full lg:w-full lg:max-w-none"
+                ? "h-[calc(100svh-9.75rem)] max-h-[calc(100svh-9.75rem)] min-h-0 min-w-0 overflow-hidden sm:h-[calc(100svh-12rem)] sm:max-h-[calc(100svh-12rem)] lg:relative lg:inset-auto lg:z-auto lg:h-full lg:max-h-full lg:w-full lg:max-w-none"
                 : "fixed bottom-3 right-3 top-3 z-40 flex min-h-0 w-[calc(100vw-24px)] max-w-[420px] min-w-0 overflow-hidden lg:relative lg:inset-auto lg:z-auto lg:h-full lg:max-h-full lg:w-full lg:max-w-none"
             }
           >

@@ -219,9 +219,9 @@ export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthP
     <main
       aria-labelledby="auth-title"
       data-testid={`auth-${mode}-page`}
-      className="min-h-screen px-5 py-6"
+      className="min-h-[100svh] px-3 py-4 sm:px-5 sm:py-6"
     >
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-5xl flex-col">
+      <div className="mx-auto flex min-h-[calc(100svh-2rem)] max-w-5xl flex-col sm:min-h-[calc(100svh-3rem)]">
         <header className="flex items-center justify-between gap-3">
           <Link
             href="/"
@@ -239,8 +239,8 @@ export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthP
           </Link>
         </header>
 
-        <section className="grid flex-1 place-items-center py-8">
-          <div className="w-full max-w-md rounded-[24px] border border-white/85 bg-white/86 p-5 shadow-2xl shadow-brand-100/45 backdrop-blur md:p-6">
+        <section className="grid flex-1 place-items-center py-5 sm:py-8">
+          <div className="w-full max-w-md rounded-lg border border-white/85 bg-white/90 p-4 shadow-xl shadow-brand-100/35 backdrop-blur sm:p-5 md:p-6">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.16em] text-neutral-600">
                 {content.eyebrow}

@@ -174,9 +174,9 @@ export function HomeDraftWorkspace() {
       canvasIntro={
         <div
           data-testid="home-hero"
-          className="branchmind-home-hero max-w-[min(760px,calc(100vw-48px))] text-center"
+          className="branchmind-home-hero max-w-[min(760px,calc(100vw-36px))] text-center sm:max-w-[min(760px,calc(100vw-48px))]"
         >
-          <p className="branchmind-home-logo home-title-soft text-5xl font-black leading-none text-neutral-900 sm:text-7xl lg:text-8xl">
+          <p className="branchmind-home-logo home-title-soft text-[42px] font-black leading-none text-neutral-900 sm:text-7xl lg:text-8xl">
             BranchMind
           </p>
           <p

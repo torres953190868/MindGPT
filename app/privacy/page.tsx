@@ -48,11 +48,11 @@ const privacySections = [
 export default function PrivacyPage() {
   return (
     <main
-      className="min-h-screen px-5 py-6"
+      className="min-h-[100svh] px-3 py-4 sm:px-5 sm:py-6"
       aria-labelledby="privacy-title"
       data-testid="privacy-page"
     >
-      <div className="mx-auto flex max-w-4xl flex-col gap-8">
+      <div className="mx-auto flex max-w-4xl flex-col gap-5 sm:gap-8">
         <ResponsiveHeader
           title="Privacy Policy"
           icon={<FileText size={22} />}
@@ -83,17 +83,17 @@ export default function PrivacyPage() {
         <section
           aria-labelledby="privacy-title"
           data-testid="privacy-policy-content"
-          className="rounded-[28px] border border-white/80 bg-white/72 p-6 shadow-lg shadow-[#e8dcef]/35 md:p-8"
+          className="rounded-lg border border-white/80 bg-white/78 p-4 shadow-lg shadow-[#e8dcef]/30 sm:p-6 md:p-8"
         >
-          <div className="mb-8 flex items-start gap-4">
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-[18px] bg-[#e5f6ee] text-[#3d7558] shadow-sm">
+          <div className="mb-6 flex items-start gap-3 sm:mb-8 sm:gap-4">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#e5f6ee] text-[#3d7558] shadow-sm sm:h-12 sm:w-12">
               <FileText size={23} />
             </div>
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               <p className="text-sm font-extrabold uppercase tracking-[0.08em] text-[#6a5d74]">
                 Beta notice
               </p>
-              <h1 id="privacy-title" className="text-4xl font-black text-[#312737]">
+              <h1 id="privacy-title" className="text-3xl font-black text-[#312737] sm:text-4xl">
                 Privacy Policy
               </h1>
               <p className="text-sm font-bold text-[#7c7184]">Last updated: May 2, 2026</p>

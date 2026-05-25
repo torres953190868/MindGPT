@@ -1391,11 +1391,11 @@ export function PdfReader() {
       ref={readerGridRef}
       data-testid="pdf-reader"
       style={pdfReaderGridStyle}
-      className="grid min-h-[calc(100vh-92px)] w-full min-w-0 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl shadow-[rgba(44,35,62,0.08)] lg:h-[calc(100vh-92px)] lg:grid-cols-[var(--pdf-reader-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch"
+      className="grid min-h-0 w-full min-w-0 overflow-visible rounded-xl border border-neutral-200 bg-white shadow-xl shadow-[rgba(44,35,62,0.08)] lg:h-[calc(100svh-92px)] lg:min-h-[calc(100svh-92px)] lg:grid-cols-[var(--pdf-reader-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:overflow-hidden"
     >
       <aside
         data-testid="pdf-documents-sidebar"
-        className="min-w-0 border-b border-neutral-200 bg-neutral-50 p-4 lg:order-5 lg:max-h-[calc(100vh-92px)] lg:overflow-hidden lg:border-b-0 lg:border-l"
+        className="order-2 min-w-0 border-t border-neutral-200 bg-neutral-50 p-3 sm:p-4 lg:order-5 lg:max-h-[calc(100svh-92px)] lg:overflow-hidden lg:border-b-0 lg:border-l lg:border-t-0"
       >
         <div className="mb-4">
           <h2 className="text-xs font-black uppercase tracking-wider text-neutral-800">
@@ -1433,7 +1433,7 @@ export function PdfReader() {
           </button>
         </form>
 
-        <div className="mt-5 max-h-80 space-y-2 overflow-auto pr-1 lg:max-h-[calc(100vh-370px)]">
+        <div className="mt-5 max-h-64 space-y-2 overflow-auto pr-1 sm:max-h-80 lg:max-h-[calc(100svh-370px)]">
           {documents.map((document) => {
             const isSelected = selectedId === document.id;
             const isRenaming = renamingDocumentId === document.id;
@@ -1588,8 +1588,8 @@ export function PdfReader() {
         onResizeStart={handleDocumentsSidebarResizeStart}
       />
 
-      <main className="flex min-w-0 flex-col bg-white lg:order-3 lg:min-h-[calc(100vh-92px)]">
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-neutral-200 px-4 py-3">
+      <main className="order-1 flex min-w-0 flex-col bg-white lg:order-3 lg:min-h-[calc(100svh-92px)]">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-neutral-200 px-3 py-3 sm:px-4">
           <div className="min-w-[180px] flex-1">
             <h2 className="truncate text-sm font-black text-neutral-900">
               {selectedDocumentTitle}
@@ -1731,10 +1731,10 @@ export function PdfReader() {
 
         <div
           data-testid="pdf-viewer"
-          className="relative flex-1 overflow-auto bg-[#f4f4f7] px-4 py-5"
+          className="relative min-h-[380px] flex-1 overflow-auto bg-[#f4f4f7] px-3 py-4 sm:min-h-[520px] sm:px-4 sm:py-5 lg:min-h-0"
         >
           {!hasActivePdf && (
-            <div className="flex flex-col items-center justify-center gap-3 min-h-[520px] rounded-xl border-2 border-dashed border-neutral-300 bg-white/60 text-sm font-bold text-neutral-600">
+            <div className="flex min-h-[340px] flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-neutral-300 bg-white/60 text-sm font-bold text-neutral-600 sm:min-h-[520px]">
               <FileText size={32} className="text-neutral-300" />
               <span>Select a PDF to start reading</span>
             </div>
@@ -1782,11 +1782,11 @@ export function PdfReader() {
 
       <aside
         data-testid="pdf-tools-sidebar"
-        className="flex min-w-0 flex-col border-t border-neutral-200 bg-neutral-50 lg:order-1 lg:max-h-[calc(100vh-92px)] lg:overflow-hidden lg:border-r lg:border-t-0"
+        className="order-3 flex min-w-0 flex-col border-t border-neutral-200 bg-neutral-50 lg:order-1 lg:max-h-[calc(100svh-92px)] lg:overflow-hidden lg:border-r lg:border-t-0"
       >
         <div
           data-testid="pdf-toc-section"
-          className="flex min-h-0 flex-1 flex-col p-4"
+          className="flex min-h-0 flex-1 flex-col p-3 sm:p-4"
         >
           <h2 className="text-[11px] font-black uppercase tracking-wider text-neutral-800">
             Table of Contents

@@ -1,0 +1,9 @@
+.env*
+!.env.example
+.next/
+.next-dev/
+node_modules/
+test-results/
+playwright-report/
+reports/
+data/

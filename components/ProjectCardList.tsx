@@ -353,7 +353,7 @@ export function ProjectCardList() {
 
   return (
     <section
-      className="project-card-list-shell mx-auto flex w-full max-w-[1500px] flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white/95 shadow-xl md:min-h-[calc(100vh-2rem)] md:flex-row"
+      className="project-card-list-shell mx-auto flex w-full max-w-[1500px] flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white/95 shadow-xl md:min-h-[calc(100svh-1.5rem)] lg:min-h-[calc(100svh-2rem)] lg:flex-row"
       aria-labelledby="projects-title"
       data-testid="project-card-list"
     >
@@ -430,7 +430,7 @@ export function ProjectCardList() {
         className="sr-only"
       />
 
-      <aside className="project-card-list-sidebar flex w-full shrink-0 flex-col border-b border-neutral-200 bg-white px-3 py-3 md:w-56 md:border-b-0 md:border-r">
+      <aside className="project-card-list-sidebar flex w-full shrink-0 flex-col border-b border-neutral-200 bg-white px-3 py-3 lg:w-56 lg:border-b-0 lg:border-r">
         <Link
           href="/"
           aria-label="BranchMind home"
@@ -445,12 +445,12 @@ export function ProjectCardList() {
         <nav
           aria-label="Projects navigation"
           data-testid="projects-navigation"
-          className="mt-5 grid gap-1 text-sm font-bold"
+          className="mt-3 flex gap-1 overflow-x-auto pb-1 text-sm font-bold lg:mt-5 lg:grid lg:overflow-visible lg:pb-0"
         >
           <Link
             href="/projects"
             aria-current="page"
-            className="relative inline-flex min-h-10 items-center gap-2 rounded-md bg-brand-50 px-3 text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-300"
+            className="relative inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md bg-brand-50 px-3 text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-300"
           >
             <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-500" />
             <Folder size={16} />
@@ -466,7 +466,7 @@ export function ProjectCardList() {
                 : "Open most recent project"
             }
             data-testid="open-recent-project-button"
-            className="inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40 disabled:cursor-not-allowed disabled:text-neutral-500 disabled:opacity-70 disabled:hover:bg-transparent"
+            className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40 disabled:cursor-not-allowed disabled:text-neutral-500 disabled:opacity-70 disabled:hover:bg-transparent"
           >
             <Clock3 size={16} />
             Recent
@@ -474,7 +474,7 @@ export function ProjectCardList() {
           <button
             type="button"
             disabled
-            className="inline-flex min-h-10 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-500 opacity-70"
+            className="inline-flex min-h-10 shrink-0 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-500 opacity-70"
           >
             <Star size={16} />
             Starred
@@ -482,18 +482,18 @@ export function ProjectCardList() {
           <button
             type="button"
             disabled
-            className="inline-flex min-h-10 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-500 opacity-70"
+            className="inline-flex min-h-10 shrink-0 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-500 opacity-70"
           >
             <Share2 size={16} />
             Shared with me
           </button>
 
-          <div className="my-3 border-t border-neutral-200" />
+          <div className="my-3 hidden border-t border-neutral-200 lg:block" />
 
           <button
             type="button"
             disabled
-            className="inline-flex min-h-10 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-500 opacity-70"
+            className="inline-flex min-h-10 shrink-0 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-500 opacity-70"
           >
             <LayoutTemplate size={16} />
             Templates
@@ -502,18 +502,18 @@ export function ProjectCardList() {
             type="button"
             onClick={openImportPicker}
             disabled={isImporting}
-            className="inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Upload size={16} />
             Import
           </button>
 
-          <div className="my-3 border-t border-neutral-200" />
+          <div className="my-3 hidden border-t border-neutral-200 lg:block" />
 
           <button
             type="button"
             disabled
-            className="inline-flex min-h-10 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-600 opacity-60"
+            className="inline-flex min-h-10 shrink-0 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-600 opacity-60"
           >
             <Settings size={16} />
             Settings
@@ -521,28 +521,28 @@ export function ProjectCardList() {
           <button
             type="button"
             disabled
-            className="inline-flex min-h-10 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-600 opacity-60"
+            className="inline-flex min-h-10 shrink-0 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-600 opacity-60"
           >
             <HelpCircle size={16} />
             Help & feedback
           </button>
           <Link
             href="/reader"
-            className="inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
+            className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
           >
             <FileText size={16} />
             PDF Reader
           </Link>
           <Link
             href="/"
-            className="inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
+            className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
           >
             <Home size={16} />
             Home
           </Link>
         </nav>
 
-        <div className="mt-5 border-t border-neutral-200 pt-3 md:mt-auto">
+        <div className="mt-5 hidden border-t border-neutral-200 pt-3 lg:mt-auto lg:block">
           <AuthPanel placement="top" variant="sidebar" className="w-full" />
         </div>
       </aside>
@@ -591,7 +591,7 @@ export function ProjectCardList() {
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
               <button
                 type="button"
                 onClick={openImportPicker}
@@ -707,7 +707,178 @@ export function ProjectCardList() {
               className="project-card-list-panel overflow-hidden rounded-lg border border-neutral-200 bg-white"
               data-testid="project-grid"
             >
-              <div className="overflow-x-auto">
+              <div className="grid gap-2 p-2 md:hidden">
+                {visibleProjects.map((project) => {
+                  const nodeCount = Object.keys(project.nodes).length;
+                  const isEditingProject = editingProjectId === project.id;
+                  const editedProjectName = isEditingProject && editingProject
+                    ? editingProject.title
+                    : project.title;
+
+                  return (
+                    <article
+                      key={`mobile-${project.id}`}
+                      data-testid="project-mobile-card"
+                      data-project-id={project.id}
+                      className="rounded-lg border border-neutral-200 bg-white p-3 shadow-sm"
+                    >
+                      <div className="flex min-w-0 items-start gap-3">
+                        <button
+                          type="button"
+                          onClick={(event) => toggleStar(event, project.id)}
+                          aria-label={
+                            starredProjectIds.has(project.id)
+                              ? `Unstar ${project.title}`
+                              : `Star ${project.title}`
+                          }
+                          className={`grid h-9 w-9 shrink-0 place-items-center rounded-md border border-neutral-200 transition hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-brand-200 ${
+                            starredProjectIds.has(project.id)
+                              ? "text-brand-500"
+                              : "text-neutral-500"
+                          }`}
+                        >
+                          <Star
+                            size={16}
+                            fill={
+                              starredProjectIds.has(project.id)
+                                ? "currentColor"
+                                : "none"
+                            }
+                          />
+                        </button>
+
+                        <div className="min-w-0 flex-1">
+                          {isEditingProject ? (
+                            <form
+                              onSubmit={(event) =>
+                                handleProjectNameFormSubmit(
+                                  event,
+                                  project.id,
+                                  project.title,
+                                )
+                              }
+                              className="space-y-2"
+                            >
+                              <input
+                                ref={editInputRef}
+                                value={editedProjectName}
+                                onChange={(event) =>
+                                  setEditingProject({
+                                    id: project.id,
+                                    title: event.target.value,
+                                  })
+                                }
+                                onKeyDown={handleProjectNameKeyDown}
+                                disabled={isSavingProjectName}
+                                aria-label={`Project name for ${project.title}`}
+                                data-testid="project-name-edit-input"
+                                className="h-10 w-full rounded-md border border-brand-200 bg-white px-3 text-sm font-extrabold text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-60"
+                              />
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={cancelEditingProject}
+                                  disabled={isSavingProjectName}
+                                  aria-label={`Cancel project name edit for ${project.title}`}
+                                  data-testid="cancel-project-name-button"
+                                  className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-neutral-300 bg-white text-neutral-700 transition hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-45"
+                                >
+                                  <X size={15} />
+                                </button>
+                                <button
+                                  type="submit"
+                                  disabled={!editedProjectName.trim() || isSavingProjectName}
+                                  aria-label={`Save project name for ${project.title}`}
+                                  data-testid="save-project-name-button"
+                                  className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-success-600 text-white transition hover:bg-success-700 focus:outline-none focus:ring-2 focus:ring-success-200 disabled:cursor-not-allowed disabled:opacity-45"
+                                >
+                                  {isSavingProjectName ? (
+                                    <Loader2 size={14} className="animate-spin" />
+                                  ) : (
+                                    <Check size={15} />
+                                  )}
+                                </button>
+                              </div>
+                            </form>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => openProject(project.id)}
+                              className="block min-w-0 text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-200"
+                            >
+                              <h2 className="line-clamp-2 text-base font-extrabold leading-snug text-neutral-900">
+                                {project.title}
+                              </h2>
+                              <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-neutral-600">
+                                <span className="h-1.5 w-1.5 rounded-full bg-success-400" />
+                                {formatNodeCount(nodeCount)}
+                              </p>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between gap-3 border-t border-neutral-100 pt-3">
+                        <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-semibold text-neutral-700">
+                          <Clock3 size={13} className="shrink-0 text-neutral-500" />
+                          <span className="truncate">{formatProjectDate(project.updatedAt)}</span>
+                        </span>
+                        <div
+                          className="flex shrink-0 items-center gap-1"
+                          role="group"
+                          aria-label={`${project.title} actions`}
+                        >
+                          <Link
+                            href={`/workspace/${project.id}`}
+                            aria-label={`Open ${project.title}`}
+                            data-project-id={project.id}
+                            data-testid="open-project-link"
+                            className="grid h-9 w-9 place-items-center rounded-md text-neutral-700 transition hover:bg-success-50 hover:text-success-700 focus:outline-none focus:ring-2 focus:ring-success-200"
+                          >
+                            <ExternalLink size={15} />
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => downloadProjectJson(project)}
+                            aria-label={`Export ${project.title} as JSON`}
+                            data-project-id={project.id}
+                            data-testid="export-project-json-button"
+                            className="grid h-9 w-9 place-items-center rounded-md text-neutral-700 transition hover:bg-brand-50 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                          >
+                            <Download size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(event) =>
+                              startEditingProject(event, project.id, project.title)
+                            }
+                            aria-label={`Edit ${project.title} name`}
+                            data-project-id={project.id}
+                            data-testid="edit-project-name-button"
+                            className="grid h-9 w-9 place-items-center rounded-md text-neutral-700 transition hover:bg-brand-50 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-45"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(event) =>
+                              handleDeleteProject(event, project.id, project.title)
+                            }
+                            aria-label={`Delete ${project.title}`}
+                            data-project-id={project.id}
+                            data-testid="delete-project-button"
+                            className="grid h-9 w-9 place-items-center rounded-md text-neutral-700 transition hover:bg-danger-50 hover:text-danger-600 focus:outline-none focus:ring-2 focus:ring-danger-200"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+
+              <div className="hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[760px] text-left text-sm">
                   <thead className="border-b border-neutral-200 bg-neutral-50 text-xs font-extrabold uppercase tracking-wide text-neutral-700">
                     <tr>

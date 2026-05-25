@@ -76,7 +76,7 @@ export function BranchNodeCard({ data }: NodeProps) {
       data-home-composer={isHomeInlineComposer ? "true" : undefined}
       className={`branch-node-card-surface branch-node-edge-hit-area group bg-white text-left transition ${
         isHomeInlineComposer
-          ? `w-[min(760px,calc(100vw-48px))] rounded-[18px] border border-neutral-200/90 p-4 shadow-lg sm:p-6 ${
+          ? `w-[min(760px,calc(100vw-36px))] rounded-[18px] border border-neutral-200/90 p-3 shadow-lg sm:w-[min(760px,calc(100vw-48px))] sm:p-6 ${
               selected
                 ? "ring-2 ring-brand-200/70"
                 : "hover:shadow-xl"
@@ -307,7 +307,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
         onPointerDown={(event) => event.stopPropagation()}
         className="home-inline-composer nodrag nopan space-y-3"
       >
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <ModelSelectorButton controls={composerControls} placement="below" />
             <AttachmentMenuButton controls={composerControls} placement="below" />
@@ -328,7 +328,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
           data-testid="message-instruction-input"
           placeholder={composer.placeholder}
           rows={2}
-          className="min-h-[86px] w-full resize-none bg-transparent px-1 py-1 text-base leading-7 text-neutral-900 outline-none placeholder:text-neutral-500 disabled:cursor-not-allowed disabled:opacity-65"
+          className="min-h-[78px] w-full resize-none bg-transparent px-1 py-1 text-base leading-7 text-neutral-900 outline-none placeholder:text-neutral-500 disabled:cursor-not-allowed disabled:opacity-65 sm:min-h-[86px]"
         />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {composer.suggestions && composer.suggestions.length > 0 && (
@@ -358,18 +358,20 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
             disabled={isComposerBusy || !input.trim()}
             aria-label="Send message"
             data-testid="send-message-button"
-            className="branchmind-primary-action inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-brand-600 px-5 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="branchmind-primary-action inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-brand-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 sm:px-5"
           >
             {composerControls.isPreparingAttachments || composer.isBusy ? (
               <Loader2 size={15} className="animate-spin" />
             ) : (
               <Send size={15} />
             )}
-            {composerControls.isPreparingAttachments
-              ? "Preparing..."
-              : composer.isBusy
-                ? "Creating..."
-                : composer.submitLabel}
+            <span className="node-detail-send-label">
+              {composerControls.isPreparingAttachments
+                ? "Preparing..."
+                : composer.isBusy
+                  ? "Creating..."
+                  : composer.submitLabel}
+            </span>
           </button>
         </div>
         {displayError && (
@@ -424,18 +426,20 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
             disabled={isComposerBusy || !input.trim()}
             aria-label="Send message"
             data-testid="send-message-button"
-            className="branchmind-primary-action inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="branchmind-primary-action inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-3 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
           >
             {composerControls.isPreparingAttachments || composer.isBusy ? (
               <Loader2 size={14} className="animate-spin" />
             ) : (
               <Send size={14} />
             )}
-            {composerControls.isPreparingAttachments
-              ? "Preparing..."
-              : composer.isBusy
-                ? "Creating..."
-                : composer.submitLabel}
+            <span className="node-detail-send-label">
+              {composerControls.isPreparingAttachments
+                ? "Preparing..."
+                : composer.isBusy
+                  ? "Creating..."
+                  : composer.submitLabel}
+            </span>
           </button>
         </div>
       </div>

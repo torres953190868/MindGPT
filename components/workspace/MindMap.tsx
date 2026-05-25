@@ -393,7 +393,7 @@ export function MindMap({
       >
         <Controls
           className={`!rounded-[18px] !border-white/80 !bg-white/80 !shadow-lg ${
-            isHomeInlineComposer ? "!hidden sm:!flex" : ""
+            isHomeInlineComposer ? "!hidden lg:!flex" : ""
           }`}
         />
       </ReactFlow>
