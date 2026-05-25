@@ -515,6 +515,10 @@ textarea {
   box-shadow: var(--theme-shadow-md);
 }
 
+[data-theme="warm-limestone"] .node-detail-panel-surface {
+  background: var(--theme-surface-elevated);
+}
+
 [data-theme="warm-limestone"] .branchmind-workspace-grid {
   border-radius: 12px;
 }

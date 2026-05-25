@@ -584,7 +584,21 @@ test("home shows the canvas-first mobile launcher with collapsed side panels", a
     await expect(page.getByTestId("workspace-sidebar")).toHaveCount(0);
 
     await rightToggle.click();
-    await expect(page.getByTestId("node-detail-panel")).toBeVisible();
+    const nodeDetailPanel = page.getByTestId("node-detail-panel");
+    await expect(nodeDetailPanel).toBeVisible();
+    await expect
+      .poll(() =>
+        nodeDetailPanel.evaluate((element) => {
+          const panelBackground = getComputedStyle(element).backgroundColor;
+          const surfaceProbe = document.createElement("div");
+          surfaceProbe.style.backgroundColor = "var(--theme-surface-elevated)";
+          document.body.append(surfaceProbe);
+          const expectedBackground = getComputedStyle(surfaceProbe).backgroundColor;
+          surfaceProbe.remove();
+          return panelBackground === expectedBackground;
+        }),
+      )
+      .toBe(true);
     await page.mouse.click(8, viewport.height / 2);
     await expect(page.getByTestId("node-detail-panel")).toHaveCount(0);
 
