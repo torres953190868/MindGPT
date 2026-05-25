@@ -238,6 +238,22 @@ async function getElementBox(locator: Locator, label: string) {
   return box;
 }
 
+async function dragFromElementCenter(
+  page: Page,
+  locator: Locator,
+  deltaX: number,
+  deltaY: number,
+) {
+  const box = await getElementBox(locator, "drag source");
+  const startX = box.x + box.width / 2;
+  const startY = box.y + box.height / 2;
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + deltaX, startY + deltaY, { steps: 12 });
+  await page.mouse.up();
+}
+
 async function dragResizeHandle(page: Page, handle: Locator, deltaX: number) {
   const handleBox = await handle.boundingBox();
   if (!handleBox) throw new Error("Expected resize handle to be measurable.");
@@ -535,22 +551,125 @@ test("home shows the canvas-first mobile launcher with collapsed side panels", a
     await expect(page.getByTestId("node-detail-panel")).toHaveCount(0);
 
     const mindMapCanvas = page.getByTestId("mind-map-canvas");
-    await expect(mindMapCanvas.getByTestId("expand-workspace-sidebar-button")).toBeVisible();
-    await expect(mindMapCanvas.getByTestId("expand-node-detail-panel-button")).toBeVisible();
+    const leftToggle = mindMapCanvas.getByTestId("expand-workspace-sidebar-button");
+    const rightToggle = mindMapCanvas.getByTestId("expand-node-detail-panel-button");
+    await expect(leftToggle).toBeVisible();
+    await expect(rightToggle).toBeVisible();
 
-    await mindMapCanvas.getByTestId("expand-workspace-sidebar-button").click();
+    const homeHeroBox = await getElementBox(page.getByTestId("home-hero"), "home hero");
+    const leftToggleBox = await getElementBox(leftToggle, "left canvas toggle");
+    const rightToggleBox = await getElementBox(rightToggle, "right canvas toggle");
+    expect(homeHeroBox.y).toBeGreaterThan(80);
+    expect(leftToggleBox.y).toBeGreaterThan(24);
+    expect(rightToggleBox.y).toBeGreaterThan(24);
+
+    await leftToggle.click();
     await expect(page.getByTestId("workspace-sidebar")).toBeVisible();
     await expect(page.getByTestId("mobile-drawer-backdrop")).toBeVisible();
     await page.getByTestId("collapse-workspace-sidebar-button").click();
     await expect(page.getByTestId("workspace-sidebar")).toHaveCount(0);
 
-    await mindMapCanvas.getByTestId("expand-node-detail-panel-button").click();
+    await rightToggle.click();
     await expect(page.getByTestId("node-detail-panel")).toBeVisible();
     await page.mouse.click(8, viewport.height / 2);
     await expect(page.getByTestId("node-detail-panel")).toHaveCount(0);
 
     await expect(page.locator('[data-testid="account-sign-in-button"]:visible')).toHaveCount(0);
   }
+});
+
+test("mobile home composer gestures only pan vertically while controls stay interactive", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chrome", "Mobile gesture behavior is covered once.");
+
+  await mockAuthSession(page, { configured: true, user: null });
+  await mockHomeModelCatalog(page);
+  await page.setViewportSize({ width: 390, height: 780 });
+  await page.goto("/");
+
+  const mindMapCanvas = page.getByTestId("mind-map-canvas");
+  const composer = page.getByTestId("message-composer");
+  const composerCard = page.locator('[data-testid="branch-node-card"][data-home-composer="true"]');
+  const input = page.getByTestId("message-instruction-input");
+
+  await expect(composer).toBeVisible();
+  await expect(composerCard).toBeVisible();
+
+  const mindMapCanvasBox = await getElementBox(mindMapCanvas, "mind map canvas");
+  const verticalPanLimit = mindMapCanvasBox.height / 5;
+  const viewportBeforeHorizontal = await getReactFlowViewport(mindMapCanvas);
+  await dragFromElementCenter(page, composer, 90, 0);
+  await expect
+    .poll(async () => {
+      const viewport = await getReactFlowViewport(mindMapCanvas);
+      return Math.abs(viewport.x - viewportBeforeHorizontal.x);
+    })
+    .toBeLessThanOrEqual(2);
+  await expect
+    .poll(async () => {
+      const viewport = await getReactFlowViewport(mindMapCanvas);
+      return Math.abs(viewport.y - viewportBeforeHorizontal.y);
+    })
+    .toBeLessThanOrEqual(2);
+
+  const viewportBeforeBaselineDown = await getReactFlowViewport(mindMapCanvas);
+  await dragFromElementCenter(page, composer, 0, 90);
+  await expect
+    .poll(async () => {
+      const viewport = await getReactFlowViewport(mindMapCanvas);
+      return Math.abs(viewport.y - viewportBeforeBaselineDown.y);
+    })
+    .toBeLessThanOrEqual(2);
+
+  const viewportBeforeUp = await getReactFlowViewport(mindMapCanvas);
+  await dragFromElementCenter(page, composer, 0, -420);
+  await expect
+    .poll(async () => {
+      const viewport = await getReactFlowViewport(mindMapCanvas);
+      return viewportBeforeUp.y - viewport.y;
+    })
+    .toBeGreaterThan(24);
+  await expect
+    .poll(async () => {
+      const viewport = await getReactFlowViewport(mindMapCanvas);
+      return viewportBeforeHorizontal.y - viewport.y;
+    })
+    .toBeLessThanOrEqual(verticalPanLimit + 3);
+
+  const homeHeroBox = await getElementBox(page.getByTestId("home-hero"), "home hero");
+  const composerCardBox = await getElementBox(composerCard, "home composer card");
+  const viewportAfterUp = await getReactFlowViewport(mindMapCanvas);
+  expect(homeHeroBox.y).toBeGreaterThanOrEqual(15);
+  expect(Math.abs(viewportAfterUp.x - viewportBeforeHorizontal.x)).toBeLessThanOrEqual(2);
+  expect(Math.abs(viewportAfterUp.y - viewportBeforeHorizontal.y)).toBeLessThanOrEqual(
+    verticalPanLimit + 3,
+  );
+  expect(composerCardBox.y).toBeGreaterThan(homeHeroBox.y + homeHeroBox.height + 16);
+
+  await dragFromElementCenter(page, composer, 0, 420);
+  await expect
+    .poll(async () => {
+      const viewport = await getReactFlowViewport(mindMapCanvas);
+      return Math.abs(viewport.y - viewportBeforeHorizontal.y);
+    })
+    .toBeLessThanOrEqual(3);
+
+  await input.click();
+  await expect(input).toBeFocused();
+  await input.fill("Mobile gesture input");
+  await expect(input).toHaveValue("Mobile gesture input");
+
+  await page.locator('[data-testid="home-prompt-suggestion"]:visible').first().click();
+  await expect(input).not.toHaveValue("Mobile gesture input");
+
+  await page.getByTestId("chat-model-selector-button").click();
+  await expect(page.getByTestId("chat-model-menu")).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await page.getByTestId("add-message-attachment-button").click();
+  await expect(page.getByTestId("attachment-menu")).toBeVisible();
+  await expect(page.getByTestId("send-message-button")).toBeEnabled();
 });
 
 test("mobile home launcher starts a workspace from the compact composer", async ({ page }) => {

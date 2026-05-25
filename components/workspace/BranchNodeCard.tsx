@@ -131,7 +131,9 @@ export function BranchNodeCard({ data }: NodeProps) {
         }}
         data-testid="branch-node-inner-hit-area"
         data-node-id={mindNode.id}
-        className="branch-node-inner-hit-area nodrag nopan rounded-[18px]"
+        className={`branch-node-inner-hit-area nodrag rounded-[18px] ${
+          isHomeInlineComposer ? "" : "nopan"
+        }`}
       >
         {isHomeInlineComposer ? (
           <>
@@ -318,8 +320,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
         data-testid="message-composer"
         onSubmit={handleSubmit}
         onClick={(event) => event.stopPropagation()}
-        onPointerDown={(event) => event.stopPropagation()}
-        className="home-inline-composer nodrag nopan space-y-2 sm:space-y-3"
+        className="home-inline-composer nodrag space-y-2 sm:space-y-3"
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">

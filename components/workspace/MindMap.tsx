@@ -32,7 +32,10 @@ const nodeTypes: NodeTypes = {
   branchNode: BranchNodeCard,
 };
 const HOME_CANVAS_PAN_RANGE_RATIO = 1 / 5;
+const HOME_COMPOSER_INITIAL_OFFSET_Y = 16;
 const HOME_CANVAS_WHEEL_PAN_SPEED = 0.5;
+const HOME_HERO_MIN_VISIBLE_TOP = 16;
+const HOME_CANVAS_PAN_ACTIVATION_DISTANCE = 6;
 const LINE_SCROLL_DELTA_MULTIPLIER = 20;
 
 function clamp(value: number, min: number, max: number) {
@@ -52,6 +55,17 @@ type MindMapProps = {
   onHomeCanvasPanOffsetChange?: (offsetY: number) => void;
 };
 
+type HomeCanvasGesture = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startOffsetY: number;
+  baselineX: number;
+  baselineY: number;
+  mode: "pending" | "vertical" | "horizontal";
+  captured: boolean;
+};
+
 export function MindMap({
   project,
   selectedNodeId,
@@ -65,6 +79,9 @@ export function MindMap({
   onHomeCanvasPanOffsetChange,
 }: MindMapProps) {
   const flowContainerRef = useRef<HTMLDivElement | null>(null);
+  const homeCanvasPanOffsetYRef = useRef(0);
+  const homeCanvasGestureRef = useRef<HomeCanvasGesture | null>(null);
+  const homeViewportBaselineXRef = useRef<number | null>(null);
   const homeViewportBaselineYRef = useRef<number | null>(null);
   const previousFlowBoundsRef = useRef<DOMRectReadOnly | null>(null);
   const visibleNodeIds = useMemo(() => getVisibleNodeIds(project), [project]);
@@ -151,15 +168,37 @@ export function MindMap({
         duration: 0,
       })
       .then(() => {
-        homeViewportBaselineYRef.current = reactFlowInstance.getViewport().y;
+        const viewport = reactFlowInstance.getViewport();
+        const initialViewport = {
+          ...viewport,
+          y: viewport.y + HOME_COMPOSER_INITIAL_OFFSET_Y,
+        };
+
+        homeViewportBaselineYRef.current = initialViewport.y;
+        homeViewportBaselineXRef.current = initialViewport.x;
+        homeCanvasPanOffsetYRef.current = 0;
         onHomeCanvasPanOffsetChange?.(0);
+        void reactFlowInstance.setViewport(initialViewport, { duration: 0 });
       });
   }, [homeComposerNodeId, onHomeCanvasPanOffsetChange, reactFlowInstance]);
 
-  const getHomeCanvasPanLimit = useCallback(() => {
+  const getHomeCanvasPanBounds = useCallback(() => {
     const containerHeight = flowContainerRef.current?.clientHeight ?? window.innerHeight;
+    const heroTop =
+      document
+        .querySelector<HTMLElement>("[data-testid='home-hero']")
+        ?.getBoundingClientRect().top ?? containerHeight;
+    const baselineHeroTop = heroTop - homeCanvasPanOffsetYRef.current;
+    const maxUpBeforeHeroLeavesScreen = Math.max(
+      0,
+      baselineHeroTop - HOME_HERO_MIN_VISIBLE_TOP,
+    );
+    const panRange = containerHeight * HOME_CANVAS_PAN_RANGE_RATIO;
 
-    return containerHeight * HOME_CANVAS_PAN_RANGE_RATIO;
+    return {
+      down: 0,
+      up: Math.min(panRange, maxUpBeforeHeroLeavesScreen),
+    };
   }, []);
 
   useEffect(() => {
@@ -279,18 +318,27 @@ export function MindMap({
       if (homeViewportBaselineYRef.current === null) {
         homeViewportBaselineYRef.current = viewport.y;
       }
+      if (homeViewportBaselineXRef.current === null) {
+        homeViewportBaselineXRef.current = viewport.x;
+      }
 
+      const baselineX = homeViewportBaselineXRef.current;
       const baselineY = homeViewportBaselineYRef.current;
-      const panLimit = getHomeCanvasPanLimit();
+      const panBounds = getHomeCanvasPanBounds();
       const rawOffsetY = viewport.y - baselineY;
-      const clampedOffsetY = clamp(rawOffsetY, -panLimit, 0);
+      const clampedOffsetY = clamp(rawOffsetY, -panBounds.up, panBounds.down);
+      const shouldCorrectViewport =
+        Math.abs(viewport.x - baselineX) > 0.5 ||
+        Math.abs(rawOffsetY - clampedOffsetY) > 0.5;
 
+      homeCanvasPanOffsetYRef.current = clampedOffsetY;
       onHomeCanvasPanOffsetChange?.(clampedOffsetY);
 
-      if (reactFlowInstance && Math.abs(rawOffsetY - clampedOffsetY) > 0.5) {
+      if (reactFlowInstance && shouldCorrectViewport) {
         void reactFlowInstance.setViewport(
           {
             ...viewport,
+            x: baselineX,
             y: baselineY + clampedOffsetY,
           },
           { duration: 0 },
@@ -298,7 +346,7 @@ export function MindMap({
       }
     },
     [
-      getHomeCanvasPanLimit,
+      getHomeCanvasPanBounds,
       isHomeInlineComposer,
       onHomeCanvasPanOffsetChange,
       reactFlowInstance,
@@ -329,25 +377,30 @@ export function MindMap({
       event.stopPropagation();
 
       const viewport = reactFlowInstance.getViewport();
+      const baselineX = homeViewportBaselineXRef.current ?? viewport.x;
       const baselineY = homeViewportBaselineYRef.current ?? viewport.y;
+      const panBounds = getHomeCanvasPanBounds();
       const nextOffsetY = clamp(
         viewport.y - baselineY - deltaY * HOME_CANVAS_WHEEL_PAN_SPEED,
-        -getHomeCanvasPanLimit(),
+        -panBounds.up,
         0,
       );
 
+      homeViewportBaselineXRef.current = baselineX;
       homeViewportBaselineYRef.current = baselineY;
+      homeCanvasPanOffsetYRef.current = nextOffsetY;
       onHomeCanvasPanOffsetChange?.(nextOffsetY);
       void reactFlowInstance.setViewport(
         {
           ...viewport,
+          x: baselineX,
           y: baselineY + nextOffsetY,
         },
         { duration: 0 },
       );
     },
     [
-      getHomeCanvasPanLimit,
+      getHomeCanvasPanBounds,
       isHomeInlineComposer,
       onHomeCanvasPanOffsetChange,
       reactFlowInstance,
@@ -367,6 +420,128 @@ export function MindMap({
       window.removeEventListener("wheel", handleHomeWheel);
     };
   }, [handleHomeWheel, isHomeInlineComposer, reactFlowInstance]);
+
+  useEffect(() => {
+    if (!isHomeInlineComposer || !reactFlowInstance) return undefined;
+
+    const gestureTarget = flowContainerRef.current;
+    if (!gestureTarget) return undefined;
+
+    const stopGesture = (event?: PointerEvent) => {
+      const gesture = homeCanvasGestureRef.current;
+      if (gesture?.captured && event?.pointerId === gesture.pointerId) {
+        try {
+          gestureTarget.releasePointerCapture?.(gesture.pointerId);
+        } catch {
+          // The browser can release capture before pointercancel reaches us.
+        }
+      }
+      homeCanvasGestureRef.current = null;
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!event.isPrimary || event.button !== 0) return;
+
+      const viewport = reactFlowInstance.getViewport();
+      const baselineX = homeViewportBaselineXRef.current ?? viewport.x;
+      const baselineY = homeViewportBaselineYRef.current ?? viewport.y;
+
+      homeViewportBaselineXRef.current = baselineX;
+      homeViewportBaselineYRef.current = baselineY;
+      homeCanvasGestureRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startOffsetY: clamp(
+          viewport.y - baselineY,
+          -getHomeCanvasPanBounds().up,
+          getHomeCanvasPanBounds().down,
+        ),
+        baselineX,
+        baselineY,
+        mode: "pending",
+        captured: false,
+      };
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const gesture = homeCanvasGestureRef.current;
+      if (!gesture || event.pointerId !== gesture.pointerId) return;
+
+      const deltaX = event.clientX - gesture.startX;
+      const deltaY = event.clientY - gesture.startY;
+
+      if (gesture.mode === "pending") {
+        const absX = Math.abs(deltaX);
+        const absY = Math.abs(deltaY);
+
+        if (
+          Math.max(absX, absY) < HOME_CANVAS_PAN_ACTIVATION_DISTANCE
+        ) {
+          return;
+        }
+
+        gesture.mode = absY >= absX ? "vertical" : "horizontal";
+        gestureTarget.setPointerCapture?.(event.pointerId);
+        gesture.captured = true;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (gesture.mode === "horizontal") {
+        void reactFlowInstance.setViewport(
+          {
+            ...reactFlowInstance.getViewport(),
+            x: gesture.baselineX,
+          },
+          { duration: 0 },
+        );
+        return;
+      }
+
+      const panBounds = getHomeCanvasPanBounds();
+      const nextOffsetY = clamp(
+        gesture.startOffsetY + deltaY,
+        -panBounds.up,
+        panBounds.down,
+      );
+
+      homeCanvasPanOffsetYRef.current = nextOffsetY;
+      onHomeCanvasPanOffsetChange?.(nextOffsetY);
+      void reactFlowInstance.setViewport(
+        {
+          ...reactFlowInstance.getViewport(),
+          x: gesture.baselineX,
+          y: gesture.baselineY + nextOffsetY,
+        },
+        { duration: 0 },
+      );
+    };
+
+    const handlePointerUp = (event: PointerEvent) => {
+      stopGesture(event);
+    };
+
+    gestureTarget.addEventListener("pointerdown", handlePointerDown);
+    gestureTarget.addEventListener("pointermove", handlePointerMove, {
+      passive: false,
+    });
+    gestureTarget.addEventListener("pointerup", handlePointerUp);
+    gestureTarget.addEventListener("pointercancel", handlePointerUp);
+
+    return () => {
+      gestureTarget.removeEventListener("pointerdown", handlePointerDown);
+      gestureTarget.removeEventListener("pointermove", handlePointerMove);
+      gestureTarget.removeEventListener("pointerup", handlePointerUp);
+      gestureTarget.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [
+    getHomeCanvasPanBounds,
+    isHomeInlineComposer,
+    onHomeCanvasPanOffsetChange,
+    reactFlowInstance,
+  ]);
 
   if (graphNodes.length === 0) {
     return (
@@ -412,6 +587,7 @@ export function MindMap({
         maxZoom={1.7}
         zoomOnScroll={!isHomeInlineComposer}
         panOnScroll={false}
+        panOnDrag={!isHomeInlineComposer}
         className="branchmind-grid h-full rounded-[28px] lg:rounded-none"
       >
         <Controls

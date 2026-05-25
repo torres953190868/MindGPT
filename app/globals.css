@@ -1017,14 +1017,20 @@ textarea {
 @media (max-width: 1023px) {
   .branchmind-home-workspace-grid .branchmind-map-shell {
     border-radius: 0;
+    touch-action: none;
   }
 
   .branchmind-home-workspace-grid .branchmind-canvas-intro-floating {
-    top: calc(env(safe-area-inset-top) + 4.25rem);
+    top: calc(env(safe-area-inset-top) + 5.75rem);
   }
 
   .branchmind-home-workspace-grid .branchmind-canvas-toggle {
-    top: calc(env(safe-area-inset-top) + 0.75rem);
+    top: calc(env(safe-area-inset-top) + 2.25rem);
+  }
+
+  .branchmind-home-workspace-grid .branch-node-inner-hit-area,
+  .branchmind-home-workspace-grid .home-inline-composer {
+    touch-action: none;
   }
 
   .react-flow__controls button {
