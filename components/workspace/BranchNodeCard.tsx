@@ -76,7 +76,7 @@ export function BranchNodeCard({ data }: NodeProps) {
       data-home-composer={isHomeInlineComposer ? "true" : undefined}
       className={`branch-node-card-surface branch-node-edge-hit-area group text-left transition ${
         isHomeInlineComposer
-          ? `w-[min(760px,calc(100vw-40px))] rounded-xl border border-neutral-200/90 bg-white/92 p-2.5 shadow-lg backdrop-blur sm:w-[min(760px,calc(100vw-48px))] sm:rounded-[18px] sm:p-6 ${
+          ? `w-[min(312px,calc(100vw-72px))] rounded-xl border border-neutral-200/90 bg-white/92 p-2.5 shadow-lg backdrop-blur sm:w-[360px] sm:rounded-[18px] sm:p-5 md:w-[400px] lg:w-[min(760px,calc(100vw-48px))] lg:p-6 ${
               selected
                 ? "ring-2 ring-brand-200/70"
                 : "hover:shadow-xl"
@@ -270,6 +270,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
   const errorId = `inline-node-composer-${composer.nodeId}-error`;
   const isHomeComposer = composer.variant === "home";
   const suggestionsAnimationPhase = composer.suggestionsAnimationPhase ?? "idle";
+  const homeSuggestions = composer.suggestions ?? [];
 
   async function submitComposer() {
     const trimmed = input.trim();
@@ -345,11 +346,11 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
           className="min-h-[58px] w-full resize-none bg-transparent px-1 py-1 text-base leading-7 text-neutral-900 outline-none placeholder:text-neutral-500 disabled:cursor-not-allowed disabled:opacity-65 sm:min-h-[86px]"
         />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          {composer.suggestions && composer.suggestions.length > 0 && (
+          {homeSuggestions.length > 0 && (
             <div
-              className={`home-prompt-suggestion-rotator home-prompt-suggestion-rotator-${suggestionsAnimationPhase} hidden min-w-0 flex-1 flex-wrap gap-2 sm:flex`}
+              className={`home-prompt-suggestion-rotator home-prompt-suggestion-rotator-${suggestionsAnimationPhase} flex min-w-0 flex-1 flex-wrap gap-2`}
             >
-              {composer.suggestions.map((suggestion) => (
+              {homeSuggestions.map((suggestion, index) => (
                 <button
                   key={suggestion}
                   type="button"
@@ -359,7 +360,9 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
                     setInput(suggestion);
                   }}
                   data-testid="home-prompt-suggestion"
-                  className="home-prompt-suggestion-button inline-flex min-h-9 max-w-full items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 text-sm font-bold text-neutral-700 shadow-sm transition hover:border-brand-200 hover:bg-neutral-50 focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-55"
+                  className={`home-prompt-suggestion-button min-h-9 max-w-full items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 text-sm font-bold text-neutral-700 shadow-sm transition hover:border-brand-200 hover:bg-neutral-50 focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-55 ${
+                    index === 0 ? "inline-flex" : "hidden lg:inline-flex"
+                  }`}
                 >
                   <Sparkles size={15} className="shrink-0 text-brand-500" />
                   <span className="truncate">{suggestion}</span>
