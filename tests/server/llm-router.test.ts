@@ -122,6 +122,7 @@ describe("LLM router", () => {
   });
 
   it("omits providers without API keys from the public catalog", () => {
+    vi.stubEnv("AI_MOCK_MODE", "false");
     vi.stubEnv("PRIMARY_KEY", "primary-key");
     vi.stubEnv("FALLBACK_KEY", "");
 

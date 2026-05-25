@@ -159,6 +159,7 @@ describe("GeminiEmbeddingProvider", () => {
   });
 
   it("selects Gemini when configured as the embedding provider", () => {
+    vi.stubEnv("AI_MOCK_MODE", "false");
     vi.stubEnv("EMBEDDING_PROVIDER", "gemini");
     vi.stubEnv("EMBEDDING_MODEL", "");
 
