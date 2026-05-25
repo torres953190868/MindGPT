@@ -1,5 +1,9 @@
 import type { NextRequest } from "next/server";
 import { getBranchMindAuthContext, getOptionalSupabaseUser } from "@/lib/server/auth";
+import {
+  getSupabaseUserAccountName,
+  getSupabaseUserPublicEmail,
+} from "@/lib/server/auth-password";
 import { HttpError, jsonWithSession, safeErrorWithSession } from "@/lib/server/http";
 import { getExistingSessionId, getOrCreateSession } from "@/lib/server/session";
 import { hasSupabaseServerConfig } from "@/lib/supabase/server";
@@ -23,6 +27,7 @@ const updateAccountSchema = z.object({
 
 export type AccountDto = {
   email: string | null;
+  accountName: string | null;
   displayName: string | null;
   authMode: "supabase" | "local" | "guest";
   authConfigured: boolean;
@@ -47,6 +52,7 @@ async function getFileAccountData(sessionId: string): Promise<AccountDto> {
 
   return {
     email: null,
+    accountName: null,
     displayName: null,
     authMode: "local",
     authConfigured: false,
@@ -61,8 +67,17 @@ async function getFileAccountData(sessionId: string): Promise<AccountDto> {
   };
 }
 
-async function getSupabaseAccountData(userId: string, email: string | null): Promise<AccountDto> {
+type SupabaseAccountUser = {
+  id: string;
+  email?: string | null;
+  user_metadata?: Record<string, unknown> | null;
+};
+
+async function getSupabaseAccountData(user: SupabaseAccountUser): Promise<AccountDto> {
   const supabase = getSupabaseAdminClient();
+  const userId = user.id;
+  const email = getSupabaseUserPublicEmail(user);
+  const accountName = getSupabaseUserAccountName(user);
 
   // Count actual resources
   const { count: projectCount } = await supabase
@@ -93,6 +108,7 @@ async function getSupabaseAccountData(userId: string, email: string | null): Pro
 
   return {
     email,
+    accountName,
     displayName: null,
     authMode: "supabase",
     authConfigured: true,
@@ -115,6 +131,7 @@ export async function GET(request: NextRequest) {
       return jsonWithSession(
         {
           email: null,
+          accountName: null,
           displayName: null,
           authMode: "local",
           authConfigured: false,
@@ -137,6 +154,7 @@ export async function GET(request: NextRequest) {
         return jsonWithSession(
           {
             email: null,
+            accountName: null,
             displayName: null,
             authMode: "guest",
             authConfigured: true,
@@ -152,7 +170,7 @@ export async function GET(request: NextRequest) {
           fallbackSession,
         );
       }
-      const data = await getSupabaseAccountData(user.id, user.email ?? null);
+      const data = await getSupabaseAccountData(user);
       return jsonWithSession(data, fallbackSession);
     }
 
@@ -177,7 +195,7 @@ export async function PATCH(request: NextRequest) {
         throw new HttpError("Sign in is required.", { code: "AUTH_REQUIRED", expose: true, status: 401 });
       }
 
-      const data = await getSupabaseAccountData(user.id, user.email ?? null);
+      const data = await getSupabaseAccountData(user);
       return jsonWithSession(
         body.displayName !== undefined ? { ...data, displayName: body.displayName } : data,
         fallbackSession,

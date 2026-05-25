@@ -792,6 +792,34 @@ textarea {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-brand-200) 54%, transparent);
 }
 
+[data-theme="warm-limestone"] .node-selection-action {
+  border-color: var(--theme-border-default);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--theme-surface-elevated) 96%, transparent);
+  color: var(--theme-text-primary);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
+}
+
+[data-theme="warm-limestone"] .node-selection-action:hover {
+  border-color: var(--theme-border-hover);
+  background: var(--theme-surface-elevated);
+}
+
+[data-theme="warm-limestone"] .node-selection-action svg {
+  color: var(--theme-text-secondary);
+}
+
+[data-theme="warm-limestone"] .node-selected-text-chip {
+  border-color: var(--theme-border-default);
+  background: color-mix(in srgb, var(--theme-surface-elevated) 78%, transparent);
+  color: var(--theme-text-secondary);
+  box-shadow: none;
+}
+
+[data-theme="warm-limestone"] .node-selected-text-chip svg {
+  color: var(--theme-text-muted);
+}
+
 [data-theme="warm-limestone"] .node-detail-mode-button,
 [data-theme="warm-limestone"] .node-detail-tertiary-action {
   border: 1px solid var(--theme-border-default);
@@ -872,9 +900,8 @@ textarea {
   }
 }
 
-.home-tagline-rotator {
-  display: inline-block;
-  min-height: 1.25em;
+.home-tagline-rotator,
+.home-prompt-suggestion-rotator {
   opacity: 1;
   transform: translateY(0);
   filter: blur(0);
@@ -884,13 +911,24 @@ textarea {
     filter 420ms ease-out;
 }
 
-.home-tagline-rotator-leaving {
+.home-tagline-rotator {
+  display: inline-block;
+  min-height: 1.25em;
+}
+
+.home-prompt-suggestion-rotator {
+  min-height: 2.25rem;
+}
+
+.home-tagline-rotator-leaving,
+.home-prompt-suggestion-rotator-leaving {
   opacity: 0;
   transform: translateY(-6px);
   filter: blur(2px);
 }
 
-.home-tagline-rotator-entering {
+.home-tagline-rotator-entering,
+.home-prompt-suggestion-rotator-entering {
   animation: home-tagline-enter 420ms ease-out both;
 }
 
@@ -909,12 +947,15 @@ textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .home-tagline-rotator {
+  .home-tagline-rotator,
+  .home-prompt-suggestion-rotator {
     transition-duration: 1ms;
   }
 
   .home-tagline-rotator-leaving,
-  .home-tagline-rotator-entering {
+  .home-tagline-rotator-entering,
+  .home-prompt-suggestion-rotator-leaving,
+  .home-prompt-suggestion-rotator-entering {
     opacity: 1;
     transform: none;
     filter: none;

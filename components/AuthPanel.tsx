@@ -18,12 +18,12 @@ import {
   X,
 } from "lucide-react";
 import { BugReportDialog } from "@/components/BugReportLauncher";
-import { writeRememberedAuthEmail } from "@/lib/client/auth-email";
+import { writeRememberedAuthAccountName } from "@/lib/client/auth-email";
 import type { AccountDto } from "@/app/api/account/route";
 
 type AuthSession = {
   configured: boolean;
-  user: { id: string; email: string | null } | null;
+  user: { id: string; email: string | null; accountName: string | null } | null;
 };
 
 type AuthPanelProps = {
@@ -49,8 +49,8 @@ function getCurrentNextPath() {
   return `${window.location.pathname}${window.location.search}${window.location.hash}`;
 }
 
-function getInitial(email: string | null | undefined) {
-  return email?.trim().charAt(0).toUpperCase() || "B";
+function getInitial(accountName: string | null | undefined) {
+  return accountName?.trim().charAt(0).toUpperCase() || "B";
 }
 
 function getPlanBadgeColor(plan: string) {
@@ -245,8 +245,8 @@ export function AuthPanel({
   }, []);
 
   useEffect(() => {
-    if (session?.user?.email) writeRememberedAuthEmail(session.user.email);
-  }, [session?.user?.email]);
+    if (session?.user?.accountName) writeRememberedAuthAccountName(session.user.accountName);
+  }, [session?.user?.accountName]);
 
   useEffect(() => {
     if (session?.user) {
@@ -294,7 +294,8 @@ export function AuthPanel({
   }
 
   const displayEmail = account?.email ?? session?.user?.email ?? null;
-  const displayName = account?.displayName ?? displayEmail;
+  const displayAccountName = account?.accountName ?? session?.user?.accountName ?? displayEmail;
+  const displayName = account?.displayName ?? displayAccountName;
   const plan = account?.plan ?? "free";
   const highestUsage = account ? getHighestUsageItem(account.usage) : null;
   const isFreePlan = plan === "free";
@@ -358,7 +359,7 @@ export function AuthPanel({
             }
           >
             <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-50 text-xs font-bold text-brand-700 ring-1 ring-inset ring-brand-100">
-              {getInitial(displayEmail)}
+              {getInitial(displayAccountName)}
             </span>
             <span className={`${isSidebar ? "flex-1" : "max-w-36"} truncate`}>
               {displayName ?? "Signed in"}
@@ -378,11 +379,11 @@ export function AuthPanel({
               <div className="rounded-lg border border-neutral-200 bg-surface-soft px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
                 <div className="flex items-center gap-2.5">
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-50 text-xs font-bold text-brand-700 ring-1 ring-inset ring-brand-100">
-                    {getInitial(displayEmail)}
+                    {getInitial(displayAccountName)}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-bold text-neutral-900">
-                      {displayEmail ?? "BranchMind account"}
+                      {displayAccountName ?? "BranchMind account"}
                     </p>
                     <div className="mt-0.5 flex items-center gap-2">
                       <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${getPlanBadgeColor(plan)}`}>

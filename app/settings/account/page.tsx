@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
-import { CheckCircle2, KeyRound, Loader2, Mail, ShieldCheck, UserCircle } from "lucide-react";
+import { CheckCircle2, KeyRound, Loader2, ShieldCheck, UserCircle } from "lucide-react";
 import type { AccountDto } from "@/app/api/account/route";
 
-function getInitial(email: string | null | undefined) {
-  return email?.trim().charAt(0).toUpperCase() || "B";
+function getInitial(accountName: string | null | undefined) {
+  return accountName?.trim().charAt(0).toUpperCase() || "B";
 }
 
 const inputClassName =
@@ -64,7 +64,7 @@ export default function AccountSettingsPage() {
   }, []);
 
   async function handleUpdateName() {
-    if (account?.authMode !== "supabase" || !account.email) {
+    if (account?.authMode !== "supabase") {
       setNameMessage("Sign in to update your profile.");
       return;
     }
@@ -91,13 +91,13 @@ export default function AccountSettingsPage() {
 
   async function handleUpdatePassword() {
     setPasswordMessage(null);
-    if (account?.authMode !== "supabase" || !account.email) {
+    if (account?.authMode !== "supabase") {
       setPasswordMessage("Sign in to update your password.");
       return;
     }
 
-    if (newPassword.length < 6) {
-      setPasswordMessage("Password must be at least 6 characters.");
+    if (newPassword.length < 8) {
+      setPasswordMessage("Password must be at least 8 characters.");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -134,20 +134,22 @@ export default function AccountSettingsPage() {
   }
 
   const email = account?.email ?? null;
-  const authMode = account?.authMode ?? (email ? "supabase" : "local");
+  const accountName = account?.accountName ?? email;
+  const authMode = account?.authMode ?? (accountName ? "supabase" : "local");
   const isLocalMode = authMode === "local";
   const isGuestMode = authMode === "guest";
-  const canEditAccount = authMode === "supabase" && Boolean(email);
+  const canEditAccount = authMode === "supabase";
   const profileName =
-    account?.displayName ?? email ?? (isLocalMode ? "Local workspace" : "BranchMind account");
+    account?.displayName ?? accountName ?? (isLocalMode ? "Local workspace" : "BranchMind account");
   const profileMeta =
-    email ?? (isLocalMode ? "Anonymous browser session" : "Sign in to connect your email");
-  const emailTitle = email ?? (isLocalMode ? "No email attached" : "Sign in to add email");
-  const emailDescription = email
-    ? "Used for sign-in, recovery, and account notices."
+    accountName ?? (isLocalMode ? "Anonymous browser session" : "Sign in to choose an account name");
+  const accountNameTitle =
+    accountName ?? (isLocalMode ? "No account name attached" : "Sign in to add an account name");
+  const accountNameDescription = accountName
+    ? "Used for account-name and password sign-in."
     : isLocalMode
-      ? "This environment is using local storage, so there is no account email to show."
-      : "Your email appears here after you sign in.";
+      ? "This environment is using local storage, so there is no account name to show."
+      : "Your account name appears here after you sign in.";
 
   return (
     <div className="space-y-5">
@@ -206,21 +208,23 @@ export default function AccountSettingsPage() {
         </div>
       </SettingsCard>
 
-      <SettingsCard title="Email Address" description="Your email is used for sign-in and notifications.">
+      <SettingsCard title="Account Name" description="Your account name is used for password sign-in.">
         <div className="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-surface-muted px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-elevated text-neutral-600 ring-1 ring-inset ring-neutral-200">
-              <Mail size={16} />
+              <UserCircle size={16} />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-black text-neutral-900">{emailTitle}</p>
-              <p className="mt-0.5 text-xs font-semibold text-neutral-600">{emailDescription}</p>
+              <p className="truncate text-sm font-black text-neutral-900">{accountNameTitle}</p>
+              <p className="mt-0.5 text-xs font-semibold text-neutral-600">
+                {accountNameDescription}
+              </p>
             </div>
           </div>
-          {email && (
+          {accountName && (
             <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-success-50 px-2.5 py-1 text-xs font-black text-success-700">
               <CheckCircle2 size={13} />
-              Verified
+              Active
             </span>
           )}
           {isGuestMode && (
@@ -281,7 +285,7 @@ export default function AccountSettingsPage() {
               </p>
               <p className="mt-0.5 text-xs font-semibold leading-5 text-neutral-600">
                 {isLocalMode
-                  ? "Local workspaces use an anonymous browser session instead of email/password auth."
+                  ? "Local workspaces use an anonymous browser session instead of account/password auth."
                   : "Password management is available once your account session is active."}
               </p>
             </div>

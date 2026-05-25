@@ -49,6 +49,16 @@ LLM_MODEL=deepseek-v4-flash
 DEEPSEEK_API_KEY=
 ```
 
+Gemini chat completions are also supported through Google's OpenAI-compatible
+endpoint:
+
+```bash
+AI_PROVIDER=gemini
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-3.5-flash
+GEMINI_ALLOWED_MODELS=gemini-3.5-flash
+```
+
 Storage:
 
 ```bash
@@ -61,6 +71,14 @@ SUPABASE_SERVICE_ROLE_KEY=
 ```
 
 `auto` uses Supabase when configured and local file storage under `data/` otherwise. Production requires Supabase configuration.
+
+Authentication uses Supabase Auth with BranchMind account names. Enable
+email/password sign-in in Supabase, but BranchMind creates username/password
+accounts server-side with `SUPABASE_SERVICE_ROLE_KEY` and confirms them
+immediately. Public email sign-up, magic-link sign-in, and email password
+recovery are disabled. Existing Supabase email users can still sign in by
+typing their email in the account-name field, and Google OAuth can remain
+enabled.
 
 PDF indexing uses Vercel Queues in production. In local `next dev`, BranchMind
 runs indexing inline in the dev server process by default, avoiding Vercel OIDC

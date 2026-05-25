@@ -12,11 +12,11 @@ import {
   KeyRound,
   Loader2,
   LockKeyhole,
-  Mail,
+  UserRound,
 } from "lucide-react";
 import {
-  readRememberedAuthEmail,
-  writeRememberedAuthEmail,
+  readRememberedAuthAccountName,
+  writeRememberedAuthAccountName,
 } from "@/lib/client/auth-email";
 
 type AuthMode = "sign-in" | "sign-up" | "forgot-password" | "reset-password";
@@ -24,7 +24,7 @@ type AuthMode = "sign-in" | "sign-up" | "forgot-password" | "reset-password";
 type AuthPageShellProps = {
   mode: AuthMode;
   nextPath: string;
-  initialEmail?: string;
+  initialAccountName?: string;
 };
 
 type ApiResult = {
@@ -51,14 +51,14 @@ const modeContent: Record<
   },
   "sign-up": {
     title: "Create account",
-    eyebrow: "Email verification required",
+    eyebrow: "Account name registration",
     submitLabel: "Create account",
     pendingLabel: "Creating account...",
   },
   "forgot-password": {
     title: "Reset password",
-    eyebrow: "Email recovery",
-    submitLabel: "Send reset email",
+    eyebrow: "Recovery disabled",
+    submitLabel: "Send reset link",
     pendingLabel: "Sending...",
   },
   "reset-password": {
@@ -92,13 +92,13 @@ async function postJson(path: string, body: Record<string, unknown>) {
   return data ?? {};
 }
 
-export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShellProps) {
+export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthPageShellProps) {
   const router = useRouter();
   const content = modeContent[mode];
-  const needsEmail = mode !== "reset-password";
+  const needsAccountName = mode !== "reset-password";
   const needsPassword = mode !== "forgot-password";
   const needsConfirmation = mode === "sign-up" || mode === "reset-password";
-  const [email, setEmail] = useState("");
+  const [accountName, setAccountName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -107,8 +107,8 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setEmail(initialEmail || readRememberedAuthEmail());
-  }, [initialEmail]);
+    setAccountName(initialAccountName || readRememberedAuthAccountName());
+  }, [initialAccountName]);
 
   const alternateHref = useMemo(() => {
     const params = new URLSearchParams({ next: nextPath });
@@ -117,14 +117,18 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
       : `/auth/sign-up?${params.toString()}`;
   }, [mode, nextPath]);
 
-  const forgotHref = useMemo(() => {
-    const params = new URLSearchParams({ next: nextPath });
-    if (email.trim()) params.set("email", email.trim().toLowerCase());
-    return `/auth/forgot-password?${params.toString()}`;
-  }, [email, nextPath]);
-
   function validateForm() {
-    if (needsEmail && !email.trim()) return "Email is required.";
+    const trimmedAccountName = accountName.trim();
+    if (needsAccountName && !trimmedAccountName) return "Account name is required.";
+    if (mode === "sign-up" && trimmedAccountName.length < 3) {
+      return "Account name must be at least 3 characters.";
+    }
+    if (mode === "sign-up" && trimmedAccountName.length > 32) {
+      return "Account name must be 32 characters or fewer.";
+    }
+    if (mode === "sign-up" && !/^[a-z0-9._-]+$/i.test(trimmedAccountName)) {
+      return "Account name can only include letters, numbers, dots, underscores, and hyphens.";
+    }
     if (needsPassword && password.length < 8) return "Password must be at least 8 characters.";
     if (needsPassword && password.length > 128) return "Password must be 128 characters or fewer.";
     if (needsConfirmation && password !== confirmPassword) return "Passwords do not match.";
@@ -145,11 +149,11 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
     setStatus(null);
 
     try {
-      if (needsEmail) writeRememberedAuthEmail(email);
+      if (needsAccountName) writeRememberedAuthAccountName(accountName);
 
       if (mode === "sign-in") {
         const result = await postJson("/api/auth/sign-in", {
-          email,
+          accountName,
           password,
           next: nextPath,
         });
@@ -159,25 +163,24 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
       }
 
       if (mode === "sign-up") {
-        await postJson("/api/auth/sign-up", {
-          email,
+        const result = await postJson("/api/auth/sign-up", {
+          accountName,
           password,
           next: nextPath,
         });
         setPassword("");
         setConfirmPassword("");
-        setStatus(
-          "If this email can create a new account, a verification link is on the way. If you already have an account, sign in or reset your password.",
-        );
+        router.push(result.next || nextPath);
+        router.refresh();
         return;
       }
 
       if (mode === "forgot-password") {
         await postJson("/api/auth/forgot-password", {
-          email,
+          accountName,
           next: nextPath,
         });
-        setStatus("If that email has an account, a reset link is on the way.");
+        setStatus("If that account supports recovery, a reset link is on the way.");
         return;
       }
 
@@ -248,22 +251,24 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
             </div>
 
             <form onSubmit={handleSubmit} className="mt-5 space-y-3">
-              {needsEmail && (
+              {needsAccountName && (
                 <label className="block">
-                  <span className="mb-1.5 block text-sm font-black text-neutral-800">Email</span>
+                  <span className="mb-1.5 block text-sm font-black text-neutral-800">
+                    Account name
+                  </span>
                   <span className="relative block">
-                    <Mail
+                    <UserRound
                       aria-hidden="true"
                       size={17}
                       className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500"
                     />
                     <input
-                      type="email"
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                      autoComplete="email"
+                      type="text"
+                      value={accountName}
+                      onChange={(event) => setAccountName(event.target.value)}
+                      autoComplete="username"
                       disabled={isSubmitting}
-                      data-testid="auth-email-input"
+                      data-testid="auth-account-name-input"
                       className="h-11 w-full rounded-[16px] border border-neutral-200 bg-white pl-10 pr-3 text-sm text-neutral-900 outline-none transition placeholder:text-neutral-500 focus:border-brand-400 focus:ring-4 focus:ring-brand-100"
                     />
                   </span>
@@ -328,9 +333,9 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
                 type="submit"
                 disabled={isSubmitting}
                 data-testid="auth-submit-button"
-                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[16px] bg-brand-50 px-4 text-sm font-black text-brand-800 transition hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-65"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[16px] bg-brand-800 px-4 text-sm font-black text-white shadow-md shadow-brand-900/15 transition hover:bg-brand-900 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65"
               >
-                {isSubmitting ? <Loader2 className="animate-spin" size={16} /> : <Mail size={16} />}
+                {isSubmitting ? <Loader2 className="animate-spin" size={16} /> : <UserRound size={16} />}
                 {isSubmitting ? content.pendingLabel : content.submitLabel}
               </button>
             </form>
@@ -341,29 +346,18 @@ export function AuthPageShell({ mode, nextPath, initialEmail = "" }: AuthPageShe
                 onClick={handleGoogleSignIn}
                 disabled={isSubmitting}
                 data-testid="google-sign-in-button"
-                className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[16px] bg-success-50 px-4 text-sm font-black text-success-700 transition hover:bg-success-100 disabled:cursor-not-allowed disabled:opacity-65"
+                className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[16px] border border-neutral-300 bg-neutral-50 px-4 text-sm font-black text-neutral-900 shadow-sm transition hover:border-neutral-400 hover:bg-white focus:outline-none focus:ring-4 focus:ring-neutral-200 disabled:cursor-not-allowed disabled:opacity-65"
               >
                 <Chrome size={16} />
                 Continue with Google
               </button>
             )}
 
-            {mode === "sign-in" && (
-              <div className="mt-3 text-center">
-                <Link
-                  href={forgotHref}
-                  className="text-sm font-bold text-brand-800 underline decoration-brand-200 underline-offset-4"
-                >
-                  Forgot password?
-                </Link>
-              </div>
-            )}
-
             {status && (
               <p
                 role="status"
                 data-testid="auth-status"
-                className="mt-3 rounded-[16px] bg-success-50 px-3 py-2 text-sm font-bold text-success-700"
+                className="mt-3 rounded-[16px] border border-success-200 bg-success-100 px-3.5 py-3 text-sm font-extrabold leading-relaxed text-success-800 shadow-sm"
               >
                 {status}
               </p>

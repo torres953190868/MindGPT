@@ -1,5 +1,9 @@
 import type { NextRequest } from "next/server";
 import { getOptionalSupabaseUser } from "@/lib/server/auth";
+import {
+  getSupabaseUserAccountName,
+  getSupabaseUserPublicEmail,
+} from "@/lib/server/auth-password";
 import { jsonWithSession, safeErrorWithSession } from "@/lib/server/http";
 import { getExistingSessionId, getOrCreateSession } from "@/lib/server/session";
 import { hasSupabaseServerConfig } from "@/lib/supabase/server";
@@ -24,7 +28,13 @@ export async function GET(request: NextRequest) {
     return jsonWithSession(
       {
         configured: hasSupabaseServerConfig(),
-        user: user ? { id: user.id, email: user.email ?? null } : null,
+        user: user
+          ? {
+              id: user.id,
+              email: getSupabaseUserPublicEmail(user),
+              accountName: getSupabaseUserAccountName(user),
+            }
+          : null,
       },
       session,
     );

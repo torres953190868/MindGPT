@@ -17,10 +17,11 @@ const DRAFT_ROOT_NODE_ID = "home-draft-root";
 const DRAFT_TIMESTAMP = "2026-01-01T00:00:00.000Z";
 const HOME_COMPOSER_PLACEHOLDER =
   "输入一个研究问题，BranchMind 会把理解路径拆成可探索的分支...";
-const HOME_PROMPT_SUGGESTIONS = [
-  "拆解论文论点",
-  "规划学习路线",
-  "拆分复杂概念",
+const HOME_PROMPT_SUGGESTION_GROUPS = [
+  ["拆解论文论点", "规划学习路线", "拆分复杂概念"],
+  ["找到关键假设", "生成追问清单", "搭建理解地图"],
+  ["比较不同观点", "提炼核心问题", "定位知识盲区"],
+  ["发散研究方向", "收束行动计划", "整理学习笔记"],
 ];
 const HOME_HERO_TAGLINES = [
   "你可以外包思考，但是无法外包理解。",
@@ -86,6 +87,10 @@ export function HomeDraftWorkspace() {
   const aiError = useBranchMindStore((state) => state.aiError);
   const clearAiError = useBranchMindStore((state) => state.clearAiError);
   const draftProject = useMemo(() => createDraftProject(rootPosition), [rootPosition]);
+  const promptSuggestions =
+    HOME_PROMPT_SUGGESTION_GROUPS[
+      taglineIndex % HOME_PROMPT_SUGGESTION_GROUPS.length
+    ];
 
   useEffect(() => {
     hydrate();
@@ -192,7 +197,8 @@ export function HomeDraftWorkspace() {
         placeholder: HOME_COMPOSER_PLACEHOLDER,
         submitLabel: "Start",
         variant: "home",
-        suggestions: HOME_PROMPT_SUGGESTIONS,
+        suggestions: promptSuggestions,
+        suggestionsAnimationPhase: taglinePhase,
       }}
       nodeDetailOptions={{
         initialSubmit: true,

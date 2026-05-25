@@ -17,7 +17,7 @@ export default async function SignUpPage({ searchParams }: SignUpPageProps) {
     <AuthPageShell
       mode="sign-up"
       nextPath={nextPath}
-      initialEmail={getStringParam(params?.email) ?? ""}
+      initialAccountName={getStringParam(params?.accountName) ?? ""}
     />
   );
 }

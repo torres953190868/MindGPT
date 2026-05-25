@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { getOptionalSupabaseUser } from "@/lib/server/auth";
+import { getSupabaseUserPublicEmail } from "@/lib/server/auth-password";
 import { createBugReportForUser } from "@/lib/server/bug-reports";
 import { jsonWithSession, safeErrorWithSession } from "@/lib/server/http";
 import { checkRateLimitAsync } from "@/lib/server/rate-limit";
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
       screenshot: formFile(formData, "screenshot"),
       reporter: {
         userId: user?.id ?? null,
-        email: user?.email ?? null,
+        email: user ? getSupabaseUserPublicEmail(user) : null,
       },
     });
 

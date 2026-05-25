@@ -23,6 +23,7 @@ export type InlineNodeComposerData = {
   submitLabel: string;
   variant?: "default" | "home";
   suggestions?: string[];
+  suggestionsAnimationPhase?: "idle" | "leaving" | "entering";
   onSubmit: (
     instruction: string,
     attachments?: ChatAttachment[],
@@ -268,6 +269,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
   const isComposerBusy = composerControls.controlsBusy;
   const errorId = `inline-node-composer-${composer.nodeId}-error`;
   const isHomeComposer = composer.variant === "home";
+  const suggestionsAnimationPhase = composer.suggestionsAnimationPhase ?? "idle";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -330,7 +332,9 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
         />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {composer.suggestions && composer.suggestions.length > 0 && (
-            <div className="flex min-w-0 flex-1 flex-wrap gap-2">
+            <div
+              className={`home-prompt-suggestion-rotator home-prompt-suggestion-rotator-${suggestionsAnimationPhase} flex min-w-0 flex-1 flex-wrap gap-2`}
+            >
               {composer.suggestions.map((suggestion) => (
                 <button
                   key={suggestion}

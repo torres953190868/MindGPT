@@ -2,8 +2,9 @@ import type { NextRequest } from "next/server";
 import { sanitizeAuthNext } from "@/lib/server/auth-redirect";
 import {
   checkAuthRateLimit,
+  getAuthEmailForAccountName,
   getAuthRouteSession,
-  passwordAuthSchema,
+  signInAuthSchema,
 } from "@/lib/server/auth-password";
 import { isSupabaseUserEmailConfirmed } from "@/lib/server/auth";
 import { tryMigrateAnonymousDataToUser } from "@/lib/server/account-migration";
@@ -32,20 +33,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { email, password, next } = await parseJsonBody(
+    const { accountName, password, next } = await parseJsonBody(
       request,
-      passwordAuthSchema,
+      signInAuthSchema,
       { maxBytes: 8 * 1024 },
     );
+    const authEmail = getAuthEmailForAccountName(accountName);
     const supabase = await createSupabaseCookieClient();
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: authEmail,
       password,
     });
 
     if (error || !data.user || !isSupabaseUserEmailConfirmed(data.user)) {
       throw new HttpError(
-        "Invalid email or password, or the account has not been verified.",
+        "Invalid account name or password.",
         {
           code: "SIGN_IN_FAILED",
           expose: true,

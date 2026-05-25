@@ -6,10 +6,13 @@ import {
 } from "@/lib/server/auth-redirect";
 
 const createSupabaseCookieClientMock = vi.hoisted(() => vi.fn());
+const getSupabaseAdminClientMock = vi.hoisted(() => vi.fn());
+const hasSupabaseServerConfigMock = vi.hoisted(() => vi.fn());
 const signInWithOtpMock = vi.hoisted(() => vi.fn());
 const signInWithOAuthMock = vi.hoisted(() => vi.fn());
 const signUpMock = vi.hoisted(() => vi.fn());
 const signInWithPasswordMock = vi.hoisted(() => vi.fn());
+const createUserMock = vi.hoisted(() => vi.fn());
 const resetPasswordForEmailMock = vi.hoisted(() => vi.fn());
 const updateUserMock = vi.hoisted(() => vi.fn());
 const getUserMock = vi.hoisted(() => vi.fn());
@@ -29,6 +32,8 @@ const originalAuthOriginEnv = new Map(
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseCookieClient: createSupabaseCookieClientMock,
+  getSupabaseAdminClient: getSupabaseAdminClientMock,
+  hasSupabaseServerConfig: hasSupabaseServerConfigMock,
 }));
 
 vi.mock("@/lib/server/account-migration", () => ({
@@ -116,10 +121,13 @@ describe("auth routes", () => {
   beforeEach(() => {
     vi.resetModules();
     createSupabaseCookieClientMock.mockReset();
+    getSupabaseAdminClientMock.mockReset();
+    hasSupabaseServerConfigMock.mockReset();
     signInWithOtpMock.mockReset();
     signInWithOAuthMock.mockReset();
     signUpMock.mockReset();
     signInWithPasswordMock.mockReset();
+    createUserMock.mockReset();
     resetPasswordForEmailMock.mockReset();
     updateUserMock.mockReset();
     getUserMock.mockReset();
@@ -131,6 +139,7 @@ describe("auth routes", () => {
       documentsUpdated: 0,
       skipped: true,
     });
+    hasSupabaseServerConfigMock.mockReturnValue(true);
     createSupabaseCookieClientMock.mockResolvedValue({
       auth: {
         signInWithOtp: signInWithOtpMock,
@@ -143,10 +152,16 @@ describe("auth routes", () => {
         exchangeCodeForSession: exchangeCodeForSessionMock,
       },
     });
+    getSupabaseAdminClientMock.mockReturnValue({
+      auth: {
+        admin: {
+          createUser: createUserMock,
+        },
+      },
+    });
   });
 
-  it("passes a sanitized callback URL to Supabase magic-link auth", async () => {
-    signInWithOtpMock.mockResolvedValue({ error: null });
+  it("disables Supabase magic-link auth", async () => {
     const { POST } = await import("@/app/api/auth/magic-link/route");
 
     const response = await POST(
@@ -155,47 +170,90 @@ describe("auth routes", () => {
         next: "/reader?document=doc_1",
       }),
     );
+    const body = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(createSupabaseCookieClientMock).toHaveBeenCalledOnce();
-    expect(signInWithOtpMock).toHaveBeenCalledWith({
-      email: "learner@example.com",
-      options: {
-        emailRedirectTo: expect.any(String),
-      },
-    });
-
-    const redirectTo = new URL(
-      signInWithOtpMock.mock.calls[0][0].options.emailRedirectTo,
-    );
-    expect(redirectTo.origin).toBe("https://branchmind.example");
-    expect(redirectTo.pathname).toBe("/auth/callback");
-    expect(redirectTo.searchParams.get("next")).toBe("/reader?document=doc_1");
+    expect(response.status).toBe(410);
+    expect(body.error.code).toBe("EMAIL_AUTH_DISABLED");
+    expect(createSupabaseCookieClientMock).not.toHaveBeenCalled();
+    expect(signInWithOtpMock).not.toHaveBeenCalled();
   });
 
-  it("starts password sign-up with an email verification callback", async () => {
-    signUpMock.mockResolvedValue({ data: { user: null, session: null }, error: null });
+  it("creates a username account, signs in, and migrates anonymous browser data", async () => {
+    const anonymousSessionId = "anon_session_12345678901234567890";
+    createUserMock.mockResolvedValue({
+      data: { user: { id: "created_user" } },
+      error: null,
+    });
+    signInWithPasswordMock.mockResolvedValue({
+      data: {
+        user: {
+          id: "created_user",
+          email: "learner-1@users.branchmind.invalid",
+          email_confirmed_at: "2026-05-16T00:00:00.000Z",
+          user_metadata: { account_name: "learner-1" },
+        },
+      },
+      error: null,
+    });
+    tryMigrateAnonymousDataToUserMock.mockResolvedValue({
+      ok: true,
+      projectsUpdated: 1,
+      documentsUpdated: 2,
+      skipped: false,
+    });
+    const { POST } = await import("@/app/api/auth/sign-up/route");
+
+    const response = await POST(
+      createJsonRequest(
+        "https://branchmind.example/api/auth/sign-up",
+        {
+          accountName: "Learner-1",
+          password: "correct horse battery",
+          next: "/projects",
+        },
+        { Cookie: `branchmind_session=${anonymousSessionId}` },
+      ),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      ok: true,
+      accountName: "learner-1",
+      next: "/projects",
+      migration: { ok: true, projectsUpdated: 1, documentsUpdated: 2 },
+    });
+    expect(createUserMock).toHaveBeenCalledWith({
+      email: "learner-1@users.branchmind.invalid",
+      password: "correct horse battery",
+      email_confirm: true,
+      user_metadata: { account_name: "learner-1" },
+    });
+    expect(signInWithPasswordMock).toHaveBeenCalledWith({
+      email: "learner-1@users.branchmind.invalid",
+      password: "correct horse battery",
+    });
+    expect(tryMigrateAnonymousDataToUserMock).toHaveBeenCalledWith(
+      anonymousSessionId,
+      "created_user",
+    );
+  });
+
+  it("rejects email-formatted password sign-ups", async () => {
     const { POST } = await import("@/app/api/auth/sign-up/route");
 
     const response = await POST(
       createJsonRequest("https://branchmind.example/api/auth/sign-up", {
-        email: "Learner@Example.com",
+        accountName: "Learner@Example.com",
         password: "correct horse battery",
         next: "/projects",
       }),
     );
     const body = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(body).toMatchObject({ ok: true, verificationRequired: true });
-    expect(signUpMock).toHaveBeenCalledWith({
-      email: "learner@example.com",
-      password: "correct horse battery",
-      options: { emailRedirectTo: expect.any(String) },
-    });
-    const redirectTo = new URL(signUpMock.mock.calls[0][0].options.emailRedirectTo);
-    expect(redirectTo.pathname).toBe("/auth/callback");
-    expect(redirectTo.searchParams.get("next")).toBe("/projects");
+    expect(response.status).toBe(400);
+    expect(body.error.code).toBe("VALIDATION_FAILED");
+    expect(createUserMock).not.toHaveBeenCalled();
   });
 
   it("signs in with password and migrates anonymous browser data", async () => {
@@ -222,7 +280,7 @@ describe("auth routes", () => {
       createJsonRequest(
         "https://branchmind.example/api/auth/sign-in",
         {
-          email: "Learner@Example.com",
+          accountName: "Learner@Example.com",
           password: "correct horse battery",
           next: "/reader",
         },
@@ -247,6 +305,34 @@ describe("auth routes", () => {
     );
   });
 
+  it("maps username sign-ins to an internal Supabase auth email", async () => {
+    signInWithPasswordMock.mockResolvedValue({
+      data: {
+        user: {
+          id: "user_username",
+          email: "learner-1@users.branchmind.invalid",
+          email_confirmed_at: "2026-05-16T00:00:00.000Z",
+          user_metadata: { account_name: "learner-1" },
+        },
+      },
+      error: null,
+    });
+    const { POST } = await import("@/app/api/auth/sign-in/route");
+
+    const response = await POST(
+      createJsonRequest("https://branchmind.example/api/auth/sign-in", {
+        accountName: "Learner-1",
+        password: "correct horse battery",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(signInWithPasswordMock).toHaveBeenCalledWith({
+      email: "learner-1@users.branchmind.invalid",
+      password: "correct horse battery",
+    });
+  });
+
   it("rejects unverified password sign-ins without migrating data", async () => {
     signInWithPasswordMock.mockResolvedValue({
       data: {
@@ -262,7 +348,7 @@ describe("auth routes", () => {
 
     const response = await POST(
       createJsonRequest("https://branchmind.example/api/auth/sign-in", {
-        email: "learner@example.com",
+        accountName: "learner@example.com",
         password: "correct horse battery",
       }),
     );
@@ -273,8 +359,61 @@ describe("auth routes", () => {
     expect(tryMigrateAnonymousDataToUserMock).not.toHaveBeenCalled();
   });
 
-  it("starts password recovery without exposing account existence", async () => {
-    resetPasswordForEmailMock.mockResolvedValue({ data: {}, error: null });
+  it("reports old email accounts with the email as the account name", async () => {
+    getUserMock.mockResolvedValue({
+      data: {
+        user: {
+          id: "user_email",
+          email: "learner@example.com",
+          email_confirmed_at: "2026-05-16T00:00:00.000Z",
+          user_metadata: {},
+        },
+      },
+      error: null,
+    });
+    const { GET } = await import("@/app/api/auth/session/route");
+
+    const response = await GET(
+      new NextRequest("https://branchmind.example/api/auth/session"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.user).toMatchObject({
+      id: "user_email",
+      email: "learner@example.com",
+      accountName: "learner@example.com",
+    });
+  });
+
+  it("reports username accounts without leaking their internal auth email", async () => {
+    getUserMock.mockResolvedValue({
+      data: {
+        user: {
+          id: "user_username",
+          email: "learner-1@users.branchmind.invalid",
+          email_confirmed_at: "2026-05-16T00:00:00.000Z",
+          user_metadata: { account_name: "learner-1" },
+        },
+      },
+      error: null,
+    });
+    const { GET } = await import("@/app/api/auth/session/route");
+
+    const response = await GET(
+      new NextRequest("https://branchmind.example/api/auth/session"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.user).toMatchObject({
+      id: "user_username",
+      email: null,
+      accountName: "learner-1",
+    });
+  });
+
+  it("disables email password recovery", async () => {
     const { POST } = await import("@/app/api/auth/forgot-password/route");
 
     const response = await POST(
@@ -283,16 +422,11 @@ describe("auth routes", () => {
         next: "/reader",
       }),
     );
+    const body = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(resetPasswordForEmailMock).toHaveBeenCalledWith("learner@example.com", {
-      redirectTo: expect.any(String),
-    });
-    const redirectTo = new URL(resetPasswordForEmailMock.mock.calls[0][1].redirectTo);
-    expect(redirectTo.pathname).toBe("/auth/callback");
-    expect(redirectTo.searchParams.get("next")).toBe(
-      "/auth/reset-password?next=%2Freader",
-    );
+    expect(response.status).toBe(410);
+    expect(body.error.code).toBe("EMAIL_AUTH_DISABLED");
+    expect(resetPasswordForEmailMock).not.toHaveBeenCalled();
   });
 
   it("updates password only with a valid recovery session", async () => {

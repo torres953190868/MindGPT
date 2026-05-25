@@ -5,6 +5,7 @@ import {
   createSupabaseCookieClient,
   hasSupabaseServerConfig,
 } from "@/lib/supabase/server";
+import { getSupabaseUserPublicEmail } from "@/lib/server/auth-password";
 
 export type BranchMindPrincipal = {
   id: string;
@@ -55,7 +56,7 @@ export async function getBranchMindAuthContext(
     return {
       principal: {
         id: user.id,
-        email: user.email ?? null,
+        email: getSupabaseUserPublicEmail(user),
         authMode: "supabase",
       },
       session: { id: user.id, isNew: false },

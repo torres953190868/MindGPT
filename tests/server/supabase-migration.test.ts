@@ -49,6 +49,13 @@ const adminLlmBugReportsMigration = readFileSync(
   ),
   "utf8",
 );
+const geminiLlmMigration = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/20260524020000_branchmind_gemini_llm_provider.sql",
+  ),
+  "utf8",
+);
 
 describe("Supabase foundation migration", () => {
   it("creates the beta persistence and distributed rate-limit tables", () => {
@@ -125,6 +132,15 @@ describe("Supabase foundation migration", () => {
     expect(adminLlmBugReportsMigration).toContain("false");
     expect(adminLlmBugReportsMigration).toContain(
       "revoke all on public.branchmind_bug_reports from anon, authenticated",
+    );
+  });
+
+  it("seeds Gemini as an OpenAI-compatible LLM provider", () => {
+    expect(geminiLlmMigration).toContain("'gemini'");
+    expect(geminiLlmMigration).toContain("GEMINI_API_KEY");
+    expect(geminiLlmMigration).toContain("gemini-3.5-flash");
+    expect(geminiLlmMigration).toContain(
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
     );
   });
 });

@@ -5,10 +5,11 @@
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `AI_PROVIDER` (`deepseek` or `opencode-go`)
+- `AI_PROVIDER` (`deepseek`, `opencode-go`, or `gemini`)
 - Provider-specific API key/model:
   - `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` when `AI_PROVIDER=deepseek`
   - `OPENCODE_GO_API_KEY`, `OPENCODE_GO_MODEL` when `AI_PROVIDER=opencode-go`
+  - `GEMINI_API_KEY`, `GEMINI_MODEL` when `AI_PROVIDER=gemini`
 - `APP_ORIGIN` or `ALLOWED_ORIGINS`
 
 Use `AI_MOCK_MODE=true` only for local smoke, CI, and E2E. Production must use Supabase-backed storage; file storage is only allowed for CI smoke with `BRANCHMIND_ALLOW_FILE_STORE_IN_PRODUCTION=true`.

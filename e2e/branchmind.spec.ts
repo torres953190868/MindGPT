@@ -278,6 +278,50 @@ async function importProject(page: Page, project: WorkspaceProject): Promise<Wor
   return importedProject;
 }
 
+async function selectConversationText(page: Page, phrase: string) {
+  await page.evaluate((textToSelect) => {
+    const historyElement = document.querySelector<HTMLElement>(
+      '[data-testid="conversation-history"]',
+    );
+    const messageContent = document.querySelector<HTMLElement>(
+      '[data-testid="conversation-message-content"]',
+    );
+    if (!historyElement || !messageContent) {
+      throw new Error("Expected conversation history and message content.");
+    }
+
+    const walker = document.createTreeWalker(messageContent, NodeFilter.SHOW_TEXT);
+    let textNode: Text | null = null;
+
+    while (walker.nextNode()) {
+      const currentNode = walker.currentNode;
+      if (
+        currentNode.nodeType === Node.TEXT_NODE &&
+        currentNode.textContent?.includes(textToSelect)
+      ) {
+        textNode = currentNode as Text;
+        break;
+      }
+    }
+
+    if (!textNode) {
+      throw new Error(`Could not find selectable text: ${textToSelect}`);
+    }
+
+    const start = textNode.data.indexOf(textToSelect);
+    const range = document.createRange();
+    range.setStart(textNode, start);
+    range.setEnd(textNode, start + textToSelect.length);
+
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    historyElement.dispatchEvent(
+      new MouseEvent("mouseup", { bubbles: true, cancelable: true }),
+    );
+  }, phrase);
+}
+
 async function getPersistedProject(page: Page, projectId: string): Promise<WorkspaceProject> {
   const response = await page.request.get("/api/projects");
   expect(response.status(), await response.text()).toBe(200);
@@ -290,12 +334,21 @@ async function getPersistedProject(page: Page, projectId: string): Promise<Works
   return project;
 }
 
-async function mockAuthSession(page: Page, session: { configured: boolean; user: null | { id: string; email: string | null } }) {
+async function mockAuthSession(
+  page: Page,
+  session: {
+    configured: boolean;
+    user: null | { id: string; email: string | null; accountName?: string | null };
+  },
+) {
   await page.route("**/api/auth/session", async (route) => {
+    const user = session.user
+      ? { ...session.user, accountName: session.user.accountName ?? session.user.email }
+      : null;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(session),
+      body: JSON.stringify({ ...session, user }),
     });
   });
 }
@@ -1021,13 +1074,13 @@ test("shows compact account entry on desktop and responsive mobile navigation", 
 
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
-  await expect(page.getByTestId("auth-email-input")).toHaveCount(0);
+  await expect(page.getByTestId("auth-account-name-input")).toHaveCount(0);
   const desktopSignIn = page.locator('[data-testid="account-sign-in-button"]:visible').first();
   await expect(desktopSignIn).toBeVisible();
   await expect(desktopSignIn).toHaveAttribute("href", /\/auth\/sign-in/);
   await desktopSignIn.click();
   await expect(page).toHaveURL(/\/auth\/sign-in/);
-  await expect(page.locator('[data-testid="auth-email-input"]:visible')).toBeVisible();
+  await expect(page.locator('[data-testid="auth-account-name-input"]:visible')).toBeVisible();
   await expect(page.locator('[data-testid="auth-password-input"]:visible')).toBeVisible();
   await expect(page.locator('[data-testid="google-sign-in-button"]:visible')).toBeVisible();
 
@@ -1995,6 +2048,88 @@ test("loads a seeded workspace with stable test ids", async ({ page }) => {
     await mindMapCanvas.getByTestId("expand-node-detail-panel-button").click();
     await expect(page.getByTestId("node-detail-panel")).toBeVisible();
     await expect(page.getByTestId("conversation-history")).toBeVisible();
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("selected conversation text is attached as BranchMind context", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const sourceProject = makeWorkspaceProject(`selection-context-${makeSeed()}`);
+  const selectedPhrase = "stable workspace";
+  const clearedPhrase = "release checks";
+  const streamPayloads: Array<Record<string, unknown>> = [];
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.route(`**/api/projects/${project.id}/nodes/stream`, async (route) => {
+      streamPayloads.push(route.request().postDataJSON() as Record<string, unknown>);
+      await route.fulfill({
+        status: 200,
+        headers: { "Content-Type": "text/event-stream; charset=utf-8" },
+        body: 'event: error\ndata: {"message":"Captured request"}\n\n',
+      });
+    });
+
+    await page.goto(`/workspace/${project.id}`);
+    await expect(page.getByTestId("conversation-history")).toBeVisible();
+
+    await selectConversationText(page, selectedPhrase);
+    await expect(page.getByTestId("ask-branchmind-selection-button")).toBeVisible();
+    await expect(page.getByTestId("ask-branchmind-selection-button")).toContainText(
+      "询问 BranchMind",
+    );
+    await expect(page.getByTestId("selected-source-text")).toHaveCount(0);
+
+    await page.getByTestId("ask-branchmind-selection-button").click();
+    await expect(page.getByTestId("selected-text-context-chip")).toContainText(
+      "1 个已选文本片段",
+    );
+    await expect(
+      page.getByTestId("message-branch-mode").getByTestId("branch-right-button"),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    await page
+      .getByTestId("message-instruction-input")
+      .fill("Explain this selected context.");
+    await page.getByTestId("send-message-button").click();
+    await expect
+      .poll(() => streamPayloads.length, { message: "first stream request" })
+      .toBe(1);
+    expect(streamPayloads[0]).toMatchObject({
+      instruction: "Explain this selected context.",
+      mode: "branch",
+      sourceText: selectedPhrase,
+    });
+
+    await expect(page.getByTestId("selected-text-context-chip")).toHaveCount(0);
+    await expect(page.getByTestId("send-message-button")).toContainText("Send");
+
+    await selectConversationText(page, clearedPhrase);
+    await page.getByTestId("ask-branchmind-selection-button").click();
+    await expect(page.getByTestId("selected-text-context-chip")).toBeVisible();
+    await page.getByTestId("remove-selected-text-context-button").click();
+    await expect(page.getByTestId("selected-text-context-chip")).toHaveCount(0);
+
+    await page
+      .getByTestId("message-instruction-input")
+      .fill("Ask without the selected context.");
+    await page.getByTestId("send-message-button").click();
+    await expect
+      .poll(() => streamPayloads.length, { message: "second stream request" })
+      .toBe(2);
+    expect(streamPayloads[1]).toMatchObject({
+      instruction: "Ask without the selected context.",
+      mode: "branch",
+    });
+    expect(streamPayloads[1]).not.toHaveProperty("sourceText");
   } finally {
     if (projectIdToDelete) {
       await page.request

@@ -16,6 +16,7 @@ import {
   Copy,
   Paperclip,
   Loader2,
+  MessageSquare,
   Pencil,
   RotateCcw,
   Save,
@@ -99,8 +100,9 @@ type NodeDetailPanelProps = {
   submitLabel?: string;
 };
 
-const DEFAULT_SELECTION_BRANCH_INSTRUCTION = "Explain the selected text in a focused branch.";
-const SELECTION_PREVIEW_LIMIT = 180;
+const SELECTION_ACTION_WIDTH = 176;
+const SELECTION_ACTION_MARGIN = 12;
+const SELECTION_ACTION_VERTICAL_OFFSET = 52;
 
 type MessageActionButtonProps = {
   label: string;
@@ -115,11 +117,14 @@ type MessageActionButtonProps = {
 type HeaderActionItem = "edit" | "delete" | "notes";
 type ModeActionItem = "continue" | "branch";
 
-function getSelectionPreview(sourceText: string) {
-  const compact = sourceText.replace(/\s+/g, " ").trim();
-  return compact.length > SELECTION_PREVIEW_LIMIT
-    ? `${compact.slice(0, SELECTION_PREVIEW_LIMIT)}...`
-    : compact;
+type SelectionAction = {
+  text: string;
+  x: number;
+  y: number;
+};
+
+function clampSelectionActionPosition(value: number, max: number) {
+  return Math.min(Math.max(value, SELECTION_ACTION_MARGIN), max);
 }
 
 async function copyTextToClipboard(text: string) {
@@ -250,6 +255,7 @@ export function NodeDetailPanel({
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"continue" | "branch">("continue");
   const [selectedSourceText, setSelectedSourceText] = useState("");
+  const [selectionAction, setSelectionAction] = useState<SelectionAction | null>(null);
   const [copiedMessageKey, setCopiedMessageKey] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
@@ -280,6 +286,8 @@ export function NodeDetailPanel({
   const displayError = composerControls.attachmentError ?? error;
   const isInitialSubmit = initialSubmit;
   const isBlankNode = !isInitialSubmit && Boolean(node && node.messages.length === 0);
+  const hasSelectedTextContext =
+    !isInitialSubmit && !isBlankNode && selectedSourceText.length > 0;
   const isTitleEditBusy = isCreating || isComposerBusy;
   const titleEditTrimmed = titleEditValue.trim();
   const isTitleSaveDisabled =
@@ -287,24 +295,61 @@ export function NodeDetailPanel({
 
   const clearSelectedSourceText = useCallback(() => {
     setSelectedSourceText("");
+    setSelectionAction(null);
     window.getSelection()?.removeAllRanges();
   }, []);
 
-  const captureSelectedSourceText = useCallback(() => {
+  const clearSelectionAction = useCallback(() => {
+    setSelectionAction(null);
+  }, []);
+
+  const captureSelectionAction = useCallback(() => {
     const container = messagesRef.current;
     const selection = window.getSelection();
     if (!container || !selection || selection.rangeCount === 0 || selection.isCollapsed) {
-      setSelectedSourceText("");
+      setSelectionAction(null);
       return;
     }
 
     const range = selection.getRangeAt(0);
     if (!container.contains(range.commonAncestorContainer)) {
-      setSelectedSourceText("");
+      setSelectionAction(null);
       return;
     }
 
-    setSelectedSourceText(selection.toString().trim());
+    const text = selection.toString().replace(/\s+/g, " ").trim();
+    if (!text) {
+      setSelectionAction(null);
+      return;
+    }
+
+    const rect = range.getBoundingClientRect();
+    const fallbackRect = Array.from(range.getClientRects()).find(
+      (item) => item.width > 0 || item.height > 0,
+    );
+    const selectionRect = rect.width > 0 || rect.height > 0 ? rect : fallbackRect;
+    if (!selectionRect) {
+      setSelectionAction(null);
+      return;
+    }
+
+    const maxLeft = Math.max(
+      SELECTION_ACTION_MARGIN,
+      window.innerWidth - SELECTION_ACTION_WIDTH - SELECTION_ACTION_MARGIN,
+    );
+    const x = clampSelectionActionPosition(
+      selectionRect.left + selectionRect.width / 2 - SELECTION_ACTION_WIDTH / 2,
+      maxLeft,
+    );
+    const topAbove = selectionRect.top - SELECTION_ACTION_VERTICAL_OFFSET;
+    const topBelow = selectionRect.bottom + 8;
+    const maxTop = Math.max(SELECTION_ACTION_MARGIN, window.innerHeight - 48);
+    const y = clampSelectionActionPosition(
+      topAbove >= SELECTION_ACTION_MARGIN ? topAbove : topBelow,
+      maxTop,
+    );
+
+    setSelectionAction({ text, x, y });
   }, []);
 
   useEffect(() => {
@@ -329,6 +374,18 @@ export function NodeDetailPanel({
     titleInputRef.current?.focus();
     titleInputRef.current?.select();
   }, [isEditingTitle]);
+
+  useEffect(() => {
+    if (!selectionAction) return undefined;
+
+    window.addEventListener("resize", clearSelectionAction);
+    window.addEventListener("scroll", clearSelectionAction, true);
+
+    return () => {
+      window.removeEventListener("resize", clearSelectionAction);
+      window.removeEventListener("scroll", clearSelectionAction, true);
+    };
+  }, [clearSelectionAction, selectionAction]);
 
   useEffect(() => {
     return () => {
@@ -379,7 +436,7 @@ export function NodeDetailPanel({
       return;
     }
 
-    const sourceText = mode === "branch" && selectedSourceText ? selectedSourceText : undefined;
+    const sourceText = hasSelectedTextContext ? selectedSourceText : undefined;
     const createdNodeId = await onCreateNode(
       node.id,
       mode,
@@ -395,24 +452,12 @@ export function NodeDetailPanel({
     }
   }
 
-  async function handleBranchFromSelection() {
-    if (isInitialSubmit || !node || !selectedSourceText || isComposerBusy) return;
-    const instruction = input.trim() || DEFAULT_SELECTION_BRANCH_INSTRUCTION;
-    const preparedAttachments = await composerControls.prepareAttachmentsForSend();
-    if (!preparedAttachments) return;
-    const createdNodeId = await onCreateNode(
-      node.id,
-      "branch",
-      instruction,
-      selectedSourceText,
-      preparedAttachments,
-      composerControls.selectedModel,
-    );
-    if (createdNodeId) {
-      setInput("");
-      composerControls.resetAttachments();
-      clearSelectedSourceText();
-    }
+  function handleAskBranchMindSelection() {
+    if (isInitialSubmit || isBlankNode || !node || !selectionAction || isComposerBusy) return;
+    setSelectedSourceText(selectionAction.text);
+    setMode("branch");
+    setSelectionAction(null);
+    window.getSelection()?.removeAllRanges();
   }
 
   async function handleCopyMessage(message: ChatMessage, messageKey: string) {
@@ -435,7 +480,8 @@ export function NodeDetailPanel({
   function handleStartEdit(message: ChatMessage) {
     setEditingMessageId(message.id);
     setEditingValue(message.content);
-    clearSelectedSourceText();
+    setSelectionAction(null);
+    window.getSelection()?.removeAllRanges();
   }
 
   async function handleSaveEdit() {
@@ -467,7 +513,8 @@ export function NodeDetailPanel({
     setEditingValue("");
     setTitleEditValue(node.title);
     setIsEditingTitle(true);
-    clearSelectedSourceText();
+    setSelectionAction(null);
+    window.getSelection()?.removeAllRanges();
   }
 
   function handleCancelTitleEdit() {
@@ -709,9 +756,9 @@ export function NodeDetailPanel({
         aria-label="Conversation history"
         aria-busy={isCreating}
         data-testid="conversation-history"
-        onKeyUp={captureSelectedSourceText}
-        onMouseUp={captureSelectedSourceText}
-        onTouchEnd={captureSelectedSourceText}
+        onKeyUp={captureSelectionAction}
+        onMouseUp={captureSelectionAction}
+        onTouchEnd={captureSelectionAction}
         className="min-h-0 flex-1 space-y-3 overflow-auto overscroll-contain py-4 pr-1"
       >
         {displayMessages.length === 0 ? (
@@ -851,6 +898,21 @@ export function NodeDetailPanel({
         )}
       </section>
 
+      {selectionAction && !isInitialSubmit && !isBlankNode && !isComposerBusy && (
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={handleAskBranchMindSelection}
+          aria-label="询问 BranchMind 关于选中文本"
+          data-testid="ask-branchmind-selection-button"
+          style={{ left: selectionAction.x, top: selectionAction.y }}
+          className="node-selection-action fixed z-50 inline-flex h-9 min-w-[154px] items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-neutral-200/90 bg-white/95 px-3.5 text-[13px] font-bold leading-none tracking-normal text-neutral-800 shadow-lg shadow-neutral-900/10 backdrop-blur transition hover:-translate-y-0.5 hover:border-brand-200 hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100"
+        >
+          <MessageSquare size={14} className="shrink-0 text-brand-700" />
+          询问 BranchMind
+        </button>
+      )}
+
       {showComposer && (
         <form
         aria-label="Message composer"
@@ -860,30 +922,6 @@ export function NodeDetailPanel({
         onSubmit={handleSubmit}
         className="node-detail-composer shrink-0 space-y-3 border-t border-neutral-200 pt-4"
       >
-        {!isInitialSubmit && !isBlankNode && selectedSourceText && (
-          <div
-            aria-label="Selected source text"
-            data-testid="selected-source-text"
-            className="space-y-2 rounded-xl border border-brand-100 bg-brand-50 p-3 text-sm text-neutral-700"
-          >
-            <p className="text-[11px] font-black uppercase tracking-wider text-neutral-500">
-              Selected text
-            </p>
-            <p className="line-clamp-3 leading-6">{getSelectionPreview(selectedSourceText)}</p>
-            <button
-              type="button"
-              onClick={handleBranchFromSelection}
-              disabled={isComposerBusy}
-              aria-label="Branch from selection"
-              data-testid="branch-from-selection-button"
-              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-brand-100 text-sm font-black text-brand-800 transition hover:bg-brand-200 disabled:cursor-not-allowed disabled:opacity-65"
-            >
-              <GitBranch size={16} />
-              Branch from selection
-            </button>
-          </div>
-        )}
-
         {!isInitialSubmit && !isBlankNode && (
           <div
             role="group"
@@ -934,6 +972,28 @@ export function NodeDetailPanel({
           onRemove={composerControls.removePendingAttachment}
         />
         <div className="node-detail-composer-box relative rounded-[20px] border border-neutral-200/80 bg-white shadow-sm transition focus-within:border-brand-300 focus-within:shadow-md focus-within:shadow-brand-100/20 focus-within:ring-4 focus-within:ring-brand-100/30">
+          {hasSelectedTextContext && (
+            <div className="px-3 pt-3">
+              <div
+                aria-label="Selected text context"
+                data-testid="selected-text-context-chip"
+                className="node-selected-text-chip inline-flex max-w-full items-center gap-2 rounded-full border border-neutral-200/70 bg-white/75 px-3 py-1.5 text-xs font-bold tracking-normal text-neutral-700 shadow-sm"
+              >
+                <MessageSquare size={14} className="shrink-0 text-neutral-500" />
+                <span className="min-w-0 truncate">1 个已选文本片段</span>
+                <button
+                  type="button"
+                  onClick={clearSelectedSourceText}
+                  disabled={isComposerBusy}
+                  aria-label="Remove selected text context"
+                  data-testid="remove-selected-text-context-button"
+                  className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-neutral-500 transition hover:bg-white hover:text-neutral-800 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            </div>
+          )}
           <textarea
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -943,7 +1003,9 @@ export function NodeDetailPanel({
             data-testid="message-instruction-input"
             placeholder={composerPlaceholder}
             rows={3}
-            className="w-full resize-none bg-transparent px-4 pt-4 pb-16 text-sm leading-6 text-neutral-900 outline-none placeholder:text-neutral-400 transition disabled:cursor-not-allowed disabled:opacity-65"
+            className={`w-full resize-none bg-transparent px-4 pb-16 text-sm leading-6 text-neutral-900 outline-none placeholder:text-neutral-400 transition disabled:cursor-not-allowed disabled:opacity-65 ${
+              hasSelectedTextContext ? "pt-3" : "pt-4"
+            }`}
           />
           <div className="absolute bottom-3 left-3 flex items-center gap-2">
             <AttachmentMenuButton controls={composerControls} />

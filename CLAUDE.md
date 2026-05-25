@@ -30,7 +30,7 @@ Copy `.env.example` to `.env.local` and fill the providers you want to use.
 
 Core chat completion:
 
-- `AI_PROVIDER` - Optional, `deepseek` by default. Set to `opencode-go` to use OpenCode Go.
+- `AI_PROVIDER` - Optional, `deepseek` by default. Set to `opencode-go` or `gemini` to use those providers.
 - `AI_MOCK_MODE` - Optional local/CI mock mode for deterministic AI replies.
 - `DEEPSEEK_API_KEY` - Required when `AI_PROVIDER=deepseek` unless mock mode is enabled.
 - `DEEPSEEK_MODEL` - Optional for DeepSeek, defaults to `deepseek-v4-flash`.
@@ -38,12 +38,15 @@ Core chat completion:
 - `OPENCODE_GO_API_KEY` - Required when `AI_PROVIDER=opencode-go` unless mock mode is enabled.
 - `OPENCODE_GO_MODEL` - Optional for OpenCode Go, defaults to `glm-5.1`.
 - `OPENCODE_GO_ALLOWED_MODELS` - Optional comma-separated allowlist for the model selector.
+- `GEMINI_API_KEY` - Required when `AI_PROVIDER=gemini` unless mock mode is enabled.
+- `GEMINI_MODEL` - Optional for Gemini, defaults to `gemini-3.5-flash`.
+- `GEMINI_ALLOWED_MODELS` - Optional comma-separated allowlist for the model selector.
 - `BRANCHMIND_ADMIN_EMAILS` - Comma-separated Supabase Auth emails allowed to access `/admin`.
 - `BRANCHMIND_ENABLE_LOCAL_ADMIN` - Optional local-only admin bypass for development without Supabase Auth.
 
 Auth, origin, and project storage:
 
-- `APP_ORIGIN` - Used to build Supabase Auth email/OAuth callback URLs.
+- `APP_ORIGIN` - Used to build Supabase Auth OAuth callback URLs.
 - `ALLOWED_ORIGINS` or `TRUSTED_ORIGINS` - Optional origin allowlist for production requests.
 - `NEXT_PUBLIC_SUPABASE_URL` - Required in production for Supabase-backed auth/storage.
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` or `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` - Required for Supabase client helpers.
@@ -86,13 +89,18 @@ Server project persistence is abstracted by `lib/server/projects-repository.ts`:
 Auth is resolved by `getBranchMindAuthContext()`:
 
 - With Supabase configured, confirmed Supabase users are required.
+- BranchMind account-name/password registration uses Supabase Auth admin user
+  creation with internally mapped emails under `users.branchmind.invalid`.
+  Existing Supabase email users can still sign in by entering their email as the
+  account name. Public email sign-up, magic links, and email password recovery
+  are disabled.
 - Without Supabase, the app uses an HTTP-only local session cookie.
 
 Mutation routes validate request origins, parse bodies with Zod schemas, and apply rate limits. Rate limiting uses Supabase when possible and falls back to an in-memory map.
 
 ### AI Flow
 
-Chat providers are defined in `lib/server/ai-provider.ts`. The supported chat completion providers are DeepSeek and OpenCode Go. The model selector is served from `/api/chat/models`.
+Chat providers are defined in `lib/server/ai-provider.ts`. The supported chat completion providers are DeepSeek, OpenCode Go, and Gemini through Google's OpenAI-compatible endpoint. The model selector is served from `/api/chat/models`.
 
 Initial project creation creates a pending root node first, then streams the first assistant response through the node regeneration route. Child nodes are created optimistically on the client and finalized by `/api/projects/[projectId]/nodes/stream`.
 
@@ -152,7 +160,8 @@ Indexed PDFs can also be attached from the BranchMind composer. Attached documen
 - `/projects` - Project list with search, delete, import/export, and account entry points.
 - `/workspace/[projectId]` - Main BranchMind workspace.
 - `/reader` - PDF reader and RAG query UI.
-- `/auth/sign-in`, `/auth/sign-up`, `/auth/forgot-password`, `/auth/reset-password` - Supabase Auth UI.
+- `/auth/sign-in`, `/auth/sign-up`, `/auth/reset-password` - Supabase Auth UI.
+- `/auth/forgot-password` - Redirects to sign-in because email recovery is disabled.
 - `/auth/callback` - Supabase Auth callback route.
 - `/privacy`, `/terms` - Beta policy pages.
 
