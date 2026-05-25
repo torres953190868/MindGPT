@@ -947,6 +947,30 @@ textarea {
   min-height: 2.25rem;
 }
 
+@media (max-width: 639px) {
+  .home-inline-send-button.branchmind-primary-action {
+    border: 1px solid color-mix(in srgb, var(--theme-neutral-900) 14%, var(--theme-border-default));
+    background: color-mix(in srgb, var(--theme-neutral-900) 88%, var(--theme-surface-elevated));
+    color: var(--theme-surface-elevated);
+    box-shadow: 0 7px 18px color-mix(in srgb, var(--theme-neutral-900) 18%, transparent);
+    opacity: 1;
+  }
+
+  .home-inline-send-button.branchmind-primary-action:hover:not(:disabled),
+  .home-inline-send-button.branchmind-primary-action:focus-visible:not(:disabled) {
+    background: var(--theme-neutral-900);
+    color: var(--theme-surface-elevated);
+  }
+
+  .home-inline-send-button.branchmind-primary-action:disabled {
+    border-color: var(--theme-border-default);
+    background: color-mix(in srgb, var(--theme-surface-muted) 72%, var(--theme-surface-elevated));
+    color: var(--theme-text-muted);
+    box-shadow: none;
+    opacity: 1;
+  }
+}
+
 .home-tagline-rotator-leaving,
 .home-prompt-suggestion-rotator-leaving {
   opacity: 0;

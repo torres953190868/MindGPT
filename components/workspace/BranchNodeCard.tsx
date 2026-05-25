@@ -345,7 +345,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
           rows={2}
           className="min-h-[58px] w-full resize-none bg-transparent px-1 py-1 text-base leading-7 text-neutral-900 outline-none placeholder:text-neutral-500 disabled:cursor-not-allowed disabled:opacity-65 sm:min-h-[86px]"
         />
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center justify-between gap-3">
           {homeSuggestions.length > 0 && (
             <div
               className={`home-prompt-suggestion-rotator home-prompt-suggestion-rotator-${suggestionsAnimationPhase} flex min-w-0 flex-1 flex-wrap gap-2`}
@@ -375,14 +375,14 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
             disabled={isComposerBusy || !input.trim()}
             aria-label="Send message"
             data-testid="send-message-button"
-            className="branchmind-primary-action hidden h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-brand-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 sm:inline-flex sm:px-5"
+            className="branchmind-primary-action home-inline-send-button inline-flex h-10 w-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-brand-600 px-0 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-5"
           >
             {composerControls.isPreparingAttachments || composer.isBusy ? (
               <Loader2 size={15} className="animate-spin" />
             ) : (
               <Send size={15} />
             )}
-            <span className="node-detail-send-label">
+            <span className="node-detail-send-label hidden sm:inline">
               {composerControls.isPreparingAttachments
                 ? "Preparing..."
                 : composer.isBusy

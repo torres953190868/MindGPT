@@ -525,7 +525,10 @@ test("home shows the canvas-first mobile launcher with collapsed side panels", a
     await expect(page.getByTestId("workspace-mobile-view-tabs")).toHaveCount(0);
     await expect(page.getByTestId("mind-map-canvas")).toBeVisible();
     await expect(page.getByTestId("message-composer")).toBeVisible();
-    await expect(page.getByTestId("send-message-button")).toBeHidden();
+    await expect(page.getByTestId("send-message-button")).toBeVisible();
+    await expect(
+      page.getByTestId("send-message-button").locator(".node-detail-send-label:visible"),
+    ).toHaveCount(0);
     await expect(page.locator('[data-testid="home-prompt-suggestion"]:visible')).toHaveCount(1);
     await expect(page.getByTestId("mobile-home-map-preview")).toHaveCount(0);
     await expect(page.getByTestId("workspace-sidebar")).toHaveCount(0);
@@ -581,7 +584,7 @@ test("mobile home launcher starts a workspace from the compact composer", async 
   await page.goto("/");
   await expect(page.getByTestId("workspace-shell")).toBeVisible();
   await page.getByTestId("message-instruction-input").fill(instruction);
-  await page.getByTestId("message-instruction-input").press("Enter");
+  await page.getByTestId("send-message-button").click();
 
   await expect(page).toHaveURL(/\/workspace\/project_/);
   await expect(page.getByTestId("workspace-mobile-view-tabs")).toBeVisible();
