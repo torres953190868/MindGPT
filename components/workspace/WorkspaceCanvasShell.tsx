@@ -131,6 +131,7 @@ type WorkspaceCanvasShellProps = {
   nodeDetailOptions?: NodeDetailOptions;
   projectNotesConfig?: ProjectNotesConfig;
   canvasIntro?: ReactNode;
+  mobileNavigationMode?: "tabs" | "drawers";
 };
 
 type SidePanelResizeBoundsOptions = {
@@ -272,6 +273,7 @@ type CanvasCornerToggleButtonProps = {
   side: "left" | "right";
   ariaLabel: string;
   testId: string;
+  showOnMobile?: boolean;
   onClick: () => void;
   children: ReactNode;
 };
@@ -280,6 +282,7 @@ function CanvasCornerToggleButton({
   side,
   ariaLabel,
   testId,
+  showOnMobile = false,
   onClick,
   children,
 }: CanvasCornerToggleButtonProps) {
@@ -290,7 +293,9 @@ function CanvasCornerToggleButton({
       aria-label={ariaLabel}
       aria-expanded="false"
       data-testid={testId}
-      className={`branchmind-canvas-toggle absolute top-4 z-20 hidden h-9 w-9 place-items-center rounded-md border border-neutral-200 bg-white/95 text-neutral-700 shadow-sm backdrop-blur transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40 lg:grid ${
+      className={`branchmind-canvas-toggle absolute top-4 z-20 h-9 w-9 place-items-center rounded-md border border-neutral-200 bg-white/95 text-neutral-700 shadow-sm backdrop-blur transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40 ${
+        showOnMobile ? "grid" : "hidden lg:grid"
+      } ${
         side === "left" ? "left-4" : "right-4"
       }`}
     >
@@ -325,6 +330,7 @@ export function WorkspaceCanvasShell({
   nodeDetailOptions,
   projectNotesConfig,
   canvasIntro,
+  mobileNavigationMode = "tabs",
 }: WorkspaceCanvasShellProps) {
   const workspaceGridRef = useRef<HTMLDivElement | null>(null);
   const workspaceSidebarRestoreWidthRef = useRef(WORKSPACE_SIDEBAR_DEFAULT_WIDTH);
@@ -349,6 +355,7 @@ export function WorkspaceCanvasShell({
   const [isProjectNotesPanelOpen, setIsProjectNotesPanelOpen] = useState(false);
   const [canvasIntroPanOffsetY, setCanvasIntroPanOffsetY] = useState(0);
 
+  const usesMobileDrawers = mobileNavigationMode === "drawers";
   const hasProjectNotes = Boolean(projectNotesConfig);
   const selectedNode = selectedNodeId ? project.nodes[selectedNodeId] ?? null : null;
   const selectedConversationMessages = useMemo(
@@ -393,13 +400,37 @@ export function WorkspaceCanvasShell({
   const canvasIntroStyle = {
     transform: `translate3d(0, ${canvasIntroPanOffsetY}px, 0)`,
   } as CSSProperties;
-  const workspaceGridClassName = [
-    "branchmind-workspace-grid grid min-h-0 min-w-0 grid-cols-1 gap-3 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl md:gap-4 lg:h-full lg:flex-1 lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:shadow-none",
-    dataDraftWorkspace ? "" : "flex-1",
-  ].join(" ");
+  const workspaceGridClassName = usesMobileDrawers
+    ? "branchmind-workspace-grid branchmind-home-workspace-grid grid min-h-0 min-w-0 flex-1 grid-cols-1 overflow-hidden bg-transparent lg:h-full lg:flex-1 lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0"
+    : [
+        "branchmind-workspace-grid grid min-h-0 min-w-0 grid-cols-1 gap-3 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl md:gap-4 lg:h-full lg:flex-1 lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:shadow-none",
+        dataDraftWorkspace ? "" : "flex-1",
+      ].join(" ");
   const mobileTabsClassName = hasProjectNotes
     ? "branchmind-mobile-tabs grid grid-cols-4 gap-1.5 rounded-[18px] border border-white/80 bg-white/68 p-1.5 shadow-sm sm:gap-2 sm:rounded-[24px] sm:p-2 lg:hidden"
     : "branchmind-mobile-tabs grid grid-cols-3 gap-1.5 rounded-[18px] border border-white/80 bg-white/68 p-1.5 shadow-sm sm:gap-2 sm:rounded-[24px] sm:p-2 lg:hidden";
+  const workspaceSidebarMobileClassName = usesMobileDrawers
+    ? "branchmind-mobile-drawer branchmind-mobile-drawer-left fixed bottom-2 left-2 top-2 z-40 flex w-[min(86vw,320px)] min-w-0 lg:contents"
+    : mobileWorkspaceView === "outline"
+      ? "contents"
+      : "hidden lg:contents";
+  const nodeDetailMobileClassName = usesMobileDrawers
+    ? "branchmind-mobile-drawer branchmind-mobile-drawer-right fixed bottom-2 right-2 top-2 z-40 flex w-[min(88vw,360px)] min-w-0 lg:contents"
+    : mobileWorkspaceView === "chat"
+      ? "h-[calc(100svh-9.75rem)] min-h-0 min-w-0 overflow-hidden sm:h-[calc(100svh-12rem)] lg:contents"
+      : "hidden lg:contents";
+  const mapShellClassName = usesMobileDrawers
+    ? "branchmind-map-shell relative h-full min-h-0 overflow-hidden bg-surface-canvas lg:h-full lg:min-h-0"
+    : `branchmind-map-shell relative h-[min(var(--mobile-map-height),calc(100svh-7rem))] min-h-[300px] overflow-hidden rounded-lg border border-neutral-200 bg-surface-canvas shadow-sm lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none ${
+        mobileWorkspaceView === "map" ? "" : "hidden lg:block"
+      }`;
+  const canvasIntroClassName = usesMobileDrawers
+    ? "branchmind-canvas-intro branchmind-canvas-intro-floating pointer-events-none absolute inset-x-14 top-16 z-10 flex justify-center px-0 lg:inset-x-4 lg:top-24"
+    : "branchmind-canvas-intro relative z-10 flex justify-center px-3 pt-4 sm:px-4 sm:pt-6 lg:pointer-events-none lg:absolute lg:inset-x-4 lg:top-24 lg:p-0";
+  const mindMapFrameClassName =
+    canvasIntro && !usesMobileDrawers
+      ? "h-[calc(100%-6.5rem)] sm:h-[calc(100%-7.75rem)] lg:h-full"
+      : "h-full";
 
   const getWorkspaceGridWidth = useCallback(() => {
     return workspaceGridRef.current?.clientWidth ?? 0;
@@ -600,10 +631,29 @@ export function WorkspaceCanvasShell({
   const handleSelectNodeFromOutline = useCallback(
     (nodeId: string) => {
       onSelectNode(nodeId);
+      if (
+        usesMobileDrawers &&
+        window.matchMedia("(max-width: 1023px)").matches
+      ) {
+        setIsWorkspaceSidebarCollapsed(true);
+        setIsNodeDetailPanelCollapsed(false);
+        return;
+      }
       setMobileWorkspaceView("chat");
     },
-    [onSelectNode],
+    [onSelectNode, usesMobileDrawers],
   );
+
+  const handleCloseMobileDrawers = useCallback(() => {
+    if (isWorkspaceSidebarCollapsed && isNodeDetailPanelCollapsed) return;
+    if (!isWorkspaceSidebarCollapsed) handleCollapseWorkspaceSidebar();
+    if (!isNodeDetailPanelCollapsed) handleCollapseNodeDetailPanel();
+  }, [
+    handleCollapseNodeDetailPanel,
+    handleCollapseWorkspaceSidebar,
+    isNodeDetailPanelCollapsed,
+    isWorkspaceSidebarCollapsed,
+  ]);
 
   const handleSidePanelResizeStart = useCallback((side: ResizableSide, event: ResizeStartEvent) => {
     event.preventDefault();
@@ -910,35 +960,48 @@ export function WorkspaceCanvasShell({
         </div>
       )}
 
-      <div
-        role="tablist"
-        aria-label="Workspace mobile views"
-        data-testid="workspace-mobile-view-tabs"
-        className={mobileTabsClassName}
-      >
-        {visibleMobileTabs.map((tab) => {
-          const selected = mobileWorkspaceView === tab.id;
+      {usesMobileDrawers &&
+        (!isWorkspaceSidebarCollapsed || !isNodeDetailPanelCollapsed) && (
+          <button
+            type="button"
+            aria-label="Close side panels"
+            data-testid="mobile-drawer-backdrop"
+            onClick={handleCloseMobileDrawers}
+            className="fixed inset-0 z-30 bg-neutral-900/20 backdrop-blur-[1px] lg:hidden"
+          />
+        )}
 
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              data-testid={`workspace-mobile-view-${tab.id}`}
-              onClick={() => handleSelectMobileWorkspaceView(tab.id)}
-              className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-xl text-[11px] font-black transition focus:outline-none focus:ring-2 focus:ring-brand-300 sm:min-h-11 sm:gap-1.5 sm:text-xs ${
-                selected
-                  ? "bg-brand-600 text-white shadow-md shadow-brand-200/30"
-                  : "bg-white/80 text-neutral-700 hover:bg-white"
-              }`}
-            >
-              {tab.icon}
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      {!usesMobileDrawers && (
+        <div
+          role="tablist"
+          aria-label="Workspace mobile views"
+          data-testid="workspace-mobile-view-tabs"
+          className={mobileTabsClassName}
+        >
+          {visibleMobileTabs.map((tab) => {
+            const selected = mobileWorkspaceView === tab.id;
+
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                data-testid={`workspace-mobile-view-${tab.id}`}
+                onClick={() => handleSelectMobileWorkspaceView(tab.id)}
+                className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-xl text-[11px] font-black transition focus:outline-none focus:ring-2 focus:ring-brand-300 sm:min-h-11 sm:gap-1.5 sm:text-xs ${
+                  selected
+                    ? "bg-brand-600 text-white shadow-md shadow-brand-200/30"
+                    : "bg-white/80 text-neutral-700 hover:bg-white"
+                }`}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div
         ref={workspaceGridRef}
@@ -946,7 +1009,7 @@ export function WorkspaceCanvasShell({
         style={workspaceGridStyle}
       >
         {!isWorkspaceSidebarCollapsed && (
-          <div className={mobileWorkspaceView === "outline" ? "contents" : "hidden lg:contents"}>
+          <div className={workspaceSidebarMobileClassName}>
             <WorkspaceSidebar
               footer={<AuthPanel placement="top" variant="sidebar" className="w-full" />}
               project={project}
@@ -967,16 +1030,14 @@ export function WorkspaceCanvasShell({
         <section
           aria-labelledby="mind-map-section-title"
           data-testid="mind-map-canvas"
-          className={`branchmind-map-shell relative h-[min(var(--mobile-map-height),calc(100svh-7rem))] min-h-[300px] overflow-hidden rounded-lg border border-neutral-200 bg-surface-canvas shadow-sm lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none ${
-            mobileWorkspaceView === "map" ? "" : "hidden lg:block"
-          }`}
+          className={mapShellClassName}
         >
           <h2 id="mind-map-section-title" className="sr-only">
             Mind map canvas
           </h2>
           {canvasIntro && (
             <div
-              className="branchmind-canvas-intro relative z-10 flex justify-center px-3 pt-4 sm:px-4 sm:pt-6 lg:pointer-events-none lg:absolute lg:inset-x-4 lg:top-24 lg:p-0"
+              className={canvasIntroClassName}
               style={canvasIntroStyle}
             >
               {canvasIntro}
@@ -987,6 +1048,7 @@ export function WorkspaceCanvasShell({
               side="left"
               ariaLabel="Expand workspace sidebar"
               testId="expand-workspace-sidebar-button"
+              showOnMobile={usesMobileDrawers}
               onClick={handleExpandWorkspaceSidebar}
             >
               <PanelLeftOpen size={18} />
@@ -997,12 +1059,13 @@ export function WorkspaceCanvasShell({
               side="right"
               ariaLabel="Expand node details panel"
               testId="expand-node-detail-panel-button"
+              showOnMobile={usesMobileDrawers}
               onClick={handleExpandNodeDetailPanel}
             >
               <PanelRightOpen size={18} />
             </CanvasCornerToggleButton>
           )}
-          <div className={canvasIntro ? "h-[calc(100%-6.5rem)] sm:h-[calc(100%-7.75rem)] lg:h-full" : "h-full"}>
+          <div className={mindMapFrameClassName}>
             <MindMap
               project={project}
               selectedNodeId={selectedNodeId}
@@ -1029,7 +1092,7 @@ export function WorkspaceCanvasShell({
             onResizeStart={handlePanelResizeStart}
           />
         )}
-        {mobileWorkspaceView === "map" && (
+        {!usesMobileDrawers && mobileWorkspaceView === "map" && (
           <WorkspaceResizeHandle
             orientation="horizontal"
             ariaLabel="Resize mind map height"
@@ -1038,13 +1101,7 @@ export function WorkspaceCanvasShell({
           />
         )}
         {!isNodeDetailPanelCollapsed && (
-          <div
-            className={
-              mobileWorkspaceView === "chat"
-                ? "h-[calc(100svh-9.75rem)] min-h-0 min-w-0 overflow-hidden sm:h-[calc(100svh-12rem)] lg:contents"
-                : "hidden lg:contents"
-            }
-          >
+          <div className={nodeDetailMobileClassName}>
             <NodeDetailPanel
               node={selectedNode}
               conversationMessages={selectedConversationMessages}

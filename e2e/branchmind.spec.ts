@@ -509,7 +509,7 @@ test("home opens directly into a draft workspace", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("home shows a compact mobile launcher instead of the workspace canvas", async ({ page }) => {
+test("home shows the canvas-first mobile launcher with collapsed side panels", async ({ page }) => {
   await mockAuthSession(page, { configured: true, user: null });
 
   for (const viewport of [
@@ -519,23 +519,32 @@ test("home shows a compact mobile launcher instead of the workspace canvas", asy
     await page.setViewportSize(viewport);
     await page.goto("/");
 
-    await expect(page.getByTestId("mobile-home-shell")).toBeVisible();
+    await expect(page.getByTestId("workspace-shell")).toBeVisible();
+    await expect(page.getByTestId("mobile-home-shell")).toHaveCount(0);
     await expect(page.getByTestId("home-hero")).toContainText("BranchMind");
     await expect(page.getByTestId("workspace-mobile-view-tabs")).toHaveCount(0);
-    await expect(page.getByTestId("mind-map-canvas")).toHaveCount(0);
+    await expect(page.getByTestId("mind-map-canvas")).toBeVisible();
     await expect(page.getByTestId("message-composer")).toBeVisible();
-    await expect(page.getByTestId("send-message-button")).toContainText("开始");
-    await expect(
-      page.getByTestId("send-message-button").locator(".mobile-home-send-label"),
-    ).toBeVisible();
-    await expect(page.getByTestId("home-prompt-suggestion")).toHaveCount(3);
+    await expect(page.getByTestId("send-message-button")).toBeHidden();
+    await expect(page.locator('[data-testid="home-prompt-suggestion"]:visible')).toHaveCount(0);
+    await expect(page.getByTestId("mobile-home-map-preview")).toHaveCount(0);
+    await expect(page.getByTestId("workspace-sidebar")).toHaveCount(0);
+    await expect(page.getByTestId("node-detail-panel")).toHaveCount(0);
 
-    const previewBox = await getElementBox(
-      page.getByTestId("mobile-home-map-preview"),
-      "mobile home map preview",
-    );
-    expect(previewBox.height).toBeGreaterThanOrEqual(220);
-    expect(previewBox.height).toBeLessThanOrEqual(260);
+    const mindMapCanvas = page.getByTestId("mind-map-canvas");
+    await expect(mindMapCanvas.getByTestId("expand-workspace-sidebar-button")).toBeVisible();
+    await expect(mindMapCanvas.getByTestId("expand-node-detail-panel-button")).toBeVisible();
+
+    await mindMapCanvas.getByTestId("expand-workspace-sidebar-button").click();
+    await expect(page.getByTestId("workspace-sidebar")).toBeVisible();
+    await expect(page.getByTestId("mobile-drawer-backdrop")).toBeVisible();
+    await page.getByTestId("collapse-workspace-sidebar-button").click();
+    await expect(page.getByTestId("workspace-sidebar")).toHaveCount(0);
+
+    await mindMapCanvas.getByTestId("expand-node-detail-panel-button").click();
+    await expect(page.getByTestId("node-detail-panel")).toBeVisible();
+    await page.mouse.click(8, viewport.height / 2);
+    await expect(page.getByTestId("node-detail-panel")).toHaveCount(0);
 
     await expect(page.locator('[data-testid="account-sign-in-button"]:visible')).toHaveCount(0);
   }
@@ -570,9 +579,9 @@ test("mobile home launcher starts a workspace from the compact composer", async 
 
   await page.setViewportSize({ width: 390, height: 780 });
   await page.goto("/");
-  await expect(page.getByTestId("mobile-home-shell")).toBeVisible();
+  await expect(page.getByTestId("workspace-shell")).toBeVisible();
   await page.getByTestId("message-instruction-input").fill(instruction);
-  await page.getByTestId("send-message-button").click();
+  await page.getByTestId("message-instruction-input").press("Enter");
 
   await expect(page).toHaveURL(/\/workspace\/project_/);
   await expect(page.getByTestId("workspace-mobile-view-tabs")).toBeVisible();

@@ -395,6 +395,25 @@ textarea {
   background-color: var(--theme-surface-canvas);
 }
 
+.branchmind-workspace-surface[data-draft-workspace="true"] {
+  background: var(--home-canvas-background);
+}
+
+.branchmind-home-workspace-grid {
+  background: transparent;
+}
+
+.branchmind-mobile-drawer {
+  filter: drop-shadow(0 18px 45px rgb(32 40 36 / 0.18));
+}
+
+.branchmind-mobile-drawer > [data-testid="workspace-sidebar"],
+.branchmind-mobile-drawer > [data-testid="node-detail-panel"] {
+  height: 100%;
+  max-height: none;
+  border-radius: 12px;
+}
+
 .branchmind-projects-surface {
   background-color: var(--projects-surface-background);
   background-image:
@@ -972,6 +991,18 @@ textarea {
 }
 
 @media (max-width: 1023px) {
+  .branchmind-home-workspace-grid .branchmind-map-shell {
+    border-radius: 0;
+  }
+
+  .branchmind-home-workspace-grid .branchmind-canvas-intro-floating {
+    top: calc(env(safe-area-inset-top) + 4.25rem);
+  }
+
+  .branchmind-home-workspace-grid .branchmind-canvas-toggle {
+    top: calc(env(safe-area-inset-top) + 0.75rem);
+  }
+
   .react-flow__controls button {
     width: 44px !important;
     height: 44px !important;

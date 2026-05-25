@@ -10,7 +10,6 @@ import type {
   Project,
 } from "@/lib/types";
 import { useBranchMindStore } from "@/store/useBranchMindStore";
-import { HomeStartComposer } from "./HomeStartComposer";
 import { WorkspaceCanvasShell } from "./WorkspaceCanvasShell";
 
 const DRAFT_PROJECT_ID = "home-draft-project";
@@ -76,25 +75,8 @@ async function ignoreMessageMutation() {
 
 function ignoreNodeMutation() {}
 
-function useCompactHomeLayout() {
-  const [isCompact, setIsCompact] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(max-width: 1023px)");
-    const syncCompactLayout = () => setIsCompact(mediaQuery.matches);
-
-    syncCompactLayout();
-    mediaQuery.addEventListener("change", syncCompactLayout);
-
-    return () => mediaQuery.removeEventListener("change", syncCompactLayout);
-  }, []);
-
-  return isCompact;
-}
-
 export function HomeDraftWorkspace() {
   const router = useRouter();
-  const isCompactHomeLayout = useCompactHomeLayout();
   const [selectedNodeId, setSelectedNodeId] = useState(DRAFT_ROOT_NODE_ID);
   const [rootPosition, setRootPosition] = useState<NodePosition>(ROOT_POSITION);
   const [taglineIndex, setTaglineIndex] = useState(0);
@@ -167,94 +149,7 @@ export function HomeDraftWorkspace() {
     "mt-4 text-base font-bold text-neutral-500 sm:text-2xl",
   ].join(" ");
 
-  const renderMobileHome = (testIdsEnabled: boolean) => (
-    <main
-      aria-labelledby="mobile-home-title"
-      data-testid={testIdsEnabled ? "mobile-home-shell" : undefined}
-      className="branchmind-mobile-home-shell min-h-[100svh] bg-surface-bg px-3 py-3 text-neutral-900"
-    >
-      <header
-        data-testid={testIdsEnabled ? "mobile-home-header" : undefined}
-        className="flex min-h-12 items-center gap-3"
-      >
-        <div className="min-w-0">
-          <p className="branchmind-home-logo truncate text-lg font-black leading-tight text-neutral-900">
-            BranchMind
-          </p>
-          <p className="truncate text-xs font-bold text-neutral-500">分支学习画布</p>
-        </div>
-      </header>
-
-      <section
-        data-testid={testIdsEnabled ? "home-hero" : undefined}
-        className="branchmind-home-hero pt-8 text-left"
-      >
-        <h1
-          id="mobile-home-title"
-          className="branchmind-home-logo home-title-soft text-[42px] font-black leading-none text-neutral-900"
-        >
-          BranchMind
-        </h1>
-        <p
-          data-testid={testIdsEnabled ? "home-hero-tagline" : undefined}
-          className={[
-            "home-tagline-rotator",
-            `home-tagline-rotator-${taglinePhase}`,
-            "mt-3 text-base font-bold leading-6 text-neutral-600",
-          ].join(" ")}
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          {HOME_HERO_TAGLINES[taglineIndex]}
-        </p>
-      </section>
-
-      <div
-        className="mt-5"
-        data-testid={testIdsEnabled ? "mobile-home-start" : undefined}
-      >
-        <HomeStartComposer
-          isBusy={creatingProject}
-          error={aiError}
-          onSubmit={handleStartProject}
-          placeholder={HOME_COMPOSER_PLACEHOLDER}
-          submitLabel="开始"
-          suggestions={promptSuggestions}
-          suggestionsAnimationPhase={taglinePhase}
-          testIdsEnabled={testIdsEnabled}
-        />
-      </div>
-
-      <section
-        aria-label="BranchMind map preview"
-        data-testid={testIdsEnabled ? "mobile-home-map-preview" : undefined}
-        className="branchmind-mobile-home-preview branchmind-grid relative mt-4 h-[230px] overflow-hidden rounded-xl border border-neutral-200 bg-surface-canvas shadow-sm"
-      >
-        <div className="absolute left-5 top-7 w-[46%] rounded-lg border border-neutral-200 bg-white px-3 py-2 shadow-sm">
-          <p className="text-xs font-black text-neutral-900">研究问题</p>
-          <p className="mt-1 line-clamp-2 text-[11px] font-semibold leading-4 text-neutral-500">
-            从一个问题开始
-          </p>
-        </div>
-        <div className="absolute left-[42%] top-[86px] h-px w-[28%] bg-brand-300" />
-        <div className="absolute right-5 top-[66px] w-[40%] rounded-lg border border-neutral-200 bg-white px-3 py-2 shadow-sm">
-          <p className="text-xs font-black text-neutral-900">关键假设</p>
-          <p className="mt-1 line-clamp-2 text-[11px] font-semibold leading-4 text-neutral-500">
-            拆出可验证分支
-          </p>
-        </div>
-        <div className="absolute left-[36%] top-[126px] h-px w-[24%] -rotate-12 bg-success-300" />
-        <div className="absolute bottom-8 left-9 w-[43%] rounded-lg border border-neutral-200 bg-white px-3 py-2 shadow-sm">
-          <p className="text-xs font-black text-neutral-900">追问路径</p>
-          <p className="mt-1 line-clamp-2 text-[11px] font-semibold leading-4 text-neutral-500">
-            把理解继续长出来
-          </p>
-        </div>
-      </section>
-    </main>
-  );
-
-  const desktopWorkspace = (
+  return (
     <WorkspaceCanvasShell
       project={draftProject}
       selectedNodeId={selectedNodeId}
@@ -276,6 +171,7 @@ export function HomeDraftWorkspace() {
       disableNodeCreationActions
       initialWorkspaceSidebarCollapsed
       initialNodeDetailPanelCollapsed
+      mobileNavigationMode="drawers"
       canvasIntro={
         <div
           data-testid="home-hero"
@@ -314,17 +210,4 @@ export function HomeDraftWorkspace() {
       }}
     />
   );
-
-  if (isCompactHomeLayout === null) {
-    return (
-      <>
-        <div className="lg:hidden">{renderMobileHome(false)}</div>
-        <div className="hidden lg:block">{desktopWorkspace}</div>
-      </>
-    );
-  }
-
-  if (isCompactHomeLayout) return renderMobileHome(true);
-
-  return desktopWorkspace;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { GitBranch, Loader2, Send, Sparkles, Ribbon } from "lucide-react";
 import {
@@ -74,20 +74,20 @@ export function BranchNodeCard({ data }: NodeProps) {
       data-selected={selected ? "true" : "false"}
       data-inline-composer={hasInlineComposer ? "true" : undefined}
       data-home-composer={isHomeInlineComposer ? "true" : undefined}
-      className={`branch-node-card-surface branch-node-edge-hit-area group bg-white text-left transition ${
+      className={`branch-node-card-surface branch-node-edge-hit-area group text-left transition ${
         isHomeInlineComposer
-          ? `w-[min(760px,calc(100vw-36px))] rounded-[18px] border border-neutral-200/90 p-3 shadow-lg sm:w-[min(760px,calc(100vw-48px))] sm:p-6 ${
+          ? `w-[min(760px,calc(100vw-40px))] rounded-xl border border-neutral-200/90 bg-white/92 p-2.5 shadow-lg backdrop-blur sm:w-[min(760px,calc(100vw-48px))] sm:rounded-[18px] sm:p-6 ${
               selected
                 ? "ring-2 ring-brand-200/70"
                 : "hover:shadow-xl"
             }`
           : hasInlineComposer
-            ? `w-[400px] max-w-[calc(100vw-48px)] rounded-[30px] border-2 p-5 shadow-xl ${
+            ? `w-[400px] max-w-[calc(100vw-48px)] rounded-[30px] border-2 bg-white p-5 shadow-xl ${
                 selected
                   ? "border-brand-300 ring-2 ring-brand-200"
                   : "border-white/90 hover:shadow-2xl"
             }`
-          : `w-[292px] rounded-2xl border p-4 shadow-md ${
+          : `w-[292px] rounded-2xl border bg-white p-4 shadow-md ${
               selected
                 ? "border-brand-400 shadow-lg ring-2 ring-brand-300"
                 : "border-white/90 hover:-translate-y-1 hover:shadow-lg"
@@ -271,10 +271,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
   const isHomeComposer = composer.variant === "home";
   const suggestionsAnimationPhase = composer.suggestionsAnimationPhase ?? "idle";
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    event.stopPropagation();
-
+  async function submitComposer() {
     const trimmed = input.trim();
     if (!trimmed || isComposerBusy) return;
 
@@ -295,6 +292,22 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
     }
   }
 
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    void submitComposer();
+  }
+
+  function handleInstructionKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    void submitComposer();
+  }
+
   if (isHomeComposer) {
     return (
       <form
@@ -305,14 +318,13 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
         onSubmit={handleSubmit}
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
-        className="home-inline-composer nodrag nopan space-y-3"
+        className="home-inline-composer nodrag nopan space-y-2 sm:space-y-3"
       >
-        <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <ModelSelectorButton controls={composerControls} placement="below" />
             <AttachmentMenuButton controls={composerControls} placement="below" />
           </div>
-          <span className="hidden text-sm font-bold text-neutral-400 sm:inline">?</span>
         </div>
         <PendingAttachmentChips
           attachments={composerControls.pendingAttachments}
@@ -322,18 +334,20 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
         <textarea
           value={input}
           onChange={(event) => setInput(event.target.value)}
+          onKeyDown={handleInstructionKeyDown}
           disabled={isComposerBusy}
           aria-label="Message instruction"
           aria-describedby={displayError ? errorId : undefined}
           data-testid="message-instruction-input"
           placeholder={composer.placeholder}
+          enterKeyHint="send"
           rows={2}
-          className="min-h-[78px] w-full resize-none bg-transparent px-1 py-1 text-base leading-7 text-neutral-900 outline-none placeholder:text-neutral-500 disabled:cursor-not-allowed disabled:opacity-65 sm:min-h-[86px]"
+          className="min-h-[58px] w-full resize-none bg-transparent px-1 py-1 text-base leading-7 text-neutral-900 outline-none placeholder:text-neutral-500 disabled:cursor-not-allowed disabled:opacity-65 sm:min-h-[86px]"
         />
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {composer.suggestions && composer.suggestions.length > 0 && (
             <div
-              className={`home-prompt-suggestion-rotator home-prompt-suggestion-rotator-${suggestionsAnimationPhase} flex min-w-0 flex-1 flex-wrap gap-2`}
+              className={`home-prompt-suggestion-rotator home-prompt-suggestion-rotator-${suggestionsAnimationPhase} hidden min-w-0 flex-1 flex-wrap gap-2 sm:flex`}
             >
               {composer.suggestions.map((suggestion) => (
                 <button
@@ -358,7 +372,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
             disabled={isComposerBusy || !input.trim()}
             aria-label="Send message"
             data-testid="send-message-button"
-            className="branchmind-primary-action inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-brand-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 sm:px-5"
+            className="branchmind-primary-action hidden h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-brand-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 sm:inline-flex sm:px-5"
           >
             {composerControls.isPreparingAttachments || composer.isBusy ? (
               <Loader2 size={15} className="animate-spin" />
