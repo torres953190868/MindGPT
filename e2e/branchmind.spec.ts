@@ -541,11 +541,25 @@ test("home shows the canvas-first mobile launcher with collapsed side panels", a
     await expect(page.getByTestId("workspace-mobile-view-tabs")).toHaveCount(0);
     await expect(page.getByTestId("mind-map-canvas")).toBeVisible();
     await expect(page.getByTestId("message-composer")).toBeVisible();
+    await expect
+      .poll(() =>
+        page
+          .getByTestId("home-hero-tagline")
+          .evaluate((element) => parseFloat(getComputedStyle(element).minHeight)),
+      )
+      .toBeGreaterThan(40);
     await expect(page.getByTestId("send-message-button")).toBeVisible();
     await expect(
       page.getByTestId("send-message-button").locator(".node-detail-send-label:visible"),
     ).toHaveCount(0);
     await expect(page.locator('[data-testid="home-prompt-suggestion"]:visible')).toHaveCount(1);
+    const suggestionRotator = page.locator(".home-prompt-suggestion-rotator");
+    await expect(suggestionRotator).toHaveCount(1);
+    await expect
+      .poll(() =>
+        suggestionRotator.evaluate((element) => getComputedStyle(element).overflow),
+      )
+      .toBe("hidden");
     await expect(page.getByTestId("mobile-home-map-preview")).toHaveCount(0);
     await expect(page.getByTestId("workspace-sidebar")).toHaveCount(0);
     await expect(page.getByTestId("node-detail-panel")).toHaveCount(0);

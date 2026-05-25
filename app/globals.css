@@ -948,6 +948,10 @@ textarea {
 }
 
 @media (max-width: 639px) {
+  .home-tagline-rotator {
+    min-height: 3em;
+  }
+
   .home-inline-send-button.branchmind-primary-action {
     border: 1px solid color-mix(in srgb, var(--theme-neutral-900) 14%, var(--theme-border-default));
     background: color-mix(in srgb, var(--theme-neutral-900) 88%, var(--theme-surface-elevated));

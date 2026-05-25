@@ -349,7 +349,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
         <div className="flex items-center justify-between gap-3">
           {homeSuggestions.length > 0 && (
             <div
-              className={`home-prompt-suggestion-rotator home-prompt-suggestion-rotator-${suggestionsAnimationPhase} flex min-w-0 flex-1 flex-wrap gap-2`}
+              className={`home-prompt-suggestion-rotator home-prompt-suggestion-rotator-${suggestionsAnimationPhase} flex max-h-[82px] min-w-0 flex-1 flex-wrap gap-2 overflow-hidden`}
             >
               {homeSuggestions.map((suggestion, index) => (
                 <button
