@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type WheelEvent as ReactWheelEvent,
 } from "react";
 import { EyeOff } from "lucide-react";
 import {
@@ -307,19 +306,30 @@ export function MindMap({
   );
 
   const handleHomeWheel = useCallback(
-    (event: ReactWheelEvent<HTMLDivElement>) => {
+    (event: WheelEvent) => {
       if (!isHomeInlineComposer || !reactFlowInstance) return;
+
+      const target = event.target instanceof Element ? event.target : null;
+      const deltaY =
+        event.deltaY *
+        (event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? LINE_SCROLL_DELTA_MULTIPLIER
+          : 1);
+      const floatingScrollTarget =
+        target?.closest<HTMLElement>(".nowheel, [data-testid='chat-model-menu']") ??
+        document.querySelector<HTMLElement>("[data-testid='chat-model-menu']");
+      if (floatingScrollTarget) {
+        floatingScrollTarget.scrollTop += deltaY;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
 
       event.preventDefault();
       event.stopPropagation();
 
       const viewport = reactFlowInstance.getViewport();
       const baselineY = homeViewportBaselineYRef.current ?? viewport.y;
-      const deltaY =
-        event.deltaY *
-        (event.deltaMode === WheelEvent.DOM_DELTA_LINE
-          ? LINE_SCROLL_DELTA_MULTIPLIER
-          : 1);
       const nextOffsetY = clamp(
         viewport.y - baselineY - deltaY * HOME_CANVAS_WHEEL_PAN_SPEED,
         -getHomeCanvasPanLimit(),
@@ -343,6 +353,20 @@ export function MindMap({
       reactFlowInstance,
     ],
   );
+
+  useEffect(() => {
+    if (!isHomeInlineComposer || !reactFlowInstance) return;
+
+    const wheelTarget = flowContainerRef.current?.parentElement;
+    if (!wheelTarget) return;
+
+    wheelTarget.addEventListener("wheel", handleHomeWheel, { passive: false });
+    window.addEventListener("wheel", handleHomeWheel, { passive: false });
+    return () => {
+      wheelTarget.removeEventListener("wheel", handleHomeWheel);
+      window.removeEventListener("wheel", handleHomeWheel);
+    };
+  }, [handleHomeWheel, isHomeInlineComposer, reactFlowInstance]);
 
   if (graphNodes.length === 0) {
     return (
@@ -380,7 +404,6 @@ export function MindMap({
         onInit={setReactFlowInstance}
         onNodeClick={(_, node) => onSelectNode(node.id)}
         onViewportChange={handleViewportChange}
-        onWheel={handleHomeWheel}
         onNodesChange={handleNodesChange}
         onNodeDragStop={handleNodeDragStop}
         fitView
