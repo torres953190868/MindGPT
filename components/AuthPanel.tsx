@@ -55,7 +55,7 @@ function getInitial(accountName: string | null | undefined) {
 
 function getPlanBadgeColor(plan: string) {
   if (plan === "pro") return "border-brand-200 bg-brand-50 text-brand-800";
-  if (plan === "team") return "border-success-200 bg-success-50 text-success-700";
+  if (plan === "max") return "border-success-200 bg-success-50 text-success-700";
   return "border-neutral-200 bg-neutral-50 text-neutral-700";
 }
 

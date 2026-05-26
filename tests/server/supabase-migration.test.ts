@@ -63,6 +63,13 @@ const freePlanModelAccessMigration = readFileSync(
   ),
   "utf8",
 );
+const renameTeamPlanMigration = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/20260526010000_branchmind_rename_team_plan_to_max.sql",
+  ),
+  "utf8",
+);
 
 describe("Supabase foundation migration", () => {
   it("creates the beta persistence and distributed rate-limit tables", () => {
@@ -142,6 +149,13 @@ describe("Supabase foundation migration", () => {
     expect(freePlanModelAccessMigration).toContain("'DEEPSEEK_API_KEY'");
     expect(freePlanModelAccessMigration).toContain("'deepseek-v4-flash'");
     expect(freePlanModelAccessMigration).toContain("'deepseek-v4-pro'");
+  });
+
+  it("renames the unlimited team plan to max", () => {
+    expect(renameTeamPlanMigration).toContain("set plan = 'max'");
+    expect(renameTeamPlanMigration).toContain("where plan = 'team'");
+    expect(renameTeamPlanMigration).toContain("values ('max', null, null, null, null)");
+    expect(renameTeamPlanMigration).toContain("check (plan in ('free', 'pro', 'max'))");
   });
 
   it("adds admin LLM routing tables and private bug report attachments", () => {

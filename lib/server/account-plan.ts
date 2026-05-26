@@ -1,6 +1,6 @@
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 
-export type AccountPlan = "free" | "pro" | "team";
+export type AccountPlan = "free" | "pro" | "max";
 
 export const DEFAULT_ACCOUNT_PLAN: AccountPlan = "free";
 
@@ -25,7 +25,7 @@ export const DEFAULT_PLAN_LIMITS: Record<
     documents: 50,
     aiMessages: 500,
   },
-  team: {
+  max: {
     projects: null,
     nodes: null,
     documents: null,
@@ -40,7 +40,7 @@ export const PLAN_LIMITS_DISABLED = {
   aiMessages: null,
 } as const;
 
-const ACCOUNT_PLANS = new Set<AccountPlan>(["free", "pro", "team"]);
+const ACCOUNT_PLANS = new Set<AccountPlan>(["free", "pro", "max"]);
 const FREE_PLAN_DEEPSEEK_MODELS = new Set([
   "deepseek-v4-flash",
   "deepseek-v4-pro",
@@ -60,6 +60,7 @@ function clean(value: string | null | undefined) {
 
 export function normalizeAccountPlan(value: string | null | undefined): AccountPlan {
   const plan = clean(value)?.toLowerCase();
+  if (plan === "team") return "max";
   return plan && ACCOUNT_PLANS.has(plan as AccountPlan)
     ? (plan as AccountPlan)
     : DEFAULT_ACCOUNT_PLAN;
