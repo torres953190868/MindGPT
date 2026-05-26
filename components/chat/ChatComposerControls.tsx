@@ -456,9 +456,11 @@ function replacePendingAttachment(
 export function useChatComposerControls({
   isBusy,
   maxAttachments = MAX_CHAT_ATTACHMENTS,
+  autoPreparePdfAttachments = true,
 }: {
   isBusy: boolean;
   maxAttachments?: number;
+  autoPreparePdfAttachments?: boolean;
 }) {
   const { copy } = useLanguage();
   const [pendingAttachments, setPendingAttachments] = useState<PendingChatAttachment[]>([]);
@@ -866,7 +868,9 @@ export function useChatComposerControls({
     setPendingAttachments((current) => {
       return [...current, ...nextAttachments];
     });
-    nextAttachments.forEach(startPdfIngestion);
+    if (autoPreparePdfAttachments) {
+      nextAttachments.forEach(startPdfIngestion);
+    }
     event.target.value = "";
   }
 

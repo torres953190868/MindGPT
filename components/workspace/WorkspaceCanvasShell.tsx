@@ -91,6 +91,8 @@ type ProjectNotesConfig = {
 
 type NodeDetailOptions = {
   initialSubmit?: boolean;
+  autoPreparePdfAttachments?: boolean;
+  onBeforeInitialSubmit?: (resumeSubmit: () => void) => boolean | Promise<boolean>;
   onStartProject?: (
     instruction: string,
     attachments?: ChatAttachment[],
@@ -349,6 +351,9 @@ export function WorkspaceCanvasShell({
   const workspaceSidebarRestoreWidthRef = useRef(WORKSPACE_SIDEBAR_DEFAULT_WIDTH);
   const detailPanelRestoreWidthRef = useRef(DETAIL_PANEL_DEFAULT_WIDTH);
   const autoCollapsedSidebarForNotesRef = useRef(false);
+  const activeStreamingMessageRef = useRef<{
+    nodeId: string;
+  } | null>(null);
   const [workspaceSidebarWidth, setWorkspaceSidebarWidth] = useState(
     WORKSPACE_SIDEBAR_DEFAULT_WIDTH,
   );
@@ -640,14 +645,18 @@ export function WorkspaceCanvasShell({
     setIsNodeDetailPanelCollapsed(false);
   }, [getSideBounds]);
 
+  const openMobileChatDrawerIfNeeded = useCallback(() => {
+    if (!usesMobileDrawers || !isMobileWorkspaceViewport()) return false;
+
+    setMobileDrawerView("chat");
+    return true;
+  }, [usesMobileDrawers]);
+
   const handleOpenNodeDetailPanel = useCallback(() => {
-    if (usesMobileDrawers && isMobileWorkspaceViewport()) {
-      setMobileDrawerView("chat");
-      return;
-    }
+    if (openMobileChatDrawerIfNeeded()) return;
 
     handleExpandNodeDetailPanel();
-  }, [handleExpandNodeDetailPanel, usesMobileDrawers]);
+  }, [handleExpandNodeDetailPanel, openMobileChatDrawerIfNeeded]);
 
   const handleCloseNodeDetailPanel = useCallback(() => {
     if (usesMobileDrawers && isMobileWorkspaceViewport()) {
@@ -723,16 +732,18 @@ export function WorkspaceCanvasShell({
   const handleSelectNodeFromOutline = useCallback(
     (nodeId: string) => {
       onSelectNode(nodeId);
-      if (
-        usesMobileDrawers &&
-        isMobileWorkspaceViewport()
-      ) {
-        setMobileDrawerView("chat");
-        return;
-      }
+      if (openMobileChatDrawerIfNeeded()) return;
       setMobileWorkspaceView("chat");
     },
-    [onSelectNode, usesMobileDrawers],
+    [onSelectNode, openMobileChatDrawerIfNeeded],
+  );
+
+  const handleSelectNodeFromMap = useCallback(
+    (nodeId: string) => {
+      onSelectNode(nodeId);
+      openMobileChatDrawerIfNeeded();
+    },
+    [onSelectNode, openMobileChatDrawerIfNeeded],
   );
 
   const handleCloseMobileDrawers = useCallback(() => {
@@ -889,6 +900,33 @@ export function WorkspaceCanvasShell({
     if (canvasIntro) return;
     setCanvasIntroPanOffsetY(0);
   }, [canvasIntro]);
+
+  useEffect(() => {
+    const completedStreamingMessage = activeStreamingMessageRef.current;
+    activeStreamingMessageRef.current =
+      streamingNodeId && streamingMessageId
+        ? { nodeId: streamingNodeId }
+        : null;
+
+    if (!completedStreamingMessage || streamingNodeId || aiError) return;
+
+    const completedNode =
+      project.nodes[completedStreamingMessage.nodeId] ??
+      (selectedNodeId ? project.nodes[selectedNodeId] : null);
+    const completedMessage = completedNode?.messages.find(
+      (message) => message.role === "assistant" && message.content.trim(),
+    );
+
+    if (!completedMessage?.content.trim()) return;
+    openMobileChatDrawerIfNeeded();
+  }, [
+    aiError,
+    openMobileChatDrawerIfNeeded,
+    project.nodes,
+    selectedNodeId,
+    streamingMessageId,
+    streamingNodeId,
+  ]);
 
   useEffect(() => {
     if (!hasProjectNotes && mobileWorkspaceView === "notes") {
@@ -1133,7 +1171,7 @@ export function WorkspaceCanvasShell({
             <MindMap
               project={project}
               selectedNodeId={selectedNodeId}
-              onSelectNode={onSelectNode}
+              onSelectNode={handleSelectNodeFromMap}
               onCreateNode={onQuickCreateNode}
               onToggleNode={onToggleNode}
               onMoveNode={onMoveNode}
@@ -1175,6 +1213,8 @@ export function WorkspaceCanvasShell({
               onToggleNotes={handleToggleProjectNotesPanel}
               onCollapse={handleCloseNodeDetailPanel}
               initialSubmit={nodeDetailOptions?.initialSubmit}
+              autoPreparePdfAttachments={nodeDetailOptions?.autoPreparePdfAttachments}
+              onBeforeInitialSubmit={nodeDetailOptions?.onBeforeInitialSubmit}
               onStartProject={nodeDetailOptions?.onStartProject}
               showNotesAction={
                 hasProjectNotes && (nodeDetailOptions?.showNotesAction ?? true)

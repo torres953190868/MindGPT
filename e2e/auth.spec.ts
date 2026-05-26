@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("authentication pages", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("branchmind-language", "en");
+    });
+  });
+
   test("validates sign-in input before submitting", async ({ page }) => {
     await page.goto("/auth/sign-in?next=/projects");
 

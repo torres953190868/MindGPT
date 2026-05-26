@@ -19,6 +19,8 @@ type HomeStartComposerProps = {
   suggestions: string[];
   suggestionsAnimationPhase: "idle" | "leaving" | "entering";
   testIdsEnabled?: boolean;
+  autoPreparePdfAttachments?: boolean;
+  onBeforeSubmit?: (resumeSubmit: () => void) => boolean | Promise<boolean>;
   onSubmit: (
     instruction: string,
     attachments?: ChatAttachment[],
@@ -34,21 +36,37 @@ export function HomeStartComposer({
   suggestions,
   suggestionsAnimationPhase,
   testIdsEnabled = true,
+  autoPreparePdfAttachments = true,
+  onBeforeSubmit,
   onSubmit,
 }: HomeStartComposerProps) {
   const { copy } = useLanguage();
   const [input, setInput] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const composerControls = useChatComposerControls({ isBusy });
+  const [isCheckingSubmit, setIsCheckingSubmit] = useState(false);
+  const composerControls = useChatComposerControls({
+    isBusy: isBusy || isCheckingSubmit,
+    autoPreparePdfAttachments,
+  });
   const displayError = composerControls.attachmentError ?? (submitted ? error : null);
   const isComposerBusy = composerControls.controlsBusy;
   const errorId = "mobile-home-start-composer-error";
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  async function submitComposer() {
     const trimmed = input.trim();
     if (!trimmed || isComposerBusy) return;
+
+    if (onBeforeSubmit) {
+      setIsCheckingSubmit(true);
+      try {
+        const canSubmit = await onBeforeSubmit(() => {
+          void submitComposer();
+        });
+        if (!canSubmit) return;
+      } finally {
+        setIsCheckingSubmit(false);
+      }
+    }
 
     setSubmitted(true);
     const preparedAttachments = await composerControls.prepareAttachmentsForSend();
@@ -65,6 +83,11 @@ export function HomeStartComposer({
       setSubmitted(false);
       composerControls.resetAttachments();
     }
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void submitComposer();
   }
 
   return (
@@ -128,7 +151,7 @@ export function HomeStartComposer({
         data-testid={testIdsEnabled ? "send-message-button" : undefined}
         className="branchmind-primary-action inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {composerControls.isPreparingAttachments || isBusy ? (
+        {composerControls.isPreparingAttachments || isBusy || isCheckingSubmit ? (
           <Loader2 size={16} className="animate-spin" />
         ) : (
           <Send size={16} />
@@ -136,7 +159,7 @@ export function HomeStartComposer({
         <span className="mobile-home-send-label">
           {composerControls.isPreparingAttachments
             ? copy.chat.preparing
-            : isBusy
+            : isBusy || isCheckingSubmit
               ? copy.common.creating
               : submitLabel}
         </span>

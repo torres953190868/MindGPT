@@ -25,6 +25,8 @@ export type InlineNodeComposerData = {
   variant?: "default" | "home";
   suggestions?: string[];
   suggestionsAnimationPhase?: "idle" | "leaving" | "entering";
+  autoPreparePdfAttachments?: boolean;
+  onBeforeSubmit?: (resumeSubmit: () => void) => boolean | Promise<boolean>;
   onSubmit: (
     instruction: string,
     attachments?: ChatAttachment[],
@@ -269,7 +271,11 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
   const { copy } = useLanguage();
   const [input, setInput] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const composerControls = useChatComposerControls({ isBusy: composer.isBusy });
+  const [isCheckingSubmit, setIsCheckingSubmit] = useState(false);
+  const composerControls = useChatComposerControls({
+    isBusy: composer.isBusy || isCheckingSubmit,
+    autoPreparePdfAttachments: composer.autoPreparePdfAttachments ?? true,
+  });
   const displayError = composerControls.attachmentError ?? (submitted ? composer.error : null);
   const isComposerBusy = composerControls.controlsBusy;
   const errorId = `inline-node-composer-${composer.nodeId}-error`;
@@ -280,6 +286,18 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
   async function submitComposer() {
     const trimmed = input.trim();
     if (!trimmed || isComposerBusy) return;
+
+    if (composer.onBeforeSubmit) {
+      setIsCheckingSubmit(true);
+      try {
+        const canSubmit = await composer.onBeforeSubmit(() => {
+          void submitComposer();
+        });
+        if (!canSubmit) return;
+      } finally {
+        setIsCheckingSubmit(false);
+      }
+    }
 
     setSubmitted(true);
     const preparedAttachments = await composerControls.prepareAttachmentsForSend();
@@ -381,7 +399,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
             data-testid="send-message-button"
             className="branchmind-primary-action home-inline-send-button inline-flex h-10 w-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-brand-600 px-0 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-5"
           >
-            {composerControls.isPreparingAttachments || composer.isBusy ? (
+            {composerControls.isPreparingAttachments || composer.isBusy || isCheckingSubmit ? (
               <Loader2 size={15} className="animate-spin" />
             ) : (
               <Send size={15} />
@@ -389,7 +407,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
             <span className="node-detail-send-label hidden sm:inline">
               {composerControls.isPreparingAttachments
                 ? copy.chat.preparing
-                : composer.isBusy
+                : composer.isBusy || isCheckingSubmit
                   ? copy.common.creating
                   : composer.submitLabel}
             </span>
@@ -449,7 +467,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
             data-testid="send-message-button"
             className="branchmind-primary-action inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-3 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
           >
-            {composerControls.isPreparingAttachments || composer.isBusy ? (
+            {composerControls.isPreparingAttachments || composer.isBusy || isCheckingSubmit ? (
               <Loader2 size={14} className="animate-spin" />
             ) : (
               <Send size={14} />
@@ -457,7 +475,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
             <span className="node-detail-send-label">
               {composerControls.isPreparingAttachments
                 ? copy.chat.preparing
-                : composer.isBusy
+                : composer.isBusy || isCheckingSubmit
                   ? copy.common.creating
                   : composer.submitLabel}
             </span>

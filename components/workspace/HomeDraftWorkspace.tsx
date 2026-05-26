@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AuthPromptDialog } from "@/components/auth/AuthPromptDialog";
 import { useLanguage } from "@/components/language/LanguageProvider";
 import { ROOT_POSITION } from "@/lib/graph";
 import type {
@@ -10,6 +11,7 @@ import type {
   NodePosition,
   Project,
 } from "@/lib/types";
+import { useAuthStore } from "@/store/useAuthStore";
 import { useBranchMindStore } from "@/store/useBranchMindStore";
 import { WorkspaceCanvasShell } from "./WorkspaceCanvasShell";
 
@@ -19,6 +21,7 @@ const DRAFT_TIMESTAMP = "2026-01-01T00:00:00.000Z";
 const HOME_TAGLINE_INTERVAL_MS = 4000;
 const HOME_TAGLINE_EXIT_MS = 260;
 const HOME_TAGLINE_ENTER_MS = 420;
+const AUTH_REQUIRED_MESSAGE = "Sign in is required.";
 
 type HomeTaglinePhase = "idle" | "leaving" | "entering";
 
@@ -72,6 +75,10 @@ export function HomeDraftWorkspace() {
   const [rootPosition, setRootPosition] = useState<NodePosition>(ROOT_POSITION);
   const [taglineIndex, setTaglineIndex] = useState(0);
   const [taglinePhase, setTaglinePhase] = useState<HomeTaglinePhase>("idle");
+  const [isAuthPromptOpen, setIsAuthPromptOpen] = useState(false);
+  const pendingSubmitRef = useRef<(() => void) | null>(null);
+  const sessionStatus = useAuthStore((state) => state.sessionStatus);
+  const ensureSessionLoaded = useAuthStore((state) => state.ensureSessionLoaded);
   const hydrate = useBranchMindStore((state) => state.hydrate);
   const createProject = useBranchMindStore((state) => state.createProject);
   const creatingProject = useBranchMindStore((state) => state.creatingProject);
@@ -84,6 +91,10 @@ export function HomeDraftWorkspace() {
   useEffect(() => {
     hydrate();
   }, [hydrate]);
+
+  useEffect(() => {
+    void ensureSessionLoaded();
+  }, [ensureSessionLoaded]);
 
   useEffect(() => {
     if (copy.home.taglines.length < 2) return undefined;
@@ -132,6 +143,35 @@ export function HomeDraftWorkspace() {
     },
     [clearAiError, createProject, router],
   );
+
+  const handleBeforeStartProject = useCallback(
+    async (resumeSubmit: () => void) => {
+      await ensureSessionLoaded();
+      if (useAuthStore.getState().sessionStatus !== "anonymous") return true;
+
+      pendingSubmitRef.current = resumeSubmit;
+      setIsAuthPromptOpen(true);
+      return false;
+    },
+    [ensureSessionLoaded],
+  );
+
+  const handleAuthPromptOpenChange = useCallback((open: boolean) => {
+    setIsAuthPromptOpen(open);
+    if (!open) pendingSubmitRef.current = null;
+  }, []);
+
+  const handleAuthPromptAuthenticated = useCallback(() => {
+    setIsAuthPromptOpen(false);
+    const resumeSubmit = pendingSubmitRef.current;
+    pendingSubmitRef.current = null;
+    if (resumeSubmit) window.setTimeout(resumeSubmit, 0);
+  }, []);
+
+  const autoPrepareHomePdfAttachments =
+    sessionStatus === "authenticated" || sessionStatus === "local";
+  const visibleAiError =
+    sessionStatus === "anonymous" && aiError === AUTH_REQUIRED_MESSAGE ? null : aiError;
   const taglineClassName = [
     "home-tagline-rotator",
     `home-tagline-rotator-${taglinePhase}`,
@@ -139,64 +179,75 @@ export function HomeDraftWorkspace() {
   ].join(" ");
 
   return (
-    <WorkspaceCanvasShell
-      project={draftProject}
-      selectedNodeId={selectedNodeId}
-      aiError={aiError}
-      creatingNodeId={null}
-      streamingNodeId={creatingProject ? DRAFT_ROOT_NODE_ID : null}
-      streamingMessageId={null}
-      onSelectNode={handleSelectNode}
-      onQuickCreateNode={ignoreQuickCreateNode}
-      onCreateNode={ignoreCreateNode}
-      onPopulateNode={ignoreMessageMutation}
-      onEditUserMessage={ignoreMessageMutation}
-      onRetryAssistantMessage={ignoreMessageMutation}
-      onUpdateNodeTitle={ignoreMessageMutation}
-      onToggleNode={ignoreNodeMutation}
-      onDeleteNode={ignoreNodeMutation}
-      onMoveNode={handleMoveNode}
-      dataDraftWorkspace
-      disableNodeCreationActions
-      initialWorkspaceSidebarCollapsed
-      initialNodeDetailPanelCollapsed
-      mobileNavigationMode="drawers"
-      canvasIntro={
-        <div
-          data-testid="home-hero"
-          className="branchmind-home-hero max-w-[min(760px,calc(100vw-36px))] text-center sm:max-w-[min(760px,calc(100vw-48px))]"
-        >
-          <p className="branchmind-home-logo home-title-soft text-[42px] font-black leading-none text-neutral-900 sm:text-7xl lg:text-8xl">
-            BranchMind
-          </p>
-          <p
-            data-testid="home-hero-tagline"
-            className={taglineClassName}
-            aria-live="polite"
-            aria-atomic="true"
+    <>
+      <WorkspaceCanvasShell
+        project={draftProject}
+        selectedNodeId={selectedNodeId}
+        aiError={visibleAiError}
+        creatingNodeId={null}
+        streamingNodeId={creatingProject ? DRAFT_ROOT_NODE_ID : null}
+        streamingMessageId={null}
+        onSelectNode={handleSelectNode}
+        onQuickCreateNode={ignoreQuickCreateNode}
+        onCreateNode={ignoreCreateNode}
+        onPopulateNode={ignoreMessageMutation}
+        onEditUserMessage={ignoreMessageMutation}
+        onRetryAssistantMessage={ignoreMessageMutation}
+        onUpdateNodeTitle={ignoreMessageMutation}
+        onToggleNode={ignoreNodeMutation}
+        onDeleteNode={ignoreNodeMutation}
+        onMoveNode={handleMoveNode}
+        dataDraftWorkspace
+        disableNodeCreationActions
+        initialWorkspaceSidebarCollapsed
+        initialNodeDetailPanelCollapsed
+        mobileNavigationMode="drawers"
+        canvasIntro={
+          <div
+            data-testid="home-hero"
+            className="branchmind-home-hero max-w-[min(760px,calc(100vw-36px))] text-center sm:max-w-[min(760px,calc(100vw-48px))]"
           >
-            {copy.home.taglines[taglineIndex]}
-          </p>
-        </div>
-      }
-      inlineNodeComposer={{
-        nodeId: DRAFT_ROOT_NODE_ID,
-        isBusy: creatingProject,
-        error: aiError,
-        onSubmit: handleStartProject,
-        placeholder: copy.home.composerPlaceholder,
-        submitLabel: copy.home.start,
-        variant: "home",
-        suggestions: promptSuggestions,
-        suggestionsAnimationPhase: taglinePhase,
-      }}
-      nodeDetailOptions={{
-        initialSubmit: true,
-        onStartProject: handleStartProject,
-        showNotesAction: false,
-        composerPlaceholder: copy.home.composerPlaceholder,
-        submitLabel: copy.home.start,
-      }}
-    />
+            <p className="branchmind-home-logo home-title-soft text-[42px] font-black leading-none text-neutral-900 sm:text-7xl lg:text-8xl">
+              BranchMind
+            </p>
+            <p
+              data-testid="home-hero-tagline"
+              className={taglineClassName}
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {copy.home.taglines[taglineIndex]}
+            </p>
+          </div>
+        }
+        inlineNodeComposer={{
+          nodeId: DRAFT_ROOT_NODE_ID,
+          isBusy: creatingProject,
+          error: visibleAiError,
+          onBeforeSubmit: handleBeforeStartProject,
+          onSubmit: handleStartProject,
+          autoPreparePdfAttachments: autoPrepareHomePdfAttachments,
+          placeholder: copy.home.composerPlaceholder,
+          submitLabel: copy.home.start,
+          variant: "home",
+          suggestions: promptSuggestions,
+          suggestionsAnimationPhase: taglinePhase,
+        }}
+        nodeDetailOptions={{
+          initialSubmit: true,
+          autoPreparePdfAttachments: autoPrepareHomePdfAttachments,
+          onBeforeInitialSubmit: handleBeforeStartProject,
+          onStartProject: handleStartProject,
+          showNotesAction: false,
+          composerPlaceholder: copy.home.composerPlaceholder,
+          submitLabel: copy.home.start,
+        }}
+      />
+      <AuthPromptDialog
+        open={isAuthPromptOpen}
+        onOpenChange={handleAuthPromptOpenChange}
+        onAuthenticated={handleAuthPromptAuthenticated}
+      />
+    </>
   );
 }

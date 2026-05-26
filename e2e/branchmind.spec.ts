@@ -409,6 +409,39 @@ async function mockAuthSession(
   };
 }
 
+async function mockMutableAuthSession(
+  page: Page,
+  signedInUser: { id: string; email: string | null; accountName?: string | null },
+) {
+  let signedIn = false;
+  let requestCount = 0;
+
+  await page.route("**/api/auth/session", async (route) => {
+    requestCount += 1;
+    const user = signedIn
+      ? {
+          ...signedInUser,
+          accountName: signedInUser.accountName ?? signedInUser.email,
+        }
+      : null;
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ configured: true, user }),
+    });
+  });
+
+  return {
+    signIn() {
+      signedIn = true;
+    },
+    get requestCount() {
+      return requestCount;
+    },
+  };
+}
+
 async function mockAccount(
   page: Page,
   account: Omit<AccountDto, "languagePreference"> &
@@ -801,6 +834,174 @@ test("mobile home launcher starts a workspace from the compact composer", async 
   await expect(mindMapCanvas.getByTestId("expand-workspace-sidebar-button")).toBeVisible();
   await expect(mindMapCanvas.getByTestId("expand-node-detail-panel-button")).toBeVisible();
   await expect.poll(() => syncPayload).not.toBeNull();
+  const payload = syncPayload as { project: Project };
+  expect(payload.project.title).toBe(instruction);
+});
+
+test("mobile home launcher prompts anonymous users to sign in before starting", async ({
+  page,
+}) => {
+  const seed = makeSeed();
+  const instruction = `Sign in before start ${seed}.`;
+  const authSession = await mockMutableAuthSession(page, {
+    id: `user-auth-prompt-${seed}`,
+    email: null,
+    accountName: "prompt-user",
+  });
+  let signInRequests = 0;
+  let projectPostRequests = 0;
+  let syncPayload: unknown = null;
+
+  await mockHomeModelCatalog(page);
+  await mockAccount(page, {
+    email: null,
+    accountName: "prompt-user",
+    displayName: "Prompt User",
+    authMode: "supabase",
+    authConfigured: true,
+    plan: "free",
+    subscriptionStatus: "inactive",
+    usage: {
+      projects: { used: 0, limit: 5 },
+      nodes: { used: 0, limit: 100 },
+      documents: { used: 0, limit: 3 },
+      aiMessages: { used: 0, limit: 50 },
+    },
+  });
+  await page.route("**/api/auth/sign-in", async (route) => {
+    signInRequests += 1;
+    authSession.signIn();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, next: "/" }),
+    });
+  });
+  await page.route("**/api/projects", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ projects: [] }),
+      });
+      return;
+    }
+
+    projectPostRequests += 1;
+    await route.fallback();
+  });
+  await page.route("**/api/projects/**/sync", async (route) => {
+    syncPayload = route.request().postDataJSON();
+    const payload = syncPayload as { project: Project };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ project: payload.project }),
+    });
+  });
+
+  await page.setViewportSize({ width: 390, height: 780 });
+  await page.goto("/");
+  await page.getByTestId("message-instruction-input").fill(instruction);
+  await page.getByTestId("send-message-button").click();
+
+  await expect(page.getByTestId("auth-required-dialog")).toBeVisible();
+  await expect(page.getByTestId("auth-required-dialog").getByTestId("google-sign-in-button")).toHaveCount(0);
+  await expect(page.getByTestId("message-instruction-input")).toHaveValue(instruction);
+  expect(projectPostRequests).toBe(0);
+  expect(syncPayload).toBeNull();
+
+  await page.getByTestId("auth-account-name-input").fill("prompt-user");
+  await page.getByTestId("auth-password-input").fill("correct horse battery");
+  await page.getByTestId("auth-submit-button").click();
+
+  await expect(page).toHaveURL(/\/workspace\/project_/);
+  await expect.poll(() => syncPayload).not.toBeNull();
+  expect(signInRequests).toBe(1);
+  const payload = syncPayload as { project: Project };
+  expect(payload.project.title).toBe(instruction);
+});
+
+test("home launcher can create an account from the auth prompt and continue", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Prompt sign-up is covered once.");
+
+  const seed = makeSeed();
+  const instruction = `Sign up before start ${seed}.`;
+  const authSession = await mockMutableAuthSession(page, {
+    id: `user-auth-sign-up-${seed}`,
+    email: null,
+    accountName: "new-prompt-user",
+  });
+  let signUpRequests = 0;
+  let syncPayload: unknown = null;
+
+  await mockHomeModelCatalog(page);
+  await mockAccount(page, {
+    email: null,
+    accountName: "new-prompt-user",
+    displayName: "New Prompt User",
+    authMode: "supabase",
+    authConfigured: true,
+    plan: "free",
+    subscriptionStatus: "inactive",
+    usage: {
+      projects: { used: 0, limit: 5 },
+      nodes: { used: 0, limit: 100 },
+      documents: { used: 0, limit: 3 },
+      aiMessages: { used: 0, limit: 50 },
+    },
+  });
+  await page.route("**/api/auth/sign-up", async (route) => {
+    signUpRequests += 1;
+    authSession.signIn();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: true,
+        accountName: "new-prompt-user",
+        next: "/",
+      }),
+    });
+  });
+  await page.route("**/api/projects", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ projects: [] }),
+      });
+      return;
+    }
+
+    await route.fallback();
+  });
+  await page.route("**/api/projects/**/sync", async (route) => {
+    syncPayload = route.request().postDataJSON();
+    const payload = syncPayload as { project: Project };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ project: payload.project }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByTestId("message-instruction-input").fill(instruction);
+  await page.getByTestId("send-message-button").click();
+  await expect(page.getByTestId("auth-required-dialog")).toBeVisible();
+
+  await page.getByTestId("auth-mode-switch-button").click();
+  await page.getByTestId("auth-account-name-input").fill("new-prompt-user");
+  await page.getByTestId("auth-password-input").fill("correct horse battery");
+  await page.getByTestId("auth-confirm-password-input").fill("correct horse battery");
+  await page.getByTestId("auth-submit-button").click();
+
+  await expect(page).toHaveURL(/\/workspace\/project_/);
+  await expect.poll(() => syncPayload).not.toBeNull();
+  expect(signUpRequests).toBe(1);
   const payload = syncPayload as { project: Project };
   expect(payload.project.title).toBe(instruction);
 });
@@ -1230,7 +1431,6 @@ test("home launcher uploads queued PDF attachments before creating a project onc
   await expect(page.getByTestId("pending-attachment-chip")).toContainText(
     "home-source.pdf",
   );
-  await expect(page.getByTestId("pending-attachment-chip")).toContainText("Ingesting");
   await page.getByTestId("message-instruction-input").fill(instruction);
   await page.getByTestId("send-message-button").click();
 
@@ -1249,6 +1449,176 @@ test("home launcher uploads queued PDF attachments before creating a project onc
   expect(uploadRequests).toBe(1);
   expect(documentDetailsRequests).toBeGreaterThanOrEqual(1);
   expect(indexRequests).toBe(0);
+});
+
+test("home launcher delays anonymous PDF upload until auth prompt succeeds", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Anonymous PDF auth gate is covered once.");
+
+  const seed = makeSeed();
+  const documentId = `doc-auth-pdf-${seed}`;
+  const instruction = `Create an auth-gated PDF project ${seed}.`;
+  const authSession = await mockMutableAuthSession(page, {
+    id: `user-auth-pdf-${seed}`,
+    email: null,
+    accountName: "pdf-prompt-user",
+  });
+  let uploadRequests = 0;
+  let documentDetailsRequests = 0;
+  let syncPayload: unknown = null;
+
+  await mockHomeModelCatalog(page);
+  await mockAccount(page, {
+    email: null,
+    accountName: "pdf-prompt-user",
+    displayName: "PDF Prompt User",
+    authMode: "supabase",
+    authConfigured: true,
+    plan: "free",
+    subscriptionStatus: "inactive",
+    usage: {
+      projects: { used: 0, limit: 5 },
+      nodes: { used: 0, limit: 100 },
+      documents: { used: 0, limit: 3 },
+      aiMessages: { used: 0, limit: 50 },
+    },
+  });
+  await page.route("**/api/auth/sign-in", async (route) => {
+    authSession.signIn();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, next: "/" }),
+    });
+  });
+  await page.route("**/api/documents", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fallback();
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ documents: [] }),
+    });
+  });
+  await page.route("**/api/documents/upload", async (route) => {
+    uploadRequests += 1;
+    await route.fulfill({
+      status: 202,
+      contentType: "application/json",
+      body: JSON.stringify({
+        document: {
+          id: documentId,
+          fileName: "auth-gated-source.pdf",
+          mimeType: "application/pdf",
+          status: "queued",
+          errorMessage: null,
+          errorRequestId: null,
+        },
+        job: {
+          action: "index",
+          documentId,
+          messageId: null,
+          requestId: `req-auth-pdf-${seed}`,
+          topic: "rag-document-processing",
+        },
+      }),
+    });
+  });
+  await page.route(`**/api/documents/${documentId}`, async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fallback();
+      return;
+    }
+
+    documentDetailsRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        document: {
+          id: documentId,
+          fileName: "auth-gated-source.pdf",
+          mimeType: "application/pdf",
+          status: "indexed",
+          errorMessage: null,
+          errorRequestId: null,
+        },
+        sections: [],
+        chunkCount: 1,
+      }),
+    });
+  });
+  await page.route("**/api/documents/**/index", async (route) => {
+    await route.fulfill({
+      status: 500,
+      body: "Unexpected manual index request",
+    });
+  });
+  await page.route("**/api/projects", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ projects: [] }),
+      });
+      return;
+    }
+
+    await route.fallback();
+  });
+  await page.route("**/api/projects/**/sync", async (route) => {
+    syncPayload = route.request().postDataJSON();
+    const payload = syncPayload as { project: Project };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ project: payload.project }),
+    });
+  });
+
+  await page.goto("/");
+  const fileChooserPromise = page.waitForEvent("filechooser");
+  await page.getByTestId("add-message-attachment-button").click();
+  await page.getByTestId("upload-new-file-button").click();
+  const fileChooser = await fileChooserPromise;
+  await fileChooser.setFiles({
+    name: "auth-gated-source.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4"),
+  });
+
+  await expect(page.getByTestId("pending-attachment-chip")).toContainText(
+    "auth-gated-source.pdf",
+  );
+  expect(uploadRequests).toBe(0);
+  await page.getByTestId("message-instruction-input").fill(instruction);
+  await page.getByTestId("send-message-button").click();
+  await expect(page.getByTestId("auth-required-dialog")).toBeVisible();
+  expect(uploadRequests).toBe(0);
+  expect(syncPayload).toBeNull();
+
+  await page.getByTestId("auth-account-name-input").fill("pdf-prompt-user");
+  await page.getByTestId("auth-password-input").fill("correct horse battery");
+  await page.getByTestId("auth-submit-button").click();
+
+  await expect.poll(() => uploadRequests).toBe(1);
+  await expect.poll(() => syncPayload).not.toBeNull();
+  const payload = syncPayload as { project: Project };
+  const rootNode = payload.project.nodes[payload.project.rootNodeId];
+  expect(rootNode.messages[0].content).toBe(instruction);
+  expect(rootNode.messages[0].attachments).toEqual([
+    expect.objectContaining({
+      name: "auth-gated-source.pdf",
+      mimeType: "application/pdf",
+      documentId,
+      documentStatus: "indexed",
+    }),
+  ]);
+  expect(documentDetailsRequests).toBeGreaterThanOrEqual(1);
 });
 
 test("home launcher selects an indexed knowledge PDF without re-uploading", async ({
@@ -3974,6 +4344,82 @@ test("uses the blank lower mobile chat space for conversation history", async ({
     expect(metrics.historyScrollHeight).toBeGreaterThan(metrics.historyClientHeight + 24);
     expect(metrics.blankBelowComposer).toBeLessThanOrEqual(20);
     expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1);
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("opens the mobile chat drawer when a map node is selected", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chrome", "Mobile drawer selection is covered once.");
+
+  const sourceProject = makeWorkspaceTreeProject(`mobile-node-open-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+    const rootNode = project.nodes[project.rootNodeId];
+    const rootCard = page.locator(
+      `[data-testid="branch-node-card"][data-node-id="${rootNode.id}"]`,
+    );
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/workspace/${project.id}`);
+    await expect(page.getByTestId("workspace-mobile-view-tabs")).toHaveCount(0);
+    await expect(page.getByTestId("node-detail-panel")).toHaveCount(0);
+    await expect(rootCard).toBeVisible();
+
+    await rootCard.getByTestId("open-node-button").click();
+
+    const detailPanel = page.getByTestId("node-detail-panel");
+    await expect(detailPanel).toBeVisible();
+    await expect(detailPanel).toContainText(rootNode.title);
+    await expect(rootCard).toHaveAttribute("data-selected", "true");
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("opens the mobile chat drawer when a streamed reply finishes", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chrome", "Mobile streamed drawer behavior is covered once.");
+
+  const sourceProject = makeWorkspaceProject(`mobile-stream-drawer-${makeSeed()}`);
+  const instruction = `Open the drawer after streaming ${makeSeed()}.`;
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+    await page.route(`**/api/projects/${project.id}/nodes/stream`, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 2_500));
+      await route.fallback();
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/workspace/${project.id}`);
+    await openMobileChatDrawer(page);
+    await page.getByTestId("message-instruction-input").fill(instruction);
+    await page.getByTestId("send-message-button").click();
+    await expect(page.getByTestId("message-streaming-status")).toBeVisible();
+    await page.getByTestId("collapse-node-detail-panel-button").click();
+    await expect(page.getByTestId("node-detail-panel")).toBeHidden();
+
+    const detailPanel = page.getByTestId("node-detail-panel");
+    await expect(detailPanel).toBeVisible({ timeout: 20_000 });
+    await expect(detailPanel).toContainText(`Instruction received: ${instruction}`);
+    await expect(page.getByTestId("message-streaming-status")).toHaveCount(0);
   } finally {
     if (projectIdToDelete) {
       await page.request

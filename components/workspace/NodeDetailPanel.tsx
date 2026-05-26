@@ -89,6 +89,8 @@ type NodeDetailPanelProps = {
   onToggleNotes: () => void;
   onCollapse: () => void;
   initialSubmit?: boolean;
+  autoPreparePdfAttachments?: boolean;
+  onBeforeInitialSubmit?: (resumeSubmit: () => void) => boolean | Promise<boolean>;
   onStartProject?: (
     instruction: string,
     attachments?: ChatAttachment[],
@@ -248,6 +250,8 @@ export function NodeDetailPanel({
   onToggleNotes,
   onCollapse,
   initialSubmit = false,
+  autoPreparePdfAttachments = true,
+  onBeforeInitialSubmit,
   onStartProject,
   showNotesAction = true,
   showCollapseButton = true,
@@ -268,12 +272,16 @@ export function NodeDetailPanel({
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [isCheckingInitialSubmit, setIsCheckingInitialSubmit] = useState(false);
   const [titleEditValue, setTitleEditValue] = useState("");
   const headerHighlight = useHighlightedAction<HeaderActionItem>();
   const modeHighlight = useHighlightedAction<ModeActionItem>({ defaultAction: mode });
   const clearHeaderHighlightedAction = headerHighlight.clearHighlightedAction;
   const clearModeHighlightedAction = modeHighlight.clearHighlightedAction;
-  const composerControls = useChatComposerControls({ isBusy: isCreating });
+  const composerControls = useChatComposerControls({
+    isBusy: isCreating || isCheckingInitialSubmit,
+    autoPreparePdfAttachments,
+  });
   const resolvedComposerPlaceholder = composerPlaceholder ?? copy.workspace.askNextQuestion;
   const resolvedSubmitLabel = submitLabel ?? copy.workspace.send;
   const resetComposerAttachments = composerControls.resetAttachments;
@@ -411,10 +419,22 @@ export function NodeDetailPanel({
     container.scrollTo({ top: container.scrollHeight });
   }, [isCreating, node?.id, streamingContent]);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function submitComposer() {
     const trimmed = input.trim();
     if (!node || !trimmed || isComposerBusy) return;
+
+    if (isInitialSubmit && onBeforeInitialSubmit) {
+      setIsCheckingInitialSubmit(true);
+      try {
+        const canSubmit = await onBeforeInitialSubmit(() => {
+          void submitComposer();
+        });
+        if (!canSubmit) return;
+      } finally {
+        setIsCheckingInitialSubmit(false);
+      }
+    }
+
     const preparedAttachments = await composerControls.prepareAttachmentsForSend();
     if (!preparedAttachments) return;
 
@@ -461,6 +481,11 @@ export function NodeDetailPanel({
       composerControls.resetAttachments();
       clearSelectedSourceText();
     }
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void submitComposer();
   }
 
   function handleAskBranchMindSelection() {
@@ -1032,7 +1057,7 @@ export function NodeDetailPanel({
               data-testid="send-message-button"
               className="branchmind-primary-action inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-3 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
             >
-              {composerControls.isPreparingAttachments ? (
+              {composerControls.isPreparingAttachments || isCheckingInitialSubmit ? (
                 <Loader2 size={14} className="animate-spin" />
               ) : (
                 <Send size={14} />
@@ -1040,7 +1065,7 @@ export function NodeDetailPanel({
               <span className="node-detail-send-label">
                 {composerControls.isPreparingAttachments
                   ? copy.chat.preparing
-                  : isCreating
+                  : isCreating || isCheckingInitialSubmit
                     ? isInitialSubmit
                       ? copy.common.creating
                       : `${copy.workspace.generatingAnswer}...`
