@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { FileDown, NotebookPen, PanelRightClose, PlusCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  FileDown,
+  NotebookPen,
+  PanelRightClose,
+  PlusCircle,
+} from "lucide-react";
 import { exportProjectNotesPdf } from "@/lib/client/project-notes-pdf";
 import { PROJECT_NOTES_MAX_LENGTH } from "@/lib/project-notes";
 import type { MindNode } from "@/lib/types";
@@ -15,6 +21,10 @@ type ProjectNotesPanelProps = {
   isCreating: boolean;
   onUpdateProjectNotes: (projectId: string, notes: string) => Promise<boolean>;
   onClose: () => void;
+  backAction?: {
+    label: string;
+    onClick: () => void;
+  };
 };
 
 type NotesSaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
@@ -53,6 +63,7 @@ export function ProjectNotesPanel({
   isCreating,
   onUpdateProjectNotes,
   onClose,
+  backAction,
 }: ProjectNotesPanelProps) {
   const panelId = useId();
   const titleId = `${panelId}-title`;
@@ -206,15 +217,29 @@ export function ProjectNotesPanel({
             Project notes
           </h2>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close project notes"
-          data-testid="close-project-notes-button"
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/75 text-brand-700 transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100"
-        >
-          <PanelRightClose size={18} />
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {backAction && (
+            <button
+              type="button"
+              onClick={backAction.onClick}
+              aria-label={backAction.label}
+              data-testid="project-notes-back-button"
+              className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-white/75 px-3 text-sm font-black text-brand-700 transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100"
+            >
+              <ArrowLeft size={17} />
+              <span>{backAction.label}</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close project notes"
+            data-testid="close-project-notes-button"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/75 text-brand-700 transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100"
+          >
+            <PanelRightClose size={18} />
+          </button>
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden py-4">

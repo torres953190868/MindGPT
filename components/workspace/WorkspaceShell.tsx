@@ -178,6 +178,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
         projectNotes: project.notes,
         onUpdateProjectNotes: updateProjectNotes,
       }}
+      mobileNavigationMode="drawers"
     />
   );
 }

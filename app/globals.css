@@ -408,7 +408,8 @@ textarea {
 }
 
 .branchmind-mobile-drawer > [data-testid="workspace-sidebar"],
-.branchmind-mobile-drawer > [data-testid="node-detail-panel"] {
+.branchmind-mobile-drawer > [data-testid="node-detail-panel"],
+.branchmind-mobile-drawer > [data-testid="project-notes-panel"] {
   height: 100%;
   max-height: none;
   border-radius: 12px;

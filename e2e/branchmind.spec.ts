@@ -276,6 +276,33 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
 }
 
+async function closeMobileDrawerIfOpen(page: Page) {
+  const backdrop = page.getByTestId("mobile-drawer-backdrop");
+  if (await backdrop.isVisible().catch(() => false)) {
+    const viewport = page.viewportSize() ?? { width: 390, height: 844 };
+    const hasLeftDrawer = await page.getByTestId("workspace-sidebar").isVisible();
+    const x = hasLeftDrawer ? viewport.width - 8 : 8;
+    await page.mouse.click(x, viewport.height / 2);
+    await expect(backdrop).toHaveCount(0);
+  }
+}
+
+async function openMobileOutlineDrawer(page: Page) {
+  await closeMobileDrawerIfOpen(page);
+  await page
+    .getByTestId("mind-map-canvas")
+    .getByTestId("expand-workspace-sidebar-button")
+    .click();
+}
+
+async function openMobileChatDrawer(page: Page) {
+  await closeMobileDrawerIfOpen(page);
+  await page
+    .getByTestId("mind-map-canvas")
+    .getByTestId("expand-node-detail-panel-button")
+    .click();
+}
+
 async function importProject(page: Page, project: WorkspaceProject): Promise<WorkspaceProject> {
   const response = await page.request.post("/api/projects/import", {
     headers: API_MUTATION_HEADERS,
@@ -734,7 +761,10 @@ test("mobile home launcher starts a workspace from the compact composer", async 
   await page.getByTestId("send-message-button").click();
 
   await expect(page).toHaveURL(/\/workspace\/project_/);
-  await expect(page.getByTestId("workspace-mobile-view-tabs")).toBeVisible();
+  await expect(page.getByTestId("workspace-mobile-view-tabs")).toHaveCount(0);
+  const mindMapCanvas = page.getByTestId("mind-map-canvas");
+  await expect(mindMapCanvas.getByTestId("expand-workspace-sidebar-button")).toBeVisible();
+  await expect(mindMapCanvas.getByTestId("expand-node-detail-panel-button")).toBeVisible();
   await expect.poll(() => syncPayload).not.toBeNull();
   const payload = syncPayload as { project: Project };
   expect(payload.project.title).toBe(instruction);
@@ -2364,7 +2394,7 @@ test("selected conversation text is attached as BranchMind context", async ({ pa
   }
 });
 
-test("edits a root node title from the node detail header", async ({ page }) => {
+test("edits a root node title from the node detail header", async ({ page }, testInfo) => {
   const sourceProject = makeWorkspaceProject(`title-edit-${makeSeed()}`);
   const editedTitle = "Manual root title from detail";
   let projectIdToDelete: string | null = null;
@@ -2374,6 +2404,9 @@ test("edits a root node title from the node detail header", async ({ page }) => 
     projectIdToDelete = project.id;
 
     await page.goto(`/workspace/${project.id}`);
+    if (testInfo.project.name === "mobile-chrome") {
+      await openMobileChatDrawer(page);
+    }
     await page.getByTestId("edit-node-title-button").click();
     await expect(page.getByTestId("node-title-edit-input")).toHaveValue("Seeded root node");
     await page.getByTestId("node-title-edit-input").fill(editedTitle);
@@ -3075,13 +3108,14 @@ test("shows project notes as a mobile drawer without horizontal overflow", async
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/workspace/${project.id}`);
-    await page.getByTestId("workspace-mobile-view-chat").click();
+    await expect(page.getByTestId("workspace-mobile-view-tabs")).toHaveCount(0);
+    await openMobileChatDrawer(page);
     await expect(page.getByTestId("node-detail-notes-button")).toBeVisible();
     await page.getByTestId("node-detail-notes-button").click();
 
     await expect(page.getByTestId("project-notes-window")).toBeVisible();
     await expect(page.getByTestId("project-notes-panel")).toBeVisible();
-    await expect(page.getByTestId("project-notes-drawer-backdrop")).toHaveCount(0);
+    await expect(page.getByTestId("mobile-drawer-backdrop")).toBeVisible();
     await expect(page.getByTestId("resize-project-notes-panel")).toBeHidden();
     const overflow = await page.evaluate(() => ({
       clientWidth: document.documentElement.clientWidth,
@@ -3089,8 +3123,10 @@ test("shows project notes as a mobile drawer without horizontal overflow", async
     }));
     expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
 
-    await page.getByTestId("close-project-notes-button").click();
+    await page.getByTestId("project-notes-back-button").click();
     await expect(page.getByTestId("project-notes-panel")).toHaveCount(0);
+    await expect(page.getByTestId("node-detail-panel")).toBeVisible();
+    await expect(page.getByTestId("node-detail-notes-button")).toBeVisible();
 
     await page.getByTestId("node-detail-notes-button").click();
     await page.getByTestId("close-project-notes-button").click();
@@ -3230,14 +3266,14 @@ test("keeps long project notes scrollable inside the mobile drawer", async ({
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/workspace/${project.id}`);
-    await page.getByTestId("workspace-mobile-view-chat").click();
+    await openMobileChatDrawer(page);
     await expect(page.getByTestId("node-detail-notes-button")).toBeVisible();
     await page.getByTestId("node-detail-notes-button").click();
 
     const notesWindow = page.getByTestId("project-notes-window");
     const notesEditor = page.getByTestId("project-notes-input");
     await expect(notesWindow).toBeVisible();
-    await expect(page.getByTestId("project-notes-drawer-backdrop")).toHaveCount(0);
+    await expect(page.getByTestId("mobile-drawer-backdrop")).toBeVisible();
     await expect(
       notesEditor.getByRole("heading", {
         exact: true,
@@ -3265,7 +3301,7 @@ test("keeps long project notes scrollable inside the mobile drawer", async ({
       };
     });
 
-    expect(metrics.windowHeight).toBeLessThanOrEqual(metrics.viewportHeight - 20);
+    expect(metrics.windowHeight).toBeLessThanOrEqual(metrics.viewportHeight - 12);
     expect(metrics.editorScrollHeight).toBeGreaterThan(metrics.editorClientHeight + 24);
 
     const scrolledTop = await notesEditor.evaluate((element) => {
@@ -3299,7 +3335,7 @@ test("shows the workspace sidebar as a collapsible tree outline", async ({
 
     await page.goto(`/workspace/${project.id}`);
     if (testInfo.project.name === "mobile-chrome") {
-      await page.getByTestId("workspace-mobile-view-outline").click();
+      await openMobileOutlineDrawer(page);
     }
 
     await expect(page.getByTestId("conversation-outline-row")).toHaveCount(4);
@@ -3324,7 +3360,7 @@ test("shows the workspace sidebar as a collapsible tree outline", async ({
     await expect(page.getByTestId("conversation-empty-state")).toHaveCount(0);
 
     if (testInfo.project.name === "mobile-chrome") {
-      await page.getByTestId("workspace-mobile-view-outline").click();
+      await openMobileOutlineDrawer(page);
     }
 
     await getOutlineToggle(page, basics.id).click();
@@ -3720,7 +3756,7 @@ test("uses the blank lower mobile chat space for conversation history", async ({
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/workspace/${project.id}`);
-    await page.getByTestId("workspace-mobile-view-chat").click();
+    await openMobileChatDrawer(page);
 
     const metrics = await page.evaluate(() => {
       const panel = document.querySelector<HTMLElement>('[data-testid="node-detail-panel"]');
@@ -3777,7 +3813,7 @@ test("fills the mobile map view without leaving a blank workspace tail", async (
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/workspace/${project.id}`);
-    await page.getByTestId("workspace-mobile-view-map").click();
+    await expect(page.getByTestId("workspace-mobile-view-tabs")).toHaveCount(0);
 
     const metrics = await page.evaluate(() => {
       const map = document.querySelector<HTMLElement>('[data-testid="mind-map-canvas"]');
@@ -3832,7 +3868,7 @@ test("starts the mobile map focused on the root node", async ({ page }, testInfo
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/workspace/${project.id}`);
-    await page.getByTestId("workspace-mobile-view-map").click();
+    await expect(page.getByTestId("workspace-mobile-view-tabs")).toHaveCount(0);
 
     const mindMapCanvas = page.getByTestId("mind-map-react-flow");
     const rootCard = page.locator(
