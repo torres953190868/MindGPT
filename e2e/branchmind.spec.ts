@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import type { AccountDto } from "@/app/api/account/route";
 import type { ChatMessage, Project } from "@/lib/types";
 import { createSyntheticPdf } from "../tests/server/rag/pdf-fixtures";
 
@@ -383,8 +384,14 @@ async function mockAuthSession(
     configured: boolean;
     user: null | { id: string; email: string | null; accountName?: string | null };
   },
+  options: { delayMs?: number } = {},
 ) {
+  let requestCount = 0;
   await page.route("**/api/auth/session", async (route) => {
+    requestCount += 1;
+    if (options.delayMs) {
+      await new Promise((resolve) => setTimeout(resolve, options.delayMs));
+    }
     const user = session.user
       ? { ...session.user, accountName: session.user.accountName ?? session.user.email }
       : null;
@@ -394,6 +401,30 @@ async function mockAuthSession(
       body: JSON.stringify({ ...session, user }),
     });
   });
+
+  return {
+    get requestCount() {
+      return requestCount;
+    },
+  };
+}
+
+async function mockAccount(page: Page, account: AccountDto) {
+  let requestCount = 0;
+  await page.route("**/api/account", async (route) => {
+    requestCount += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(account),
+    });
+  });
+
+  return {
+    get requestCount() {
+      return requestCount;
+    },
+  };
 }
 
 async function mockHomeModelCatalog(page: Page) {
@@ -2231,6 +2262,126 @@ test("places the workspace account entry in the sidebar footer", async ({ page }
       page.getByTestId("workspace-sidebar-footer").getByTestId("account-sign-in-button"),
     ).toBeVisible();
   } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("keeps the signed-in account cached when reopening the workspace sidebar", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const sessionMock = await mockAuthSession(page, {
+    configured: true,
+    user: { id: "user_cached_sidebar", email: null, accountName: "cached-user" },
+  });
+  await mockAccount(page, {
+    email: null,
+    accountName: "cached-user",
+    displayName: "Cached User",
+    authMode: "supabase",
+    authConfigured: true,
+    plan: "pro",
+    subscriptionStatus: "active",
+    usage: {
+      projects: { used: 1, limit: 50 },
+      nodes: { used: 2, limit: 1000 },
+      documents: { used: 0, limit: 25 },
+      aiMessages: { used: 0, limit: 1000 },
+    },
+  });
+  const sourceProject = makeWorkspaceProject(`cached-account-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.goto(`/workspace/${project.id}`);
+    const footer = page.getByTestId("workspace-sidebar-footer");
+    await expect(footer.getByTestId("account-menu-button")).toContainText("Cached User");
+    expect(sessionMock.requestCount).toBe(1);
+
+    await page.getByTestId("collapse-workspace-sidebar-button").click();
+    await expect(page.getByTestId("workspace-sidebar")).toHaveCount(0);
+    await page
+      .getByTestId("mind-map-canvas")
+      .getByTestId("expand-workspace-sidebar-button")
+      .click();
+
+    await expect(page.locator('[data-testid="account-sign-in-button"]:visible')).toHaveCount(0);
+    await expect(page.getByTestId("workspace-sidebar-footer").getByTestId("account-menu-button")).toContainText(
+      "Cached User",
+    );
+    expect(sessionMock.requestCount).toBe(1);
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("shows an account placeholder while the workspace auth session is loading", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  let releaseSession!: () => void;
+  const sessionGate = new Promise<void>((resolve) => {
+    releaseSession = resolve;
+  });
+  await page.route("**/api/auth/session", async (route) => {
+    await sessionGate;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        configured: true,
+        user: {
+          id: "user_delayed_sidebar",
+          email: null,
+          accountName: "delayed-user",
+        },
+      }),
+    });
+  });
+  await mockAccount(page, {
+    email: null,
+    accountName: "delayed-user",
+    displayName: "Delayed User",
+    authMode: "supabase",
+    authConfigured: true,
+    plan: "free",
+    subscriptionStatus: "inactive",
+    usage: {
+      projects: { used: 1, limit: 5 },
+      nodes: { used: 2, limit: 100 },
+      documents: { used: 0, limit: 3 },
+      aiMessages: { used: 0, limit: 50 },
+    },
+  });
+  const sourceProject = makeWorkspaceProject(`delayed-account-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.goto(`/workspace/${project.id}`);
+    await expect(page.getByTestId("workspace-sidebar-footer")).toBeVisible();
+    await expect(page.locator('[data-testid="account-sign-in-button"]:visible')).toHaveCount(0);
+    await expect(page.getByTestId("workspace-sidebar-footer").getByTestId("user-profile-loading")).toBeVisible();
+
+    releaseSession();
+    await expect(page.getByTestId("workspace-sidebar-footer").getByTestId("account-menu-button")).toContainText(
+      "Delayed User",
+    );
+  } finally {
+    releaseSession();
     if (projectIdToDelete) {
       await page.request
         .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })

@@ -18,6 +18,7 @@ import {
   readRememberedAuthAccountName,
   writeRememberedAuthAccountName,
 } from "@/lib/client/auth-email";
+import { useAuthStore } from "@/store/useAuthStore";
 
 type AuthMode = "sign-in" | "sign-up" | "forgot-password" | "reset-password";
 
@@ -94,6 +95,7 @@ async function postJson(path: string, body: Record<string, unknown>) {
 
 export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthPageShellProps) {
   const router = useRouter();
+  const refreshAuth = useAuthStore((state) => state.refreshAuth);
   const content = modeContent[mode];
   const needsAccountName = mode !== "reset-password";
   const needsPassword = mode !== "forgot-password";
@@ -157,6 +159,7 @@ export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthP
           password,
           next: nextPath,
         });
+        await refreshAuth({ force: true });
         router.push(result.next || nextPath);
         router.refresh();
         return;
@@ -170,6 +173,7 @@ export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthP
         });
         setPassword("");
         setConfirmPassword("");
+        await refreshAuth({ force: true });
         router.push(result.next || nextPath);
         router.refresh();
         return;

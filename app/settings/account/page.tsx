@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { CheckCircle2, KeyRound, Loader2, ShieldCheck, UserCircle } from "lucide-react";
 import type { AccountDto } from "@/app/api/account/route";
+import { useAuthStore } from "@/store/useAuthStore";
 
 function getInitial(accountName: string | null | undefined) {
   return accountName?.trim().charAt(0).toUpperCase() || "B";
@@ -34,6 +35,7 @@ function SettingsCard({
 }
 
 export default function AccountSettingsPage() {
+  const setAccountCache = useAuthStore((state) => state.setAccountCache);
   const [account, setAccount] = useState<AccountDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingName, setSavingName] = useState(false);
@@ -45,23 +47,24 @@ export default function AccountSettingsPage() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
 
-  async function loadAccount() {
+  const loadAccount = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/account");
       const data = (await res.json().catch(() => null)) as AccountDto | null;
       if (res.ok && data) {
         setAccount(data);
+        setAccountCache(data);
         setDisplayName(data.displayName ?? "");
       }
     } finally {
       setLoading(false);
     }
-  }
+  }, [setAccountCache]);
 
   useEffect(() => {
     void loadAccount();
-  }, []);
+  }, [loadAccount]);
 
   async function handleUpdateName() {
     if (account?.authMode !== "supabase") {
@@ -79,7 +82,9 @@ export default function AccountSettingsPage() {
       });
       const data = await res.json().catch(() => null);
       if (res.ok) {
-        setAccount(data as AccountDto);
+        const updatedAccount = data as AccountDto;
+        setAccount(updatedAccount);
+        setAccountCache(updatedAccount);
         setNameMessage("Display name updated.");
       } else {
         setNameMessage(data?.error?.message ?? "Failed to update.");

@@ -19,12 +19,8 @@ import {
 } from "lucide-react";
 import { BugReportDialog } from "@/components/BugReportLauncher";
 import { writeRememberedAuthAccountName } from "@/lib/client/auth-email";
+import { useAuthStore } from "@/store/useAuthStore";
 import type { AccountDto } from "@/app/api/account/route";
-
-type AuthSession = {
-  configured: boolean;
-  user: { id: string; email: string | null; accountName: string | null } | null;
-};
 
 type AuthPanelProps = {
   className?: string;
@@ -213,8 +209,12 @@ export function AuthPanel({
 }: AuthPanelProps) {
   const pathname = usePathname();
   const menuRef = useRef<HTMLElement | null>(null);
-  const [session, setSession] = useState<AuthSession | null>(null);
-  const [account, setAccount] = useState<AccountDto | null>(null);
+  const sessionStatus = useAuthStore((state) => state.sessionStatus);
+  const session = useAuthStore((state) => state.session);
+  const accountStatus = useAuthStore((state) => state.accountStatus);
+  const account = useAuthStore((state) => state.account);
+  const ensureSessionLoaded = useAuthStore((state) => state.ensureSessionLoaded);
+  const markSignedOut = useAuthStore((state) => state.markSignedOut);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [hoveredMenuItem, setHoveredMenuItem] = useState<string | null>(null);
   const [showBugReport, setShowBugReport] = useState(false);
@@ -226,33 +226,15 @@ export function AuthPanel({
   const popoverPosition = placement === "top" ? "bottom-full mb-2" : "top-full mt-2";
   const popoverHorizontal = isSidebar ? "left-0 right-0 w-full" : "right-0 w-60";
 
-  async function refreshSession() {
-    const response = await fetch("/api/auth/session");
-    const data = (await response.json().catch(() => null)) as AuthSession | null;
-    if (response.ok && data) setSession(data);
-  }
-
-  async function refreshAccount() {
-    const response = await fetch("/api/account");
-    const data = (await response.json().catch(() => null)) as AccountDto | null;
-    if (response.ok && data) setAccount(data);
-  }
-
   useEffect(() => {
-    void refreshSession();
+    void ensureSessionLoaded();
     const params = new URLSearchParams({ next: getCurrentNextPath() });
     setSignInHref(`/auth/sign-in?${params.toString()}`);
-  }, []);
+  }, [ensureSessionLoaded]);
 
   useEffect(() => {
     if (session?.user?.accountName) writeRememberedAuthAccountName(session.user.accountName);
   }, [session?.user?.accountName]);
-
-  useEffect(() => {
-    if (session?.user) {
-      void refreshAccount();
-    }
-  }, [session?.user]);
 
   useEffect(() => {
     if (!isMenuOpen) return;
@@ -283,8 +265,7 @@ export function AuthPanel({
       const response = await fetch("/api/auth/logout", { method: "POST" });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(readError(data));
-      setSession((current) => (current ? { ...current, user: null } : current));
-      setAccount(null);
+      markSignedOut();
       setIsMenuOpen(false);
     } catch (authError) {
       setError(authError instanceof Error ? authError.message : "Sign-out failed.");
@@ -296,7 +277,7 @@ export function AuthPanel({
   const displayEmail = account?.email ?? session?.user?.email ?? null;
   const displayAccountName = account?.accountName ?? session?.user?.accountName ?? displayEmail;
   const displayName = account?.displayName ?? displayAccountName;
-  const plan = account?.plan ?? "free";
+  const plan = account?.plan ?? null;
   const highestUsage = account ? getHighestUsageItem(account.usage) : null;
   const isFreePlan = plan === "free";
   const isUsageSettingsActive = pathname.startsWith("/settings/usage");
@@ -315,7 +296,30 @@ export function AuthPanel({
     };
   }
 
-  if (session && !session.configured) {
+  if (sessionStatus === "idle" || sessionStatus === "loading") {
+    return (
+      <section
+        aria-label="Loading user account"
+        data-testid="user-profile-loading"
+        className={`${isSidebar ? "flex w-full" : "inline-flex justify-end"} text-sm ${className}`}
+      >
+        <div
+          role="status"
+          aria-live="polite"
+          className={
+            isSidebar
+              ? "inline-flex h-11 w-full max-w-full items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 shadow-sm"
+              : "inline-flex min-h-11 min-w-28 max-w-full items-center gap-2 rounded-[18px] border border-white/80 bg-white/86 px-3 py-2.5 shadow-md"
+          }
+        >
+          <span className="h-7 w-7 shrink-0 animate-pulse rounded-full bg-neutral-200" />
+          <span className="h-3.5 flex-1 animate-pulse rounded-full bg-neutral-200" />
+        </div>
+      </section>
+    );
+  }
+
+  if (sessionStatus === "local") {
     return (
       <section
         aria-label="Local authentication mode"
@@ -337,7 +341,7 @@ export function AuthPanel({
     );
   }
 
-  if (session?.user) {
+  if (sessionStatus === "authenticated" && session?.user) {
     return (
       <>
         <section
@@ -386,9 +390,14 @@ export function AuthPanel({
                       {displayAccountName ?? "BranchMind account"}
                     </p>
                     <div className="mt-0.5 flex items-center gap-2">
-                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${getPlanBadgeColor(plan)}`}>
-                        {plan}
-                      </span>
+                      {plan && (
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${getPlanBadgeColor(plan)}`}>
+                          {plan}
+                        </span>
+                      )}
+                      {!plan && accountStatus === "loading" && (
+                        <span className="h-4 w-12 animate-pulse rounded-full bg-neutral-200" />
+                      )}
                       {isFreePlan && (
                         <Link
                           href="/settings/billing"
@@ -570,6 +579,28 @@ export function AuthPanel({
         />
         <WhatsNewModal open={showWhatsNew} onClose={() => setShowWhatsNew(false)} />
       </>
+    );
+  }
+
+  if (sessionStatus !== "anonymous") {
+    return (
+      <section
+        aria-label="Account status unavailable"
+        data-testid="user-profile-unavailable"
+        className={`${isSidebar ? "flex w-full" : "inline-flex justify-end"} text-sm ${className}`}
+      >
+        <div
+          role="status"
+          className={
+            isSidebar
+              ? "inline-flex h-11 w-full items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 font-black text-neutral-600 shadow-sm"
+              : "inline-flex min-h-11 items-center gap-2 rounded-[18px] bg-white/75 px-4 py-2.5 font-black text-neutral-600 shadow-sm"
+          }
+        >
+          <HelpCircle size={16} />
+          Account unavailable
+        </div>
+      </section>
     );
   }
 
