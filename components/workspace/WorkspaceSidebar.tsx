@@ -17,6 +17,7 @@ import {
   getHighlightedActionClass,
   useHighlightedAction,
 } from "@/components/ui/highlighted-action";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import type { MindNode, Project } from "@/lib/types";
 
 type WorkspaceSidebarProps = {
@@ -131,6 +132,7 @@ export function WorkspaceSidebar({
   onSelectNode,
   onCollapse,
 }: WorkspaceSidebarProps) {
+  const { copy } = useLanguage();
   const [query, setQuery] = useState("");
   const navHighlight = useHighlightedAction<SidebarNavItem>({
     defaultAction: "outline",
@@ -194,14 +196,14 @@ export function WorkspaceSidebar({
 
   return (
     <aside
-      aria-label="Workspace sidebar"
+      aria-label={copy.workspace.sidebar}
       data-testid="workspace-sidebar"
       className="workspace-sidebar-panel flex min-h-[220px] w-full flex-col gap-4 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none"
     >
       <div className="flex min-h-10 items-center justify-between gap-3">
         <Link
           href="/"
-          aria-label="BranchMind home"
+          aria-label={copy.projects.branchMindHome}
           className="workspace-brand-link flex min-w-0 items-center gap-2 rounded-md py-1 pr-2 text-neutral-900 transition hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
         >
           <span className="branchmind-logo-mark grid h-8 w-8 shrink-0 place-items-center rounded-md border border-brand-200 bg-brand-50 text-brand-600">
@@ -212,7 +214,7 @@ export function WorkspaceSidebar({
         <button
           type="button"
           onClick={onCollapse}
-          aria-label="Collapse workspace sidebar"
+          aria-label={copy.workspace.collapseSidebar}
           aria-controls="conversation-outline"
           aria-expanded="true"
           data-testid="collapse-workspace-sidebar-button"
@@ -227,9 +229,9 @@ export function WorkspaceSidebar({
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          aria-label="Search project nodes"
+          aria-label={copy.workspace.searchProjectNodes}
           data-testid="node-search-input"
-          placeholder="Search nodes"
+          placeholder={copy.workspace.searchNodes}
           className="workspace-sidebar-search h-11 w-full rounded-xl border border-neutral-200 bg-white pl-10 pr-14 text-sm font-bold text-neutral-900 outline-none placeholder:text-neutral-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
         />
         <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full bg-neutral-100 px-2 py-1 text-[11px] font-black text-neutral-500">
@@ -238,7 +240,7 @@ export function WorkspaceSidebar({
       </div>
 
       <nav
-        aria-label="Workspace sidebar navigation"
+        aria-label={copy.workspace.views}
         onMouseLeave={navHighlight.clearHighlightedAction}
         className="grid grid-cols-2 gap-2 text-sm font-black"
       >
@@ -250,7 +252,7 @@ export function WorkspaceSidebar({
           className={getSidebarNavButtonClass(isOutlineNavHighlighted)}
         >
           <PanelLeftOpen size={16} />
-          Outline
+          {copy.workspace.outline}
         </button>
         <Link
           href="/projects"
@@ -260,13 +262,13 @@ export function WorkspaceSidebar({
           className={getSidebarNavButtonClass(isProjectsNavHighlighted)}
         >
           <Folder size={16} />
-          Projects
+          {copy.common.projects}
         </Link>
       </nav>
 
       <nav
         id="conversation-outline"
-        aria-label="Conversation outline"
+        aria-label={copy.workspace.conversationOutline}
         data-testid="conversation-outline"
         className="min-h-[96px] flex-1 space-y-2 overflow-auto pr-1 lg:min-h-0"
       >
@@ -277,7 +279,7 @@ export function WorkspaceSidebar({
             className="flex flex-col items-center rounded-lg bg-neutral-50 p-4 text-center"
           >
             <Search size={20} className="text-neutral-300" />
-            <p className="mt-2 text-sm font-bold text-neutral-600">No matching nodes</p>
+            <p className="mt-2 text-sm font-bold text-neutral-600">{copy.workspace.noMatchingNodes}</p>
           </div>
         ) : (
           outlineRows.map(({ node, depth }) => (
@@ -289,6 +291,12 @@ export function WorkspaceSidebar({
               selected={selectedNodeId === node.id}
               onSelectNode={onSelectNode}
               onToggleNode={toggleOutlineNode}
+              labels={{
+                childCount: copy.workspace.childCount,
+                collapseChildrenFor: copy.workspace.collapseChildrenFor,
+                expandChildrenFor: copy.workspace.expandChildrenFor,
+                openNode: copy.workspace.openNode,
+              }}
             />
           ))
         )}
@@ -312,6 +320,7 @@ function OutlineItem({
   selected,
   onSelectNode,
   onToggleNode,
+  labels,
 }: {
   node: MindNode;
   depth: number;
@@ -319,6 +328,12 @@ function OutlineItem({
   selected: boolean;
   onSelectNode: (nodeId: string) => void;
   onToggleNode: (nodeId: string) => void;
+  labels: {
+    childCount: (count: number) => string;
+    collapseChildrenFor: (title: string) => string;
+    expandChildrenFor: (title: string) => string;
+    openNode: (title: string) => string;
+  };
 }) {
   const Icon = node.branchType === "branch" ? GitBranch : Sprout;
   const hasChildren = node.children.length > 0;
@@ -343,7 +358,7 @@ function OutlineItem({
             event.stopPropagation();
             onToggleNode(node.id);
           }}
-          aria-label={`${expanded ? "Collapse" : "Expand"} children for ${node.title}`}
+          aria-label={expanded ? labels.collapseChildrenFor(node.title) : labels.expandChildrenFor(node.title)}
           aria-expanded={expanded}
           data-testid="conversation-outline-toggle"
           data-node-id={node.id}
@@ -357,7 +372,7 @@ function OutlineItem({
       <button
         type="button"
         onClick={() => onSelectNode(node.id)}
-        aria-label={`Open conversation node ${node.title}`}
+        aria-label={labels.openNode(node.title)}
         aria-current={selected ? "true" : undefined}
         data-testid="conversation-outline-item"
         data-node-id={node.id}
@@ -372,7 +387,7 @@ function OutlineItem({
         <span className="min-w-0">
           <span className="line-clamp-2 text-sm font-black leading-5">{node.title}</span>
           <span className="mt-0.5 block text-xs font-semibold leading-4 opacity-75">
-            {node.children.length} children
+            {labels.childCount(node.children.length)}
           </span>
         </span>
       </button>

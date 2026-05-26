@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, Check, Crown, Loader2, ShieldCheck, Sparkles, Zap } from "lucide-react";
 import type { AccountDto } from "@/app/api/account/route";
+import { useLanguage } from "@/components/language/LanguageProvider";
 
 const PLANS = [
   {
@@ -65,13 +66,8 @@ const PLANS = [
   },
 ];
 
-const FREE_LIMITS = [
-  { label: "Projects", value: "5 max" },
-  { label: "Nodes", value: "100 max" },
-  { label: "PDFs", value: "3 max" },
-];
-
 export default function BillingSettingsPage() {
+  const { copy, language } = useLanguage();
   const [account, setAccount] = useState<AccountDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [upgradeMessage, setUpgradeMessage] = useState<string | null>(null);
@@ -92,7 +88,7 @@ export default function BillingSettingsPage() {
 
   function handleUpgrade(planKey: string) {
     if (planKey === "pro") {
-      setUpgradeMessage("Stripe integration coming in Phase 2. Stay tuned!");
+      setUpgradeMessage(copy.billing.stripeComing);
       setTimeout(() => setUpgradeMessage(null), 4000);
     }
   }
@@ -107,6 +103,56 @@ export default function BillingSettingsPage() {
 
   const currentPlan = account?.plan ?? "free";
   const currentPlanMeta = PLANS.find((plan) => plan.key === currentPlan) ?? PLANS[0];
+  const localizedPlans = PLANS.map((plan) => {
+    if (plan.key === "free") {
+      return {
+        ...plan,
+        description: copy.billing.freeDescription,
+        eyebrow: copy.billing.starterLimits,
+        features: [
+          { label: language === "zh" ? "5 个项目" : "5 projects" },
+          { label: language === "zh" ? "100 个节点" : "100 nodes" },
+          { label: language === "zh" ? "3 份 PDF 文档" : "3 PDF documents" },
+          { label: language === "zh" ? "每日 50 条 AI 消息" : "50 AI messages/day" },
+          { label: copy.billing.communitySupport },
+        ],
+        cta: copy.billing.freeTier,
+      };
+    }
+    if (plan.key === "pro") {
+      return {
+        ...plan,
+        description: copy.billing.proDescription,
+        eyebrow: copy.billing.proEyebrow,
+        features: [
+          { label: copy.billing.unlimitedProjects, highlight: true },
+          { label: copy.billing.unlimitedNodes, highlight: true },
+          { label: language === "zh" ? "50 份 PDF 文档" : "50 PDF documents" },
+          { label: language === "zh" ? "每日 500 条 AI 消息" : "500 AI messages/day" },
+          { label: copy.billing.prioritySupport },
+        ],
+        cta: copy.billing.upgradeToPro,
+      };
+    }
+    return {
+      ...plan,
+      description: copy.billing.maxDescription,
+      eyebrow: copy.billing.maxEyebrow,
+      features: [
+        { label: copy.billing.unlimitedEverything },
+        { label: language === "zh" ? "共享工作区" : "Shared workspaces" },
+        { label: copy.billing.unlimitedKnowledgeBase },
+        { label: copy.billing.unlimitedMessages },
+        { label: copy.billing.dedicatedSupport },
+      ],
+      cta: copy.billing.comingSoon,
+    };
+  });
+  const freeLimits = [
+    { label: copy.usage.projects, value: language === "zh" ? "最多 5" : "5 max" },
+    { label: copy.usage.nodes, value: language === "zh" ? "最多 100" : "100 max" },
+    { label: copy.usage.pdfs, value: language === "zh" ? "最多 3" : "3 max" },
+  ];
   const CurrentPlanIcon = currentPlanMeta.icon;
   const isFreePlan = currentPlan === "free";
   const isActiveSubscription = account?.subscriptionStatus === "active";
@@ -121,14 +167,14 @@ export default function BillingSettingsPage() {
                 <CurrentPlanIcon size={18} />
               </span>
               <span className="text-xs font-black uppercase tracking-[0.14em] text-[#766d78]">
-                Current plan
+                {copy.billing.currentPlan}
               </span>
               <span
                 className={`rounded-full px-2.5 py-1 text-xs font-extrabold ${
                   isActiveSubscription ? "bg-[#deebe4] text-[#315d4f]" : "bg-[#f4efe7] text-[#5e5661]"
                 }`}
               >
-                {isActiveSubscription ? "Active subscription" : "No billing required"}
+                {isActiveSubscription ? copy.billing.activeSubscription : copy.billing.noBillingRequired}
               </span>
             </div>
 
@@ -137,13 +183,13 @@ export default function BillingSettingsPage() {
             </h2>
             <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-[#766d78]">
               {isFreePlan
-                ? "Free is good for trying BranchMind. Pro removes the project and node ceilings when your workspace starts to grow."
-                : "Your workspace is already on an upgraded plan with more room for documents, ideas, and AI work."}
+                ? copy.billing.freePlanBody
+                : copy.billing.upgradedBody}
             </p>
 
             {isFreePlan && (
               <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                {FREE_LIMITS.map((limit) => (
+                {freeLimits.map((limit) => (
                   <div key={limit.label} className="rounded-lg border border-[#ddd4c7] bg-[#f6f1e9] px-3 py-2.5">
                     <p className="text-[11px] font-bold uppercase tracking-wide text-[#766d78]">{limit.label}</p>
                     <p className="mt-0.5 text-sm font-black text-[#29252f]">{limit.value}</p>
@@ -156,10 +202,10 @@ export default function BillingSettingsPage() {
           <div className="rounded-lg border border-[#ddd4c7] bg-[#f6f1e9] p-4 lg:w-72">
             <div className="flex items-center gap-2 text-sm font-black text-[#29252f]">
               <ShieldCheck size={17} className="text-[#315d4f]" />
-              Upgrade path
+              {copy.billing.upgradePath}
             </div>
             <p className="mt-2 text-sm font-semibold leading-6 text-[#766d78]">
-              Pro unlocks unlimited projects and nodes, plus 10x more daily AI messages.
+              {copy.billing.proBody}
             </p>
             <button
               type="button"
@@ -167,10 +213,10 @@ export default function BillingSettingsPage() {
               disabled={!isFreePlan}
               className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#28242d] px-4 text-sm font-black text-[#fffdf8] shadow-[0_12px_24px_rgba(40,36,45,0.18)] transition hover:-translate-y-0.5 hover:bg-[#1e1a24] disabled:cursor-default disabled:bg-[#d8d0c5] disabled:text-[#8a8178] disabled:shadow-none disabled:hover:translate-y-0"
             >
-              {isFreePlan ? "Upgrade to Pro" : "Plan active"}
+              {isFreePlan ? copy.billing.upgradeToPro : copy.billing.planActive}
               {isFreePlan && <ArrowRight size={16} />}
             </button>
-            <p className="mt-2 text-xs font-semibold text-[#8d838d]">Checkout integration is coming in Phase 2.</p>
+            <p className="mt-2 text-xs font-semibold text-[#8d838d]">{copy.billing.checkoutComing}</p>
           </div>
         </div>
       </div>
@@ -182,7 +228,7 @@ export default function BillingSettingsPage() {
       )}
 
       <div className="grid gap-4 md:grid-cols-3">
-        {PLANS.map((plan) => {
+        {localizedPlans.map((plan) => {
           const isCurrent = currentPlan === plan.key;
           const Icon = plan.icon;
           return (
@@ -197,7 +243,7 @@ export default function BillingSettingsPage() {
               {plan.popular && (
                 <span className="absolute -top-3 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-[#28242d] px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#fffdf8] shadow-lg shadow-[#28242d]/15">
                   <Sparkles size={11} />
-                  Recommended
+                  {copy.billing.recommended}
                 </span>
               )}
               <div className="flex items-start justify-between gap-3">
@@ -214,7 +260,7 @@ export default function BillingSettingsPage() {
                 </div>
                 {isCurrent && (
                   <span className="rounded-full bg-[#deebe4] px-2.5 py-1 text-[11px] font-extrabold text-[#315d4f]">
-                    Current
+                    {copy.billing.current}
                   </span>
                 )}
               </div>
@@ -257,7 +303,7 @@ export default function BillingSettingsPage() {
                         : "border border-[#d9d0c2] bg-[#fffdf8] text-[#5e5661] hover:border-[#c7bcad] hover:bg-[#fffaf3]"
                   } disabled:opacity-75`}
                 >
-                  {isCurrent ? "Current plan" : plan.cta}
+                  {isCurrent ? copy.billing.currentPlanCta : plan.cta}
                   {!isCurrent && plan.popular && !plan.ctaDisabled && <ArrowRight size={16} />}
                 </button>
               </div>

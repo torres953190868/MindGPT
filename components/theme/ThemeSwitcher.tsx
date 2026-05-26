@@ -1,11 +1,13 @@
 "use client";
 
 import { Check } from "lucide-react";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import { BRANCHMIND_THEMES } from "@/lib/theme";
 import { useTheme } from "./ThemeProvider";
 
 export function ThemeSwitcher() {
   const { theme, setTheme } = useTheme();
+  const { copy } = useLanguage();
 
   return (
     <div
@@ -40,10 +42,12 @@ export function ThemeSwitcher() {
                     />
                   ))}
                 </span>
-                <span className="text-sm font-black">{themeOption.name}</span>
+              <span className="text-sm font-black">
+                {copy.settings.themes[themeOption.id].name}
+              </span>
               </span>
               <span className="mt-2 block text-sm font-semibold leading-6 text-neutral-600">
-                {themeOption.description}
+                {copy.settings.themes[themeOption.id].description}
               </span>
             </span>
             <span

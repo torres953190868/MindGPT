@@ -1,4 +1,5 @@
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
+import { DEFAULT_LANGUAGE, getBranchMindLanguage, type BranchMindLanguage } from "@/lib/language";
 
 export type AccountPlan = "free" | "pro" | "max";
 
@@ -49,6 +50,7 @@ const FREE_PLAN_DEEPSEEK_MODELS = new Set([
 export type SupabaseAccountPlanInfo = {
   plan: AccountPlan;
   displayName: string | null;
+  languagePreference: BranchMindLanguage;
   subscriptionStatus: string | null;
   limits: (typeof DEFAULT_PLAN_LIMITS)[AccountPlan];
 };
@@ -106,6 +108,7 @@ function defaultPlanInfo(plan = DEFAULT_ACCOUNT_PLAN): SupabaseAccountPlanInfo {
   return {
     plan,
     displayName: null,
+    languagePreference: DEFAULT_LANGUAGE,
     subscriptionStatus: "inactive",
     limits: DEFAULT_PLAN_LIMITS[plan],
   };
@@ -117,7 +120,7 @@ export async function getSupabaseAccountPlanInfo(
   const supabase = getSupabaseAdminClient();
   const { data: planRow, error: planError } = await supabase
     .from("branchmind_user_plans")
-    .select("plan, display_name, subscription_status")
+    .select("plan, display_name, language_preference, subscription_status")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -145,6 +148,7 @@ export async function getSupabaseAccountPlanInfo(
   return {
     plan,
     displayName: planRow.display_name ?? null,
+    languagePreference: getBranchMindLanguage(planRow.language_preference),
     subscriptionStatus: planRow.subscription_status ?? "inactive",
     limits: limitsRow
       ? {

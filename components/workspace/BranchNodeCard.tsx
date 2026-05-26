@@ -9,6 +9,7 @@ import {
   PendingAttachmentChips,
   useChatComposerControls,
 } from "@/components/chat/ChatComposerControls";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import {
   getHighlightedActionClass,
   useHighlightedAction,
@@ -45,6 +46,7 @@ export type BranchNodeData = {
 type QuickActionItem = "branch" | "fold";
 
 export function BranchNodeCard({ data }: NodeProps) {
+  const { copy } = useLanguage();
   const nodeData = data as BranchNodeData;
   const {
     mindNode,
@@ -151,7 +153,7 @@ export function BranchNodeCard({ data }: NodeProps) {
               event.stopPropagation();
               onSelect(mindNode.id);
             }}
-            aria-label={`Open node ${mindNode.title}`}
+            aria-label={copy.workspace.openNode(mindNode.title)}
             aria-pressed={selected}
             data-testid="open-node-button"
             data-node-id={mindNode.id}
@@ -163,10 +165,10 @@ export function BranchNodeCard({ data }: NodeProps) {
               <span>
                 <span className="block text-xs font-black uppercase tracking-[0.16em] text-neutral-500">
                   {mindNode.branchType === "root"
-                    ? "Root"
+                    ? copy.workspace.root
                     : mindNode.branchType === "branch"
-                      ? "Branch"
-                      : "Continue"}
+                      ? copy.workspace.branch
+                      : copy.workspace.continue}
                 </span>
                 <span
                   id={nodeTitleId}
@@ -178,7 +180,7 @@ export function BranchNodeCard({ data }: NodeProps) {
                 </span>
               </span>
               <span
-                aria-label={`${mindNode.children.length} child nodes`}
+                aria-label={copy.workspace.childCount(mindNode.children.length)}
                 className="branch-node-child-count grid h-8 min-w-8 place-items-center rounded-full bg-brand-100 px-2 text-sm font-black text-brand-700"
               >
                 {mindNode.children.length}
@@ -219,8 +221,8 @@ export function BranchNodeCard({ data }: NodeProps) {
               onSelect(mindNode.id);
               onCreate(mindNode.id, "branch");
             }}
-            aria-label="Branch right"
-            title="Branch right"
+            aria-label={copy.workspace.branchRight}
+            title={copy.workspace.branchRight}
             className={`branch-node-quick-action branch-node-quick-action-branch grid h-9 w-9 place-items-center rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 ${getHighlightedActionClass(
               isBranchQuickActionHighlighted,
               "bg-brand-100 text-brand-700",
@@ -239,12 +241,12 @@ export function BranchNodeCard({ data }: NodeProps) {
             aria-label={
               hasChildren
                 ? mindNode.collapsed
-                  ? `Expand children for ${mindNode.title}`
-                  : `Collapse children for ${mindNode.title}`
-                : `Toggle children for ${mindNode.title}`
+                  ? copy.workspace.expandChildrenFor(mindNode.title)
+                  : copy.workspace.collapseChildrenFor(mindNode.title)
+                : copy.workspace.toggleChildren(mindNode.title)
             }
             aria-expanded={hasChildren ? !mindNode.collapsed : undefined}
-            title="Toggle children"
+            title={copy.workspace.toggleChildrenTitle}
             data-testid="toggle-children-button"
             data-node-id={mindNode.id}
             data-highlighted={quickActionHighlight.getDataHighlighted("fold")}
@@ -264,6 +266,7 @@ export function BranchNodeCard({ data }: NodeProps) {
 }
 
 function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) {
+  const { copy } = useLanguage();
   const [input, setInput] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const composerControls = useChatComposerControls({ isBusy: composer.isBusy });
@@ -314,7 +317,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
   if (isHomeComposer) {
     return (
       <form
-        aria-label="Message composer"
+        aria-label={copy.workspace.messageComposer}
         aria-busy={isComposerBusy}
         aria-describedby={displayError ? errorId : undefined}
         data-testid="message-composer"
@@ -338,7 +341,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleInstructionKeyDown}
           disabled={isComposerBusy}
-          aria-label="Message instruction"
+          aria-label={copy.workspace.messageInstruction}
           aria-describedby={displayError ? errorId : undefined}
           data-testid="message-instruction-input"
           placeholder={composer.placeholder}
@@ -374,7 +377,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
           <button
             type="submit"
             disabled={isComposerBusy || !input.trim()}
-            aria-label="Send message"
+            aria-label={copy.workspace.send}
             data-testid="send-message-button"
             className="branchmind-primary-action home-inline-send-button inline-flex h-10 w-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-brand-600 px-0 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-5"
           >
@@ -385,9 +388,9 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
             )}
             <span className="node-detail-send-label hidden sm:inline">
               {composerControls.isPreparingAttachments
-                ? "Preparing..."
+                ? copy.chat.preparing
                 : composer.isBusy
-                  ? "Creating..."
+                  ? copy.common.creating
                   : composer.submitLabel}
             </span>
           </button>
@@ -408,7 +411,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
 
   return (
     <form
-      aria-label="Message composer"
+      aria-label={copy.workspace.messageComposer}
       aria-busy={isComposerBusy}
       aria-describedby={displayError ? errorId : undefined}
       data-testid="message-composer"
@@ -427,7 +430,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
           value={input}
           onChange={(event) => setInput(event.target.value)}
           disabled={isComposerBusy}
-          aria-label="Message instruction"
+          aria-label={copy.workspace.messageInstruction}
           aria-describedby={displayError ? errorId : undefined}
           data-testid="message-instruction-input"
           placeholder={composer.placeholder}
@@ -442,7 +445,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
           <button
             type="submit"
             disabled={isComposerBusy || !input.trim()}
-            aria-label="Send message"
+            aria-label={copy.workspace.send}
             data-testid="send-message-button"
             className="branchmind-primary-action inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-3 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
           >
@@ -453,9 +456,9 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
             )}
             <span className="node-detail-send-label">
               {composerControls.isPreparingAttachments
-                ? "Preparing..."
+                ? copy.chat.preparing
                 : composer.isBusy
-                  ? "Creating..."
+                  ? copy.common.creating
                   : composer.submitLabel}
             </span>
           </button>

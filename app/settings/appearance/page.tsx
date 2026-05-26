@@ -1,7 +1,12 @@
+"use client";
+
 import { Palette } from "lucide-react";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import { ThemeSwitcher } from "@/components/theme/ThemeSwitcher";
 
 export default function AppearanceSettingsPage() {
+  const { copy } = useLanguage();
+
   return (
     <div className="space-y-5">
       <section className="rounded-lg border border-neutral-200 bg-surface-elevated p-5 shadow-md">
@@ -10,9 +15,9 @@ export default function AppearanceSettingsPage() {
             <Palette size={18} />
           </span>
           <div className="min-w-0">
-            <h2 className="text-base font-black text-neutral-900">Interface Theme</h2>
+            <h2 className="text-base font-black text-neutral-900">{copy.settings.appearanceTitle}</h2>
             <p className="mt-0.5 text-sm font-semibold leading-6 text-neutral-600">
-              Choose the workspace skin that best matches your preferred working atmosphere.
+              {copy.settings.appearanceDescription}
             </p>
           </div>
         </div>

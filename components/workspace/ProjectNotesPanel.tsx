@@ -8,6 +8,7 @@ import {
   PanelRightClose,
   PlusCircle,
 } from "lucide-react";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import { exportProjectNotesPdf } from "@/lib/client/project-notes-pdf";
 import { PROJECT_NOTES_MAX_LENGTH } from "@/lib/project-notes";
 import type { MindNode } from "@/lib/types";
@@ -43,16 +44,25 @@ function getLatestAssistantContent(node: MindNode | null) {
   return "";
 }
 
-function formatLatestReplyNote(node: MindNode, content: string) {
-  return `## ${node.title.trim() || "Untitled node"}\n\n${content.trim()}`;
+function formatLatestReplyNote(node: MindNode, content: string, untitledLabel: string) {
+  return `## ${node.title.trim() || untitledLabel}\n\n${content.trim()}`;
 }
 
-function getNotesStatusLabel(status: NotesSaveStatus) {
-  if (status === "dirty") return "Unsaved changes";
-  if (status === "saving") return "Saving...";
-  if (status === "saved") return "Saved";
-  if (status === "error") return "Save failed";
-  return "Ready";
+function getNotesStatusLabel(
+  status: NotesSaveStatus,
+  labels: {
+    ready: string;
+    saveFailed: string;
+    saved: string;
+    saving: string;
+    unsavedChanges: string;
+  },
+) {
+  if (status === "dirty") return labels.unsavedChanges;
+  if (status === "saving") return labels.saving;
+  if (status === "saved") return labels.saved;
+  if (status === "error") return labels.saveFailed;
+  return labels.ready;
 }
 
 export function ProjectNotesPanel({
@@ -65,6 +75,7 @@ export function ProjectNotesPanel({
   onClose,
   backAction,
 }: ProjectNotesPanelProps) {
+  const { copy } = useLanguage();
   const panelId = useId();
   const titleId = `${panelId}-title`;
   const notesErrorId = `${panelId}-notes-error`;
@@ -132,7 +143,7 @@ export function ProjectNotesPanel({
 
         notesDirtyRef.current = true;
         setNotesSaveStatus("error");
-        setNotesSaveError("Notes could not be saved.");
+        setNotesSaveError(copy.workspace.notesCouldNotSave);
       });
     }, NOTES_AUTOSAVE_DELAY_MS);
 
@@ -142,7 +153,7 @@ export function ProjectNotesPanel({
         notesAutosaveTimerRef.current = null;
       }
     };
-  }, [notesDraft, notesSaveStatus, onUpdateProjectNotes, projectId]);
+  }, [copy.workspace.notesCouldNotSave, notesDraft, notesSaveStatus, onUpdateProjectNotes, projectId]);
 
   useEffect(() => {
     return () => {
@@ -158,7 +169,7 @@ export function ProjectNotesPanel({
     if (value.length > PROJECT_NOTES_MAX_LENGTH) {
       notesDirtyRef.current = true;
       setNotesSaveStatus("error");
-      setNotesSaveError("Project notes are too long.");
+      setNotesSaveError(copy.workspace.notesTooLong);
       return;
     }
 
@@ -171,14 +182,14 @@ export function ProjectNotesPanel({
   function handleAppendLatestAiReply() {
     if (!node || !canAppendLatestAiReply) return;
 
-    const section = formatLatestReplyNote(node, latestAssistantContent);
+    const section = formatLatestReplyNote(node, latestAssistantContent, copy.workspace.untitledNode);
     const nextNotes = notesDraft.trim()
       ? `${notesDraft.trimEnd()}\n\n${section}`
       : section;
 
     if (nextNotes.length > PROJECT_NOTES_MAX_LENGTH) {
       setNotesSaveStatus("error");
-      setNotesSaveError("Project notes are too long.");
+      setNotesSaveError(copy.workspace.notesTooLong);
       return;
     }
 
@@ -196,7 +207,7 @@ export function ProjectNotesPanel({
     });
 
     if (!didOpenPrintDialog) {
-      setNotesSaveError("PDF export is not available in this browser.");
+      setNotesSaveError(copy.workspace.saveFailed);
     }
   }
 
@@ -214,7 +225,7 @@ export function ProjectNotesPanel({
             Notes
           </p>
           <h2 id={titleId} className="text-xl font-black leading-snug text-neutral-900">
-            Project notes
+            {copy.workspace.projectNotes}
           </h2>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -233,7 +244,7 @@ export function ProjectNotesPanel({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close project notes"
+            aria-label={copy.workspace.closeProjectNotes}
             data-testid="close-project-notes-button"
             className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/75 text-brand-700 transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100"
           >
@@ -252,18 +263,24 @@ export function ProjectNotesPanel({
               notesSaveStatus === "error" ? "text-danger-600" : "text-neutral-600"
             }`}
           >
-            {getNotesStatusLabel(notesSaveStatus)}
+            {getNotesStatusLabel(notesSaveStatus, {
+              ready: copy.workspace.ready,
+              saveFailed: copy.workspace.saveFailed,
+              saved: copy.common.saved,
+              saving: copy.common.saving,
+              unsavedChanges: copy.workspace.unsavedChanges,
+            })}
           </p>
           <button
             type="button"
             onClick={handleExportPdf}
-            aria-label="Export project notes as PDF"
+            aria-label={copy.common.exportPdf}
             data-testid="export-project-notes-pdf-button"
-            title="Export project notes as PDF"
+            title={copy.common.exportPdf}
             className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-[14px] border border-neutral-200 bg-white/78 px-3 text-xs font-black text-brand-700 transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100"
           >
             <FileDown size={15} />
-            Export PDF
+            {copy.common.exportPdf}
           </button>
         </div>
 
@@ -271,12 +288,12 @@ export function ProjectNotesPanel({
           type="button"
           onClick={handleAppendLatestAiReply}
           disabled={!canAppendLatestAiReply}
-          aria-label="Add latest AI reply to project notes"
+          aria-label={copy.workspace.addLatestAiReply}
           data-testid="add-latest-ai-reply-note-button"
           className="inline-flex h-11 w-full shrink-0 items-center justify-center gap-2 rounded-[16px] bg-brand-100 text-sm font-black text-brand-700 transition hover:bg-brand-200 disabled:cursor-not-allowed disabled:opacity-65"
         >
           <PlusCircle size={16} />
-          Add latest AI reply
+          {copy.workspace.addLatestAiReply}
         </button>
 
         <ProjectNotesEditor
@@ -284,8 +301,8 @@ export function ProjectNotesPanel({
           value={notesDraft}
           onChange={handleNotesChange}
           maxLength={PROJECT_NOTES_MAX_LENGTH}
-          placeholder="Project notes..."
-          ariaLabel="Project notes"
+          placeholder={copy.workspace.projectNotesPlaceholder}
+          ariaLabel={copy.workspace.projectNotes}
           ariaDescribedBy={notesSaveError ? notesErrorId : undefined}
           testId="project-notes-input"
         />

@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { ElementInspectorPlugin } from "@/components/dev/ElementInspectorPlugin";
+import { LanguageProvider } from "@/components/language/LanguageProvider";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import { getBranchMindLanguage, getHtmlLanguage, LANGUAGE_COOKIE_NAME } from "@/lib/language";
 import { getBranchMindTheme, THEME_COOKIE_NAME } from "@/lib/theme";
 import "./globals.css";
 
@@ -17,14 +19,22 @@ export default async function RootLayout({
 }>) {
   const cookieStore = await cookies();
   const initialTheme = getBranchMindTheme(cookieStore.get(THEME_COOKIE_NAME)?.value);
+  const initialLanguage = getBranchMindLanguage(cookieStore.get(LANGUAGE_COOKIE_NAME)?.value);
 
   return (
-    <html lang="en" data-theme={initialTheme} suppressHydrationWarning>
+    <html
+      lang={getHtmlLanguage(initialLanguage)}
+      data-language={initialLanguage}
+      data-theme={initialTheme}
+      suppressHydrationWarning
+    >
       <body>
-        <ThemeProvider initialTheme={initialTheme}>
-          <ElementInspectorPlugin />
-          {children}
-        </ThemeProvider>
+        <LanguageProvider initialLanguage={initialLanguage}>
+          <ThemeProvider initialTheme={initialTheme}>
+            <ElementInspectorPlugin />
+            {children}
+          </ThemeProvider>
+        </LanguageProvider>
       </body>
     </html>
   );

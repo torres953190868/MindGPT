@@ -34,6 +34,7 @@ import {
   type ResizeStartEvent,
   WorkspaceResizeHandle,
 } from "@/components/workspace/WorkspaceResizeHandle";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import { formatRequestReference, readJsonApi } from "@/lib/client/api";
 
 type DocumentStatus =
@@ -326,6 +327,7 @@ async function loadPdfJs() {
 }
 
 export function PdfReader() {
+  const { copy, language } = useLanguage();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -1399,7 +1401,7 @@ export function PdfReader() {
       >
         <div className="mb-4">
           <h2 className="text-xs font-black uppercase tracking-wider text-neutral-800">
-            Documents
+            {language === "zh" ? "文档" : "Documents"}
           </h2>
         </div>
 
@@ -1409,8 +1411,10 @@ export function PdfReader() {
             className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-neutral-300 bg-white px-4 text-center text-xs font-extrabold text-neutral-600 transition hover:border-brand-300 hover:bg-brand-50"
           >
             <Upload size={20} className="text-neutral-400" />
-            <span>Upload PDF</span>
-            <span className="text-[11px] font-bold text-neutral-500">or drag and drop</span>
+            <span>{copy.reader.uploadPdf}</span>
+            <span className="text-[11px] font-bold text-neutral-500">
+              {language === "zh" ? "或拖拽到这里" : "or drag and drop"}
+            </span>
             <input
               ref={fileInputRef}
               id="pdf-upload"
@@ -1429,7 +1433,7 @@ export function PdfReader() {
             ) : (
               <Upload size={15} />
             )}
-            {uploading ? "Uploading" : "Upload PDF"}
+            {uploading ? copy.reader.uploading : copy.reader.uploadPdf}
           </button>
         </form>
 
@@ -1465,18 +1469,18 @@ export function PdfReader() {
                         value={renameValue}
                         onChange={(event) => setRenameValue(event.target.value)}
                         disabled={renameSaving}
-                        aria-label="PDF name"
+                        aria-label={copy.reader.title}
                         className="h-8 w-full rounded-md border border-[#bba7dd] bg-white px-2 text-xs font-black text-[#272131] outline-none focus:ring-2 focus:ring-[#e4d9f5] disabled:cursor-not-allowed disabled:opacity-60"
                       />
                       <span className="mt-1 block text-[11px] font-bold text-[#7a7183]">
-                        {document.pageCount || "-"} pages
+                        {language === "zh" ? `${document.pageCount || "-"} 页` : `${document.pageCount || "-"} pages`}
                       </span>
                     </span>
                     <span className="mt-0.5 flex shrink-0 items-center gap-1">
                       <button
                         type="submit"
                         disabled={!renameValue.trim() || renameSaving}
-                        aria-label="Save PDF name"
+                        aria-label={copy.reader.savePdfName}
                         className="grid h-7 w-7 place-items-center rounded-md bg-[#2f8b63] text-white transition hover:bg-[#277854] disabled:cursor-not-allowed disabled:opacity-45"
                       >
                         {renameSaving ? (
@@ -1489,7 +1493,7 @@ export function PdfReader() {
                         type="button"
                         onClick={cancelRenameDocument}
                         disabled={renameSaving}
-                        aria-label="Cancel rename"
+                        aria-label={copy.common.cancel}
                         className="grid h-7 w-7 place-items-center rounded-md border border-[#e2dbea] bg-white text-[#6f627a] transition hover:bg-[#f8f5fc] disabled:cursor-not-allowed disabled:opacity-45"
                       >
                         <X size={13} />
@@ -1506,7 +1510,7 @@ export function PdfReader() {
                             setError(
                               loadError instanceof Error
                                 ? loadError.message
-                                : "Load failed.",
+                                : copy.settings.failedUpdate,
                             );
                           },
                         )
@@ -1523,7 +1527,7 @@ export function PdfReader() {
                         </span>
                         <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-neutral-600">
                           <span className={`h-1.5 w-1.5 rounded-full ${isSelected ? "bg-success-400" : "bg-neutral-300"}`} />
-                          {document.pageCount || "-"} pages
+                          {language === "zh" ? `${document.pageCount || "-"} 页` : `${document.pageCount || "-"} pages`}
                         </span>
                       </span>
                       {isSelected && (
@@ -1544,7 +1548,7 @@ export function PdfReader() {
                         onClick={() => startRenameDocument(document)}
                         disabled={busy || renameSaving || Boolean(deletingDocumentId)}
                         aria-label={`Rename ${document.title || document.fileName}`}
-                        title="Rename PDF"
+                        title={copy.reader.renamePdf}
                         data-testid="rename-pdf-button"
                         className="grid h-7 w-7 place-items-center rounded-md border border-[#e5dfec] bg-white text-[#5d4d72] transition hover:bg-[#f8f5fc] disabled:cursor-not-allowed disabled:opacity-40"
                       >
@@ -1555,7 +1559,7 @@ export function PdfReader() {
                         onClick={() => handleDeleteDocument(document).catch(() => undefined)}
                         disabled={busy || Boolean(deletingDocumentId)}
                         aria-label={`Delete ${document.title || document.fileName}`}
-                        title="Delete PDF"
+                        title={copy.reader.deletePdf}
                         data-testid="delete-pdf-button"
                         className="grid h-7 w-7 place-items-center rounded-md border border-[#f1d8d6] bg-white text-[#9b4a43] transition hover:bg-[#fff4f2] disabled:cursor-not-allowed disabled:opacity-40"
                       >
@@ -1574,7 +1578,7 @@ export function PdfReader() {
           {documents.length === 0 && (
             <div className="flex flex-col items-center rounded-lg bg-white px-3 py-6 text-center">
               <FileText size={24} className="text-neutral-300" />
-              <p className="mt-2 text-sm font-bold text-neutral-600">No PDFs yet.</p>
+              <p className="mt-2 text-sm font-bold text-neutral-600">{copy.reader.noPdfs}</p>
             </div>
           )}
         </div>
@@ -1583,7 +1587,7 @@ export function PdfReader() {
       <WorkspaceResizeHandle
         orientation="vertical"
         className="lg:order-4"
-        ariaLabel="Resize documents sidebar"
+        ariaLabel={copy.reader.resizeDocuments}
         testId="resize-pdf-documents-sidebar"
         onResizeStart={handleDocumentsSidebarResizeStart}
       />
@@ -1597,12 +1601,12 @@ export function PdfReader() {
             <p className="mt-1 truncate text-[11px] font-bold text-neutral-600">
               {localPreview
                 ? uploading
-                  ? "Local preview - uploading"
-                  : "Local preview"
+                  ? copy.reader.localPreviewUploading
+                  : copy.reader.localPreview
                 : selectedDocument
                   ? statusLabel(selectedDocument.status)
-                  : "No PDF selected"}
-              {pageCount ? ` - ${pageCount} pages` : ""}
+                  : copy.reader.noPdfSelected}
+              {pageCount ? (language === "zh" ? ` - ${pageCount} 页` : ` - ${pageCount} pages`) : ""}
             </p>
           </div>
 
@@ -1615,7 +1619,7 @@ export function PdfReader() {
                   pageNumber ? goToPage(pageNumber - 1).catch(() => undefined) : undefined
                 }
                 className="grid h-9 w-9 place-items-center text-neutral-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Previous page"
+                aria-label={copy.reader.previousPage}
               >
                 <ChevronLeft size={15} />
               </button>
@@ -1629,7 +1633,7 @@ export function PdfReader() {
                 }}
                 onKeyDown={handlePageInputKeyDown}
                 disabled={!hasActivePdf || !pageCount}
-                aria-label="Page number"
+                aria-label={copy.reader.pageNumber}
                 className="h-7 w-10 rounded-md border border-transparent bg-white text-center text-xs font-black text-neutral-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
               />
               <span className="px-1 text-xs font-black text-neutral-600">
@@ -1642,7 +1646,7 @@ export function PdfReader() {
                   pageNumber ? goToPage(pageNumber + 1).catch(() => undefined) : undefined
                 }
                 className="grid h-9 w-9 place-items-center text-neutral-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Next page"
+                aria-label={copy.reader.nextPage}
               >
                 <ChevronRight size={15} />
               </button>
@@ -1658,7 +1662,7 @@ export function PdfReader() {
                   )
                 }
                 className="grid h-9 w-9 place-items-center text-neutral-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Zoom out"
+                aria-label={copy.reader.zoomOut}
               >
                 <Minus size={15} />
               </button>
@@ -1674,7 +1678,7 @@ export function PdfReader() {
                   )
                 }
                 className="grid h-9 w-9 place-items-center text-neutral-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label="Zoom in"
+                aria-label={copy.reader.zoomIn}
               >
                 <Plus size={15} />
               </button>
@@ -1685,20 +1689,20 @@ export function PdfReader() {
                 href={`/api/documents/${selectedId}/file`}
                 download={selectedDocument.fileName}
                 className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 text-xs font-bold text-neutral-700 transition hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-brand-200"
-                aria-label="Download PDF"
+                aria-label={copy.reader.downloadPdf}
               >
                 <Download size={15} />
-                <span className="hidden sm:inline">Download</span>
+                <span className="hidden sm:inline">{copy.reader.download}</span>
               </a>
             ) : (
               <button
                 type="button"
                 disabled
                 className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 text-xs font-bold text-neutral-700 opacity-40"
-                aria-label="Download PDF"
+                aria-label={copy.reader.downloadPdf}
               >
                 <Download size={15} />
-                <span className="hidden sm:inline">Download</span>
+                <span className="hidden sm:inline">{copy.reader.download}</span>
               </button>
             )}
 
@@ -1736,7 +1740,7 @@ export function PdfReader() {
           {!hasActivePdf && (
             <div className="flex min-h-[340px] flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-neutral-300 bg-white/60 text-sm font-bold text-neutral-600 sm:min-h-[520px]">
               <FileText size={32} className="text-neutral-300" />
-              <span>Select a PDF to start reading</span>
+              <span>{copy.reader.selectPdfReading}</span>
             </div>
           )}
 
@@ -1756,7 +1760,7 @@ export function PdfReader() {
             <div className="pointer-events-none absolute inset-0 grid place-items-center bg-[#f4f4f7]/70">
               <p className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-3 text-sm font-black text-neutral-700 shadow-md">
                 <Loader2 size={16} className="animate-spin" />
-                {pdfLoading ? "Loading PDF" : "Rendering page"}
+                {pdfLoading ? copy.reader.loadingPdf : language === "zh" ? "正在渲染页面" : "Rendering page"}
               </p>
             </div>
           )}
@@ -1775,7 +1779,7 @@ export function PdfReader() {
       <WorkspaceResizeHandle
         orientation="vertical"
         className="lg:order-2"
-        ariaLabel="Resize PDF tools sidebar"
+        ariaLabel={copy.reader.resizeTools}
         testId="resize-pdf-tools-sidebar"
         onResizeStart={handleToolsSidebarResizeStart}
       />
@@ -1789,7 +1793,7 @@ export function PdfReader() {
           className="flex min-h-0 flex-1 flex-col p-3 sm:p-4"
         >
           <h2 className="text-[11px] font-black uppercase tracking-wider text-neutral-800">
-            Table of Contents
+            {language === "zh" ? "目录" : "Table of Contents"}
           </h2>
           <div
             data-testid="pdf-toc-list"
@@ -1810,7 +1814,7 @@ export function PdfReader() {
                         type="button"
                         data-testid="toc-section-toggle"
                         data-section-id={section.id}
-                        aria-label={`${isExpanded ? "Collapse" : "Expand"} ${
+                        aria-label={`${isExpanded ? copy.common.close : language === "zh" ? "展开" : "Expand"} ${
                           section.title
                         }`}
                         aria-expanded={isExpanded}
@@ -1867,7 +1871,7 @@ export function PdfReader() {
               <div className="flex flex-col items-center rounded-lg bg-white px-3 py-6 text-center">
                 <FileText size={24} className="text-neutral-300" />
                 <p className="mt-2 text-sm font-bold text-neutral-600">
-                  No sections detected yet.
+                  {language === "zh" ? "还没有检测到章节。" : "No sections detected yet."}
                 </p>
               </div>
             )}
@@ -1901,8 +1905,8 @@ export function PdfReader() {
                 <RefreshCcw size={14} />
               )}
               {isDocumentProcessing(selectedDocument.status)
-                ? "Preparing PDF"
-                : "Enable Ask PDF"}
+                ? copy.reader.preparingPdf
+                : copy.reader.enableAskPdf}
             </button>
           )}
 
@@ -1916,7 +1920,7 @@ export function PdfReader() {
               onChange={(event) => setAskQuestion(event.target.value)}
               disabled={!selectedDocument || !canAskPdf || askLoading}
               data-testid="ask-pdf-input"
-              placeholder="Ask anything about this PDF..."
+              placeholder={copy.reader.askAnything}
               rows={3}
               className="min-h-20 w-full resize-none rounded-md border border-neutral-200 bg-white p-3 text-xs font-bold leading-5 text-neutral-800 outline-none placeholder:text-neutral-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-60"
             />
@@ -1931,7 +1935,7 @@ export function PdfReader() {
               ) : (
                 <Send size={14} />
               )}
-              Ask
+              {language === "zh" ? "提问" : "Ask"}
             </button>
           </form>
 
@@ -2007,10 +2011,10 @@ export function PdfReader() {
             {!askResult && !sourceChunk && !sourceLoading && (
               <p className="rounded-md bg-white px-3 py-4 text-xs font-bold leading-5 text-neutral-600">
                 {selectedDocument?.status === "indexed"
-                  ? "Ready"
+                  ? copy.reader.ready
                   : selectedDocument
-                    ? "Index this PDF to ask grounded questions."
-                    : "Select a PDF to ask questions."}
+                    ? copy.reader.indexToAsk
+                    : copy.reader.selectPdfAsk}
               </p>
             )}
           </div>

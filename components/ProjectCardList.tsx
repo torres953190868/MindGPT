@@ -37,6 +37,7 @@ import {
   X,
 } from "lucide-react";
 import { AuthPanel } from "@/components/AuthPanel";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import { downloadProjectJson, importProjectJsonFile } from "@/lib/project-export";
 import { useBranchMindStore } from "@/store/useBranchMindStore";
 
@@ -47,8 +48,8 @@ const projectDateFormatter = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 });
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Import failed.";
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
 }
 
 function formatProjectDate(value: string) {
@@ -57,16 +58,13 @@ function formatProjectDate(value: string) {
   return projectDateFormatter.format(date);
 }
 
-function formatNodeCount(count: number) {
-  return `${count} ${count === 1 ? "node" : "nodes"}`;
-}
-
 function getProjectUpdatedTime(updatedAt: string) {
   const timestamp = Date.parse(updatedAt);
   return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
 }
 
 export function ProjectCardList() {
+  const { copy } = useLanguage();
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
@@ -341,11 +339,11 @@ export function ProjectCardList() {
 
       setImportStatus(
         result.importedCount > 0
-          ? `Imported ${result.importedCount} of ${result.sourceCount} project(s).`
-          : "No new projects were imported. The selected project already exists.",
+          ? copy.projects.importedCount(result.importedCount, result.sourceCount)
+          : copy.projects.noProjectsImported,
       );
     } catch (error) {
-      setImportError(getErrorMessage(error));
+      setImportError(getErrorMessage(error, copy.settings.failedUpdate));
     } finally {
       setIsImporting(false);
     }
@@ -382,14 +380,13 @@ export function ProjectCardList() {
                   id="delete-project-dialog-title"
                   className="text-lg font-extrabold text-neutral-900"
                 >
-                  Delete project?
+                  {copy.projects.deleteProjectPrompt}
                 </h2>
                 <p
                   id="delete-project-dialog-description"
                   className="mt-2 text-sm font-semibold leading-6 text-neutral-700"
                 >
-                  This permanently removes &quot;{projectPendingDeletion.title}&quot;
-                  from BranchMind. Export JSON first if you need a copy.
+                  {copy.projects.deleteBody(projectPendingDeletion.title)}
                 </p>
               </div>
             </div>
@@ -403,7 +400,7 @@ export function ProjectCardList() {
                 data-testid="cancel-delete-project-button"
                 className="inline-flex min-h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-extrabold text-neutral-700 transition hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Cancel
+                {copy.common.cancel}
               </button>
               <button
                 type="button"
@@ -412,7 +409,7 @@ export function ProjectCardList() {
                 data-testid="confirm-delete-project-button"
                 className="inline-flex min-h-10 items-center justify-center rounded-md bg-danger-500 px-4 text-sm font-extrabold text-white transition hover:bg-danger-600 focus:outline-none focus:ring-2 focus:ring-danger-200 disabled:cursor-not-allowed disabled:opacity-65"
               >
-                {isDeletingProject ? "Deleting..." : "Delete"}
+                {isDeletingProject ? copy.projects.deleting : copy.common.delete}
               </button>
             </div>
           </section>
@@ -425,7 +422,7 @@ export function ProjectCardList() {
         accept="application/json,.json"
         disabled={isImporting}
         onChange={handleImportProject}
-        aria-label="Import BranchMind JSON project"
+        aria-label={copy.projects.importBranchMindJson}
         data-testid="project-import-json-input"
         className="sr-only"
       />
@@ -443,7 +440,7 @@ export function ProjectCardList() {
         </Link>
 
         <nav
-          aria-label="Projects navigation"
+          aria-label={copy.common.projects}
           data-testid="projects-navigation"
           className="mt-3 flex gap-1 overflow-x-auto pb-1 text-sm font-bold lg:mt-5 lg:grid lg:overflow-visible lg:pb-0"
         >
@@ -454,7 +451,7 @@ export function ProjectCardList() {
           >
             <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-500" />
             <Folder size={16} />
-            Projects
+            {copy.common.projects}
           </Link>
           <button
             type="button"
@@ -462,14 +459,14 @@ export function ProjectCardList() {
             disabled={!hydrated || !recentProject}
             aria-label={
               recentProject
-                ? `Open most recent project, ${recentProject.title}`
-                : "Open most recent project"
+                ? copy.projects.openMostRecentProject(recentProject.title)
+                : copy.projects.openMostRecent
             }
             data-testid="open-recent-project-button"
             className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40 disabled:cursor-not-allowed disabled:text-neutral-500 disabled:opacity-70 disabled:hover:bg-transparent"
           >
             <Clock3 size={16} />
-            Recent
+            {copy.projects.recent}
           </button>
           <button
             type="button"
@@ -477,7 +474,7 @@ export function ProjectCardList() {
             className="inline-flex min-h-10 shrink-0 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-500 opacity-70"
           >
             <Star size={16} />
-            Starred
+            {copy.projects.starred}
           </button>
           <button
             type="button"
@@ -485,7 +482,7 @@ export function ProjectCardList() {
             className="inline-flex min-h-10 shrink-0 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-500 opacity-70"
           >
             <Share2 size={16} />
-            Shared with me
+            {copy.projects.sharedWithMe}
           </button>
 
           <div className="my-3 hidden border-t border-neutral-200 lg:block" />
@@ -496,7 +493,7 @@ export function ProjectCardList() {
             className="inline-flex min-h-10 shrink-0 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-500 opacity-70"
           >
             <LayoutTemplate size={16} />
-            Templates
+            {copy.projects.templates}
           </button>
           <button
             type="button"
@@ -505,7 +502,7 @@ export function ProjectCardList() {
             className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Upload size={16} />
-            Import
+            {copy.common.import}
           </button>
 
           <div className="my-3 hidden border-t border-neutral-200 lg:block" />
@@ -516,7 +513,7 @@ export function ProjectCardList() {
             className="inline-flex min-h-10 shrink-0 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-600 opacity-60"
           >
             <Settings size={16} />
-            Settings
+            {copy.common.settings}
           </button>
           <button
             type="button"
@@ -524,21 +521,21 @@ export function ProjectCardList() {
             className="inline-flex min-h-10 shrink-0 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-600 opacity-60"
           >
             <HelpCircle size={16} />
-            Help & feedback
+            {copy.projects.helpFeedback}
           </button>
           <Link
             href="/reader"
             className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
           >
             <FileText size={16} />
-            PDF Reader
+            {copy.projects.pdfReader}
           </Link>
           <Link
             href="/"
             className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
           >
             <Home size={16} />
-            Home
+            {copy.common.home}
           </Link>
         </nav>
 
@@ -555,10 +552,10 @@ export function ProjectCardList() {
             </span>
             <div className="min-w-0">
               <h1 id="projects-title" className="truncate text-lg font-extrabold text-neutral-900">
-                Projects
+                {copy.common.projects}
               </h1>
               <p className="text-xs font-semibold text-neutral-600">
-                {projects.length} {projects.length === 1 ? "project" : "projects"}
+                {copy.projects.projectCount(projects.length)}
               </p>
             </div>
           </div>
@@ -570,7 +567,7 @@ export function ProjectCardList() {
             className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 text-sm font-extrabold text-white shadow-md shadow-brand-200/60 transition hover:-translate-y-0.5 hover:bg-brand-700 hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-brand-200"
           >
             <Plus size={16} />
-            New Project
+            {copy.projects.newProject}
           </button>
         </header>
 
@@ -584,8 +581,8 @@ export function ProjectCardList() {
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search projects"
-                aria-label="Search projects"
+                placeholder={copy.projects.searchProjects}
+                aria-label={copy.projects.searchProjects}
                 data-testid="project-search-input"
                 className="h-10 w-full rounded-md border border-neutral-200 bg-white pl-9 pr-4 text-sm font-medium text-neutral-900 outline-none transition placeholder:text-neutral-600 focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
               />
@@ -596,20 +593,20 @@ export function ProjectCardList() {
                 type="button"
                 onClick={openImportPicker}
                 disabled={isImporting}
-                aria-label="Import BranchMind JSON project"
+                aria-label={copy.projects.importBranchMindJson}
                 data-testid="project-import-json-button"
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-neutral-300 bg-white px-3 text-sm font-extrabold text-neutral-700 transition hover:border-neutral-400 hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65"
               >
                 <Upload size={16} />
-                {isImporting ? "Importing..." : "Import JSON"}
+                {isImporting ? copy.common.importing : copy.common.importJson}
               </button>
               <button
                 type="button"
                 disabled
-                aria-label="Project filter"
+                aria-label={copy.projects.filter}
                 className="inline-flex h-10 cursor-not-allowed items-center justify-center gap-2 rounded-md border border-neutral-300 bg-white px-3 text-sm font-bold text-neutral-600 opacity-60"
               >
-                All projects
+                {copy.projects.allProjects}
                 <ChevronDown size={15} />
               </button>
             </div>
@@ -668,16 +665,16 @@ export function ProjectCardList() {
             </div>
           ) : projects.length === 0 ? (
             <section
-              aria-label="No projects"
+              aria-label={copy.projects.noProjects}
               data-testid="project-empty-state"
               className="project-card-list-panel flex flex-col items-center rounded-lg border border-neutral-200 bg-white p-10 text-center"
             >
               <span className="grid h-14 w-14 place-items-center rounded-2xl bg-brand-50 text-brand-500">
                 <FolderOpen size={28} />
               </span>
-              <h2 className="mt-4 text-lg font-extrabold text-neutral-900">No projects yet</h2>
+              <h2 className="mt-4 text-lg font-extrabold text-neutral-900">{copy.projects.noProjects}</h2>
               <p className="mx-auto mt-2 max-w-md text-sm font-semibold leading-6 text-neutral-700">
-                Create a project with New Project or import a BranchMind JSON export.
+                {copy.projects.noProjectsBody}
               </p>
               <button
                 type="button"
@@ -685,21 +682,21 @@ export function ProjectCardList() {
                 className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-brand-600 px-5 text-sm font-extrabold text-white shadow-md shadow-brand-200/50 transition hover:-translate-y-0.5 hover:bg-brand-700 hover:shadow-lg"
               >
                 <Plus size={16} />
-                New Project
+                {copy.projects.newProject}
               </button>
             </section>
           ) : visibleProjects.length === 0 ? (
             <section
-              aria-label="No matching projects"
+              aria-label={copy.projects.noMatchingProjects}
               data-testid="project-search-empty-state"
               className="project-card-list-panel flex flex-col items-center rounded-lg border border-neutral-200 bg-white p-10 text-center"
             >
               <span className="grid h-14 w-14 place-items-center rounded-2xl bg-neutral-100 text-neutral-600">
                 <Search size={28} />
               </span>
-              <h2 className="mt-4 text-lg font-extrabold text-neutral-900">No matching projects</h2>
+              <h2 className="mt-4 text-lg font-extrabold text-neutral-900">{copy.projects.noMatchingProjects}</h2>
               <p className="mt-2 text-sm font-semibold text-neutral-700">
-                Try a different project title.
+                {copy.projects.tryDifferentTitle}
               </p>
             </section>
           ) : (
@@ -728,8 +725,8 @@ export function ProjectCardList() {
                           onClick={(event) => toggleStar(event, project.id)}
                           aria-label={
                             starredProjectIds.has(project.id)
-                              ? `Unstar ${project.title}`
-                              : `Star ${project.title}`
+                              ? copy.projects.unstar(project.title)
+                              : copy.projects.star(project.title)
                           }
                           className={`grid h-9 w-9 shrink-0 place-items-center rounded-md border border-neutral-200 transition hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-brand-200 ${
                             starredProjectIds.has(project.id)
@@ -770,7 +767,7 @@ export function ProjectCardList() {
                                 }
                                 onKeyDown={handleProjectNameKeyDown}
                                 disabled={isSavingProjectName}
-                                aria-label={`Project name for ${project.title}`}
+                                aria-label={copy.projects.projectNameFor(project.title)}
                                 data-testid="project-name-edit-input"
                                 className="h-10 w-full rounded-md border border-brand-200 bg-white px-3 text-sm font-extrabold text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-60"
                               />
@@ -779,7 +776,7 @@ export function ProjectCardList() {
                                   type="button"
                                   onClick={cancelEditingProject}
                                   disabled={isSavingProjectName}
-                                  aria-label={`Cancel project name edit for ${project.title}`}
+                                  aria-label={copy.projects.cancelProjectName(project.title)}
                                   data-testid="cancel-project-name-button"
                                   className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-neutral-300 bg-white text-neutral-700 transition hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-45"
                                 >
@@ -788,7 +785,7 @@ export function ProjectCardList() {
                                 <button
                                   type="submit"
                                   disabled={!editedProjectName.trim() || isSavingProjectName}
-                                  aria-label={`Save project name for ${project.title}`}
+                                  aria-label={copy.projects.saveProjectName(project.title)}
                                   data-testid="save-project-name-button"
                                   className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-success-600 text-white transition hover:bg-success-700 focus:outline-none focus:ring-2 focus:ring-success-200 disabled:cursor-not-allowed disabled:opacity-45"
                                 >
@@ -811,7 +808,7 @@ export function ProjectCardList() {
                               </h2>
                               <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-neutral-600">
                                 <span className="h-1.5 w-1.5 rounded-full bg-success-400" />
-                                {formatNodeCount(nodeCount)}
+                                {copy.projects.nodeCount(nodeCount)}
                               </p>
                             </button>
                           )}
@@ -852,7 +849,7 @@ export function ProjectCardList() {
                             onClick={(event) =>
                               startEditingProject(event, project.id, project.title)
                             }
-                            aria-label={`Edit ${project.title} name`}
+                            aria-label={copy.projects.editProject(project.title)}
                             data-project-id={project.id}
                             data-testid="edit-project-name-button"
                             className="grid h-9 w-9 place-items-center rounded-md text-neutral-700 transition hover:bg-brand-50 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-45"
@@ -864,7 +861,7 @@ export function ProjectCardList() {
                             onClick={(event) =>
                               handleDeleteProject(event, project.id, project.title)
                             }
-                            aria-label={`Delete ${project.title}`}
+                            aria-label={copy.projects.deleteProject(project.title)}
                             data-project-id={project.id}
                             data-testid="delete-project-button"
                             className="grid h-9 w-9 place-items-center rounded-md text-neutral-700 transition hover:bg-danger-50 hover:text-danger-600 focus:outline-none focus:ring-2 focus:ring-danger-200"
@@ -923,8 +920,8 @@ export function ProjectCardList() {
                                 onClick={(event) => toggleStar(event, project.id)}
                                 aria-label={
                                   starredProjectIds.has(project.id)
-                                    ? `Unstar ${project.title}`
-                                    : `Star ${project.title}`
+                                    ? copy.projects.unstar(project.title)
+                                    : copy.projects.star(project.title)
                                 }
                                 data-project-row-action="true"
                                 className={`grid h-8 w-8 shrink-0 place-items-center rounded-md transition hover:bg-neutral-100 ${
@@ -966,19 +963,19 @@ export function ProjectCardList() {
                                       }
                                       onKeyDown={handleProjectNameKeyDown}
                                       disabled={isSavingProjectName}
-                                      aria-label={`Project name for ${project.title}`}
+                                      aria-label={copy.projects.projectNameFor(project.title)}
                                       data-testid="project-name-edit-input"
                                       className="h-9 w-full rounded-md border border-brand-200 bg-white px-3 text-sm font-extrabold text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-60"
                                     />
                                     <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-bold text-neutral-600">
                                       <span className="h-1.5 w-1.5 rounded-full bg-success-400" />
-                                      {formatNodeCount(nodeCount)}
+                                      {copy.projects.nodeCount(nodeCount)}
                                     </p>
                                   </div>
                                   <button
                                     type="submit"
                                     disabled={!editedProjectName.trim() || isSavingProjectName}
-                                    aria-label={`Save project name for ${project.title}`}
+                                    aria-label={copy.projects.saveProjectName(project.title)}
                                     data-testid="save-project-name-button"
                                     className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-success-600 text-white transition hover:bg-success-700 focus:outline-none focus:ring-2 focus:ring-success-200 disabled:cursor-not-allowed disabled:opacity-45"
                                   >
@@ -992,7 +989,7 @@ export function ProjectCardList() {
                                     type="button"
                                     onClick={cancelEditingProject}
                                     disabled={isSavingProjectName}
-                                    aria-label={`Cancel project name edit for ${project.title}`}
+                                    aria-label={copy.projects.cancelProjectName(project.title)}
                                     data-testid="cancel-project-name-button"
                                     className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-neutral-300 bg-white text-neutral-700 transition hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-45"
                                   >
@@ -1006,7 +1003,7 @@ export function ProjectCardList() {
                                   </h2>
                                   <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-bold text-neutral-600">
                                     <span className="h-1.5 w-1.5 rounded-full bg-success-400" />
-                                    {formatNodeCount(nodeCount)}
+                                    {copy.projects.nodeCount(nodeCount)}
                                   </p>
                                 </div>
                               )}
@@ -1053,7 +1050,7 @@ export function ProjectCardList() {
                                 onClick={(event) =>
                                   startEditingProject(event, project.id, project.title)
                                 }
-                                aria-label={`Edit ${project.title} name`}
+                                aria-label={copy.projects.editProject(project.title)}
                                 data-project-row-action="true"
                                 data-project-id={project.id}
                                 data-testid="edit-project-name-button"
@@ -1066,7 +1063,7 @@ export function ProjectCardList() {
                                 onClick={(event) =>
                                   handleDeleteProject(event, project.id, project.title)
                                 }
-                                aria-label={`Delete ${project.title}`}
+                                aria-label={copy.projects.deleteProject(project.title)}
                                 data-project-row-action="true"
                                 data-project-id={project.id}
                                 data-testid="delete-project-button"
@@ -1083,7 +1080,7 @@ export function ProjectCardList() {
                 </table>
               </div>
               <p className="border-t border-neutral-200 px-4 py-3 text-center text-xs font-semibold text-neutral-600">
-                Showing {visibleProjects.length} of {projects.length} projects
+                {copy.projects.showing(visibleProjects.length, projects.length)}
               </p>
             </div>
           )}

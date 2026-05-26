@@ -18,6 +18,7 @@ import {
   useState,
 } from "react";
 import { AuthPanel } from "@/components/AuthPanel";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import { getNodeConversationMessages } from "@/lib/graph";
 import type {
   ChatAttachment,
@@ -343,6 +344,7 @@ export function WorkspaceCanvasShell({
   canvasIntro,
   mobileNavigationMode = "tabs",
 }: WorkspaceCanvasShellProps) {
+  const { copy } = useLanguage();
   const workspaceGridRef = useRef<HTMLDivElement | null>(null);
   const workspaceSidebarRestoreWidthRef = useRef(WORKSPACE_SIDEBAR_DEFAULT_WIDTH);
   const detailPanelRestoreWidthRef = useRef(DETAIL_PANEL_DEFAULT_WIDTH);
@@ -1006,7 +1008,7 @@ export function WorkspaceCanvasShell({
             className="inline-flex min-h-9 items-center gap-2 rounded-xl bg-white px-3 text-xs font-black text-danger-700 transition hover:bg-danger-50"
           >
             <RefreshCcw size={15} />
-            Retry
+            {copy.common.retry}
           </button>
         </div>
       )}
@@ -1014,7 +1016,7 @@ export function WorkspaceCanvasShell({
       {isAnyMobileDrawerOpen && (
         <button
           type="button"
-          aria-label="Close side panels"
+          aria-label={copy.workspace.closeSidePanels}
           data-testid="mobile-drawer-backdrop"
           onClick={handleCloseMobileDrawers}
           className="fixed inset-0 z-30 bg-neutral-900/20 backdrop-blur-[1px] lg:hidden"
@@ -1024,7 +1026,7 @@ export function WorkspaceCanvasShell({
       {!usesMobileDrawers && (
         <div
           role="tablist"
-          aria-label="Workspace mobile views"
+          aria-label={copy.workspace.views}
           data-testid="workspace-mobile-view-tabs"
           className={mobileTabsClassName}
         >
@@ -1046,7 +1048,15 @@ export function WorkspaceCanvasShell({
                 }`}
               >
                 {tab.icon}
-                <span>{tab.label}</span>
+                <span>
+                  {tab.id === "map"
+                    ? copy.workspace.map
+                    : tab.id === "outline"
+                      ? copy.workspace.outline
+                      : tab.id === "chat"
+                        ? copy.workspace.chat
+                        : copy.common.notes}
+                </span>
               </button>
             );
           })}
@@ -1072,7 +1082,7 @@ export function WorkspaceCanvasShell({
         {!isWorkspaceSidebarCollapsed && (
           <WorkspaceResizeHandle
             orientation="vertical"
-            ariaLabel="Resize workspace sidebar"
+            ariaLabel={copy.workspace.resizeSidebar}
             testId="resize-workspace-sidebar"
             onResizeStart={handleWorkspaceSidebarResizeStart}
           />
@@ -1083,7 +1093,7 @@ export function WorkspaceCanvasShell({
           className={mapShellClassName}
         >
           <h2 id="mind-map-section-title" className="sr-only">
-            Mind map canvas
+            {copy.workspace.map}
           </h2>
           {canvasIntro && (
             <div
@@ -1096,7 +1106,7 @@ export function WorkspaceCanvasShell({
           {shouldRenderWorkspaceSidebarToggle && (
             <CanvasCornerToggleButton
               side="left"
-              ariaLabel="Expand workspace sidebar"
+              ariaLabel={copy.workspace.expandSidebar}
               testId="expand-workspace-sidebar-button"
               expanded={isWorkspaceSidebarMobileDrawerOpen || !isWorkspaceSidebarCollapsed}
               showOnMobile={usesMobileDrawers}
@@ -1109,7 +1119,7 @@ export function WorkspaceCanvasShell({
           {shouldRenderNodeDetailPanelToggle && (
             <CanvasCornerToggleButton
               side="right"
-              ariaLabel="Expand node details panel"
+              ariaLabel={copy.workspace.expandNodeDetails}
               testId="expand-node-detail-panel-button"
               expanded={isNodeDetailMobileDrawerOpen || !isNodeDetailPanelCollapsed}
               showOnMobile={usesMobileDrawers}
@@ -1141,7 +1151,7 @@ export function WorkspaceCanvasShell({
         {!isNodeDetailPanelCollapsed && (
           <WorkspaceResizeHandle
             orientation="vertical"
-            ariaLabel="Resize node details panel"
+            ariaLabel={copy.workspace.resizeNodeDetails}
             testId="resize-node-details-panel"
             onResizeStart={handlePanelResizeStart}
           />
@@ -1179,7 +1189,7 @@ export function WorkspaceCanvasShell({
         {shouldShowProjectNotesDrawer && (
           <WorkspaceResizeHandle
             orientation="vertical"
-            ariaLabel="Resize project notes panel"
+            ariaLabel={copy.workspace.resizeProjectNotes}
             testId="resize-project-notes-panel"
             onResizeStart={handleProjectNotesPanelResizeStart}
           />
@@ -1206,7 +1216,7 @@ export function WorkspaceCanvasShell({
               backAction={
                 isProjectNotesMobileViewOpen
                   ? {
-                      label: "Back to chat",
+                      label: copy.workspace.backToChat,
                       onClick: handleReturnToChatFromProjectNotes,
                     }
                   : undefined

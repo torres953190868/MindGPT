@@ -14,6 +14,7 @@ const account: AccountDto = {
   email: null,
   accountName: "learner",
   displayName: "Learner",
+  languagePreference: "zh",
   authMode: "supabase",
   authConfigured: true,
   plan: "pro",

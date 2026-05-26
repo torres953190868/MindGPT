@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { CheckCircle2, KeyRound, Loader2, ShieldCheck, UserCircle } from "lucide-react";
 import type { AccountDto } from "@/app/api/account/route";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import { useAuthStore } from "@/store/useAuthStore";
 
 function getInitial(accountName: string | null | undefined) {
@@ -35,6 +36,7 @@ function SettingsCard({
 }
 
 export default function AccountSettingsPage() {
+  const { copy } = useLanguage();
   const setAccountCache = useAuthStore((state) => state.setAccountCache);
   const [account, setAccount] = useState<AccountDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,7 +70,7 @@ export default function AccountSettingsPage() {
 
   async function handleUpdateName() {
     if (account?.authMode !== "supabase") {
-      setNameMessage("Sign in to update your profile.");
+      setNameMessage(copy.settings.signInProfile);
       return;
     }
 
@@ -85,9 +87,9 @@ export default function AccountSettingsPage() {
         const updatedAccount = data as AccountDto;
         setAccount(updatedAccount);
         setAccountCache(updatedAccount);
-        setNameMessage("Display name updated.");
+        setNameMessage(copy.settings.displayNameSaved);
       } else {
-        setNameMessage(data?.error?.message ?? "Failed to update.");
+        setNameMessage(data?.error?.message ?? copy.settings.failedUpdate);
       }
     } finally {
       setSavingName(false);
@@ -97,16 +99,16 @@ export default function AccountSettingsPage() {
   async function handleUpdatePassword() {
     setPasswordMessage(null);
     if (account?.authMode !== "supabase") {
-      setPasswordMessage("Sign in to update your password.");
+      setPasswordMessage(copy.settings.signInPassword);
       return;
     }
 
     if (newPassword.length < 8) {
-      setPasswordMessage("Password must be at least 8 characters.");
+      setPasswordMessage(copy.settings.passwordMin);
       return;
     }
     if (newPassword !== confirmPassword) {
-      setPasswordMessage("Passwords do not match.");
+      setPasswordMessage(copy.settings.passwordMismatch);
       return;
     }
 
@@ -120,10 +122,10 @@ export default function AccountSettingsPage() {
       if (res.ok) {
         setNewPassword("");
         setConfirmPassword("");
-        setPasswordMessage("Password updated successfully.");
+        setPasswordMessage(copy.settings.passwordUpdated);
       } else {
         const data = await res.json().catch(() => null);
-        setPasswordMessage(data?.error?.message ?? "Failed to update password.");
+        setPasswordMessage(data?.error?.message ?? copy.settings.failedUpdate);
       }
     } finally {
       setSavingPassword(false);
@@ -145,20 +147,20 @@ export default function AccountSettingsPage() {
   const isGuestMode = authMode === "guest";
   const canEditAccount = authMode === "supabase";
   const profileName =
-    account?.displayName ?? accountName ?? (isLocalMode ? "Local workspace" : "BranchMind account");
+    account?.displayName ?? accountName ?? (isLocalMode ? copy.settings.localWorkspace : copy.accountMenu.branchMindAccount);
   const profileMeta =
-    accountName ?? (isLocalMode ? "Anonymous browser session" : "Sign in to choose an account name");
+    accountName ?? (isLocalMode ? copy.settings.noAccountNameLocal : copy.settings.signInAddAccountName);
   const accountNameTitle =
-    accountName ?? (isLocalMode ? "No account name attached" : "Sign in to add an account name");
+    accountName ?? (isLocalMode ? copy.settings.accountNameMissingLocal : copy.settings.accountNameMissingSignedOut);
   const accountNameDescription = accountName
-    ? "Used for account-name and password sign-in."
+    ? copy.settings.accountNameWithValue
     : isLocalMode
-      ? "This environment is using local storage, so there is no account name to show."
-      : "Your account name appears here after you sign in.";
+      ? copy.settings.accountNameLocalDescription
+      : copy.settings.signInAddAccountName;
 
   return (
     <div className="space-y-5">
-      <SettingsCard title="Profile" description="Your public profile information.">
+      <SettingsCard title={copy.settings.profile} description={copy.settings.profileDescription}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-4">
             <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-success-50 text-lg font-black text-success-700 ring-1 ring-inset ring-success-100">
@@ -171,12 +173,12 @@ export default function AccountSettingsPage() {
           </div>
           <span className="inline-flex w-fit items-center gap-1.5 rounded-full border border-neutral-200 bg-surface-muted px-3 py-1.5 text-xs font-black text-neutral-700">
             <ShieldCheck size={14} />
-            {canEditAccount ? "Cloud account" : isLocalMode ? "Local workspace" : "Signed out"}
+            {canEditAccount ? copy.settings.cloudAccount : isLocalMode ? copy.settings.localWorkspace : copy.settings.signedOut}
           </span>
         </div>
       </SettingsCard>
 
-      <SettingsCard title="Display Name" description="This is how your name appears across BranchMind.">
+      <SettingsCard title={copy.settings.displayName} description={copy.settings.displayNameDescription}>
         <div className="space-y-3">
           <div className="relative">
             <UserCircle size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
@@ -185,7 +187,7 @@ export default function AccountSettingsPage() {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               disabled={!canEditAccount}
-              placeholder={canEditAccount ? "Your display name" : "Sign in to edit your name"}
+              placeholder={canEditAccount ? copy.settings.yourDisplayName : copy.settings.signInEditName}
               className={`${inputClassName} pl-9`}
             />
           </div>
@@ -197,23 +199,23 @@ export default function AccountSettingsPage() {
               className={primaryButtonClassName}
             >
               {savingName && <Loader2 size={14} className="animate-spin" />}
-              Save
+              {copy.settings.save}
             </button>
             {nameMessage && (
-              <p className={`text-sm font-bold ${nameMessage.includes("updated") ? "text-success-600" : "text-danger-600"}`}>
+              <p className={`text-sm font-bold ${nameMessage === copy.settings.displayNameSaved ? "text-success-600" : "text-danger-600"}`}>
                 {nameMessage}
               </p>
             )}
           </div>
           {!canEditAccount && (
             <p className="text-xs font-semibold text-neutral-500">
-              Display names are saved with a signed-in account.
+              {copy.settings.displayNamesNeedSignIn}
             </p>
           )}
         </div>
       </SettingsCard>
 
-      <SettingsCard title="Account Name" description="Your account name is used for password sign-in.">
+      <SettingsCard title={copy.settings.accountName} description={copy.settings.accountNameDescription}>
         <div className="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-surface-muted px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-elevated text-neutral-600 ring-1 ring-inset ring-neutral-200">
@@ -229,7 +231,7 @@ export default function AccountSettingsPage() {
           {accountName && (
             <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-success-50 px-2.5 py-1 text-xs font-black text-success-700">
               <CheckCircle2 size={13} />
-              Active
+              {copy.common.active}
             </span>
           )}
           {isGuestMode && (
@@ -237,20 +239,20 @@ export default function AccountSettingsPage() {
               href="/auth/sign-in?next=/settings/account"
               className="inline-flex min-h-9 w-fit items-center justify-center rounded-lg bg-neutral-900 px-3 text-xs font-black text-white transition hover:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-brand-200"
             >
-              Sign in
+              {copy.common.signIn}
             </Link>
           )}
         </div>
       </SettingsCard>
 
-      <SettingsCard title="Password" description="Update your password to keep your account secure.">
+      <SettingsCard title={copy.settings.password} description={copy.settings.passwordDescription}>
         {canEditAccount ? (
           <div className="space-y-3">
             <input
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="New password"
+              placeholder={copy.settings.passwordPlaceholder}
               autoComplete="new-password"
               className={inputClassName}
             />
@@ -258,7 +260,7 @@ export default function AccountSettingsPage() {
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Confirm new password"
+              placeholder={copy.auth.confirmPassword}
               autoComplete="new-password"
               className={inputClassName}
             />
@@ -270,10 +272,10 @@ export default function AccountSettingsPage() {
                 className={primaryButtonClassName}
               >
                 {savingPassword && <Loader2 size={14} className="animate-spin" />}
-                Update Password
+                {copy.auth.updatePassword}
               </button>
               {passwordMessage && (
-                <p className={`text-sm font-bold ${passwordMessage.includes("successfully") ? "text-success-600" : "text-danger-600"}`}>
+                <p className={`text-sm font-bold ${passwordMessage === copy.settings.passwordUpdated ? "text-success-600" : "text-danger-600"}`}>
                   {passwordMessage}
                 </p>
               )}
@@ -286,12 +288,12 @@ export default function AccountSettingsPage() {
             </span>
             <div>
               <p className="text-sm font-black text-neutral-900">
-                {isLocalMode ? "Password is not used in this workspace" : "Sign in to update your password"}
+                {isLocalMode ? copy.settings.passwordLocal : copy.settings.passwordSignInRequired}
               </p>
               <p className="mt-0.5 text-xs font-semibold leading-5 text-neutral-600">
                 {isLocalMode
-                  ? "Local workspaces use an anonymous browser session instead of account/password auth."
-                  : "Password management is available once your account session is active."}
+                  ? copy.settings.passwordLocalDescription
+                  : copy.settings.passwordSignInRequiredDescription}
               </p>
             </div>
           </div>

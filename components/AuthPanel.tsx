@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { BugReportDialog } from "@/components/BugReportLauncher";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import { writeRememberedAuthAccountName } from "@/lib/client/auth-email";
 import { useAuthStore } from "@/store/useAuthStore";
 import type { AccountDto } from "@/app/api/account/route";
@@ -28,7 +29,7 @@ type AuthPanelProps = {
   variant?: "default" | "sidebar";
 };
 
-function readError(data: unknown) {
+function readError(data: unknown, fallback = "Authentication request failed.") {
   if (data && typeof data === "object") {
     const error = (data as { error?: unknown }).error;
     if (typeof error === "string") return error;
@@ -37,7 +38,7 @@ function readError(data: unknown) {
       if (typeof message === "string") return message;
     }
   }
-  return "Authentication request failed.";
+  return fallback;
 }
 
 function getCurrentNextPath() {
@@ -80,7 +81,17 @@ function getHighestUsageItem(usage: AccountDto["usage"]) {
   return highest;
 }
 
-function UsageBar({ used, limit }: { used: number; limit: number | null }) {
+function UsageBar({
+  used,
+  limit,
+  almostAtLimitLabel,
+  usageLabel,
+}: {
+  used: number;
+  limit: number | null;
+  almostAtLimitLabel: string;
+  usageLabel: string;
+}) {
   if (limit === null) return null;
   const ratio = Math.min(used / limit, 1);
   const percentage = Math.round(ratio * 100);
@@ -89,7 +100,7 @@ function UsageBar({ used, limit }: { used: number; limit: number | null }) {
   return (
     <div className="px-3 pb-2.5 pt-1.5">
       <div className="flex items-center justify-between text-[11px] font-semibold text-neutral-600">
-        <span>{percentage >= 95 ? "Almost at limit" : "Usage"}</span>
+        <span>{percentage >= 95 ? almostAtLimitLabel : usageLabel}</span>
         <span>{used}/{limit}</span>
       </div>
       <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-neutral-200">
@@ -156,6 +167,8 @@ const WHATS_NEW_ITEMS = [
 ];
 
 function WhatsNewModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { copy } = useLanguage();
+
   if (!open) return null;
 
   return (
@@ -169,7 +182,7 @@ function WhatsNewModal({ open, onClose }: { open: boolean; onClose: () => void }
         <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
           <div className="flex items-center gap-2">
             <Sparkles size={18} className="text-brand-500" />
-            <h2 className="text-base font-extrabold text-neutral-900">What&apos;s New</h2>
+            <h2 className="text-base font-extrabold text-neutral-900">{copy.accountMenu.whatsNew}</h2>
           </div>
           <button
             type="button"
@@ -207,6 +220,7 @@ export function AuthPanel({
   placement = "bottom",
   variant = "default",
 }: AuthPanelProps) {
+  const { copy } = useLanguage();
   const pathname = usePathname();
   const menuRef = useRef<HTMLElement | null>(null);
   const sessionStatus = useAuthStore((state) => state.sessionStatus);
@@ -264,11 +278,11 @@ export function AuthPanel({
     try {
       const response = await fetch("/api/auth/logout", { method: "POST" });
       const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(readError(data));
+      if (!response.ok) throw new Error(readError(data, copy.auth.authFailed));
       markSignedOut();
       setIsMenuOpen(false);
     } catch (authError) {
-      setError(authError instanceof Error ? authError.message : "Sign-out failed.");
+      setError(authError instanceof Error ? authError.message : copy.auth.authFailed);
     } finally {
       setSubmittingAction(null);
     }
@@ -299,7 +313,7 @@ export function AuthPanel({
   if (sessionStatus === "idle" || sessionStatus === "loading") {
     return (
       <section
-        aria-label="Loading user account"
+        aria-label={copy.accountMenu.loadingUserAccount}
         data-testid="user-profile-loading"
         className={`${isSidebar ? "flex w-full" : "inline-flex justify-end"} text-sm ${className}`}
       >
@@ -322,7 +336,7 @@ export function AuthPanel({
   if (sessionStatus === "local") {
     return (
       <section
-        aria-label="Local authentication mode"
+        aria-label={copy.accountMenu.localDevMode}
         className={`${isSidebar ? "flex w-full" : "inline-flex"} ${className}`}
       >
         <div
@@ -335,7 +349,7 @@ export function AuthPanel({
           }
         >
           <CheckCircle2 size={16} />
-          Local dev mode
+          {copy.accountMenu.localDevMode}
         </div>
       </section>
     );
@@ -346,7 +360,7 @@ export function AuthPanel({
       <>
         <section
           ref={menuRef}
-          aria-label="User profile"
+          aria-label={copy.accountMenu.userProfile}
           data-testid="user-profile"
           className={`relative ${isSidebar ? "flex w-full" : "inline-flex justify-end"} text-sm ${className}`}
         >
@@ -366,7 +380,7 @@ export function AuthPanel({
               {getInitial(displayAccountName)}
             </span>
             <span className={`${isSidebar ? "flex-1" : "max-w-36"} truncate`}>
-              {displayName ?? "Signed in"}
+              {displayName ?? copy.accountMenu.signedIn}
             </span>
             <ChevronDown size={15} className="shrink-0 text-neutral-500" />
           </button>
@@ -374,7 +388,7 @@ export function AuthPanel({
           {isMenuOpen && (
             <div
               role="dialog"
-              aria-label="Account menu"
+              aria-label={copy.accountMenu.accountMenu}
               data-testid="account-menu-popover"
               onMouseLeave={() => setHoveredMenuItem(null)}
               className={`absolute ${popoverHorizontal} z-50 rounded-xl border border-neutral-200 bg-white p-1.5 text-left shadow-2xl ${popoverPosition}`}
@@ -387,7 +401,7 @@ export function AuthPanel({
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-bold text-neutral-900">
-                      {displayAccountName ?? "BranchMind account"}
+                      {displayAccountName ?? copy.accountMenu.branchMindAccount}
                     </p>
                     <div className="mt-0.5 flex items-center gap-2">
                       {plan && (
@@ -404,7 +418,7 @@ export function AuthPanel({
                           onClick={() => setIsMenuOpen(false)}
                           className="inline-flex items-center gap-0.5 text-[11px] font-bold text-neutral-700 transition hover:text-neutral-900"
                         >
-                          Upgrade
+                          {copy.accountMenu.upgrade}
                           <ArrowUpRight size={12} />
                         </Link>
                       )}
@@ -415,7 +429,12 @@ export function AuthPanel({
 
               {/* Usage bar */}
               {highestUsage && highestUsage.limit !== null && (
-                <UsageBar used={highestUsage.used} limit={highestUsage.limit} />
+                <UsageBar
+                  used={highestUsage.used}
+                  limit={highestUsage.limit}
+                  almostAtLimitLabel={copy.accountMenu.almostAtLimit}
+                  usageLabel={copy.common.usage}
+                />
               )}
 
               {/* Menu links */}
@@ -436,7 +455,7 @@ export function AuthPanel({
                   >
                     <Settings size={14} />
                   </span>
-                  Settings
+                  {copy.common.settings}
                 </Link>
                 <Link
                   href="/settings/usage"
@@ -454,7 +473,7 @@ export function AuthPanel({
                   >
                     <BarChart3 size={14} />
                   </span>
-                  Usage & Limits
+                  {copy.settings.navUsage}
                 </Link>
                 <Link
                   href="/settings/billing"
@@ -472,7 +491,7 @@ export function AuthPanel({
                   >
                     <CreditCard size={14} />
                   </span>
-                  Billing
+                  {copy.settings.billing}
                 </Link>
               </div>
 
@@ -498,7 +517,7 @@ export function AuthPanel({
                   >
                     <Sparkles size={14} />
                   </span>
-                  What&apos;s New
+                  {copy.accountMenu.whatsNew}
                 </button>
                 <button
                   type="button"
@@ -519,7 +538,7 @@ export function AuthPanel({
                   >
                     <Bug size={14} />
                   </span>
-                  Report a bug
+                  {copy.accountMenu.reportBug}
                 </button>
                 <a
                   href="mailto:support@branchmind.app"
@@ -535,7 +554,7 @@ export function AuthPanel({
                   >
                     <HelpCircle size={14} />
                   </span>
-                  Help & Support
+                  {copy.accountMenu.helpSupport}
                 </a>
               </div>
 
@@ -546,7 +565,7 @@ export function AuthPanel({
                 type="button"
                 onClick={handleLogout}
                 disabled={submittingAction === "logout"}
-                aria-label="Sign out"
+                aria-label={copy.common.signOut}
                 data-testid="sign-out-button"
                 {...getAccountMenuHoverHandlers("sign-out")}
                 className={getAccountMenuDangerItemClass(
@@ -561,7 +580,7 @@ export function AuthPanel({
                 >
                   <LogOut size={14} />
                 </span>
-                {submittingAction === "logout" ? "Signing out..." : "Sign out"}
+                {submittingAction === "logout" ? copy.common.signingOut : copy.common.signOut}
               </button>
               {error && (
                 <p role="alert" data-testid="auth-error" className="px-2.5 pb-1 text-xs font-bold text-danger-600">
@@ -585,7 +604,7 @@ export function AuthPanel({
   if (sessionStatus !== "anonymous") {
     return (
       <section
-        aria-label="Account status unavailable"
+        aria-label={copy.accountMenu.unavailableLabel}
         data-testid="user-profile-unavailable"
         className={`${isSidebar ? "flex w-full" : "inline-flex justify-end"} text-sm ${className}`}
       >
@@ -598,7 +617,7 @@ export function AuthPanel({
           }
         >
           <HelpCircle size={16} />
-          Account unavailable
+          {copy.accountMenu.accountUnavailable}
         </div>
       </section>
     );
@@ -607,7 +626,7 @@ export function AuthPanel({
   return (
     <section
       ref={menuRef}
-      aria-label="User sign in"
+      aria-label={copy.accountMenu.userSignIn}
       data-testid="user-sign-in"
       className={`relative ${isSidebar ? "flex w-full" : "inline-flex justify-end"} text-sm ${className}`}
     >
@@ -621,7 +640,7 @@ export function AuthPanel({
         }
       >
         <LogIn size={17} />
-        Sign in
+        {copy.common.signIn}
       </Link>
     </section>
   );

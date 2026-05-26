@@ -405,6 +405,7 @@ export type Database = {
           user_id: string;
           plan: string;
           display_name: string | null;
+          language_preference: string;
           stripe_customer_id: string | null;
           stripe_subscription_id: string | null;
           subscription_status: string | null;
@@ -416,6 +417,7 @@ export type Database = {
           user_id: string;
           plan?: string;
           display_name?: string | null;
+          language_preference?: string;
           stripe_customer_id?: string | null;
           stripe_subscription_id?: string | null;
           subscription_status?: string | null;
@@ -427,6 +429,7 @@ export type Database = {
           user_id?: string;
           plan?: string;
           display_name?: string | null;
+          language_preference?: string;
           stripe_customer_id?: string | null;
           stripe_subscription_id?: string | null;
           subscription_status?: string | null;

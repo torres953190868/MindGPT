@@ -70,6 +70,13 @@ const renameTeamPlanMigration = readFileSync(
   ),
   "utf8",
 );
+const languagePreferenceMigration = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/20260526020000_branchmind_language_preference.sql",
+  ),
+  "utf8",
+);
 
 describe("Supabase foundation migration", () => {
   it("creates the beta persistence and distributed rate-limit tables", () => {
@@ -156,6 +163,13 @@ describe("Supabase foundation migration", () => {
     expect(renameTeamPlanMigration).toContain("where plan = 'team'");
     expect(renameTeamPlanMigration).toContain("values ('max', null, null, null, null)");
     expect(renameTeamPlanMigration).toContain("check (plan in ('free', 'pro', 'max'))");
+  });
+
+  it("stores account language preference with Chinese as the default", () => {
+    expect(languagePreferenceMigration).toContain(
+      "add column if not exists language_preference text not null default 'zh'",
+    );
+    expect(languagePreferenceMigration).toContain("language_preference in ('zh', 'en')");
   });
 
   it("adds admin LLM routing tables and private bug report attachments", () => {

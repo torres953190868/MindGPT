@@ -3,24 +3,59 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { BarChart3, CreditCard, Palette, User } from "lucide-react";
+import { BarChart3, CreditCard, Languages, Palette, User } from "lucide-react";
+import { useLanguage } from "@/components/language/LanguageProvider";
 
-const navItems = [
-  { href: "/settings/account", label: "Account", shortLabel: "Account", icon: User },
-  { href: "/settings/appearance", label: "Appearance", shortLabel: "Theme", icon: Palette },
-  { href: "/settings/usage", label: "Usage & Limits", shortLabel: "Usage", icon: BarChart3 },
-  { href: "/settings/billing", label: "Billing", shortLabel: "Billing", icon: CreditCard },
-];
+const navIcons = {
+  account: User,
+  appearance: Palette,
+  language: Languages,
+  usage: BarChart3,
+  billing: CreditCard,
+};
 
 export function SettingsNav() {
   const pathname = usePathname();
+  const { copy } = useLanguage();
   const [hoveredHref, setHoveredHref] = useState<string | null>(null);
+  const navItems = [
+    {
+      href: "/settings/account",
+      label: copy.settings.navAccount,
+      shortLabel: copy.settings.navAccount,
+      icon: navIcons.account,
+    },
+    {
+      href: "/settings/appearance",
+      label: copy.settings.navAppearance,
+      shortLabel: copy.settings.navAppearanceShort,
+      icon: navIcons.appearance,
+    },
+    {
+      href: "/settings/language",
+      label: copy.settings.language,
+      shortLabel: copy.settings.languageShort,
+      icon: navIcons.language,
+    },
+    {
+      href: "/settings/usage",
+      label: copy.settings.navUsage,
+      shortLabel: copy.settings.navUsageShort,
+      icon: navIcons.usage,
+    },
+    {
+      href: "/settings/billing",
+      label: copy.settings.billing,
+      shortLabel: copy.settings.billingShort,
+      icon: navIcons.billing,
+    },
+  ];
 
   return (
-    <nav aria-label="Settings" className="w-full lg:w-60 lg:shrink-0">
+    <nav aria-label={copy.common.settings} className="w-full lg:w-60 lg:shrink-0">
       <div
         onMouseLeave={() => setHoveredHref(null)}
-        className="grid grid-cols-4 gap-1 rounded-lg border border-neutral-200 bg-surface-elevated/85 p-1 shadow-md backdrop-blur lg:sticky lg:top-8 lg:block lg:space-y-1 lg:p-1.5"
+        className="grid grid-cols-5 gap-1 rounded-lg border border-neutral-200 bg-surface-elevated/85 p-1 shadow-md backdrop-blur lg:sticky lg:top-8 lg:block lg:space-y-1 lg:p-1.5"
       >
         {navItems.map((item) => {
           const isActive = pathname === item.href;

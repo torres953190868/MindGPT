@@ -409,14 +409,18 @@ async function mockAuthSession(
   };
 }
 
-async function mockAccount(page: Page, account: AccountDto) {
+async function mockAccount(
+  page: Page,
+  account: Omit<AccountDto, "languagePreference"> &
+    Partial<Pick<AccountDto, "languagePreference">>,
+) {
   let requestCount = 0;
   await page.route("**/api/account", async (route) => {
     requestCount += 1;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(account),
+      body: JSON.stringify({ languagePreference: "zh", ...account }),
     });
   });
 
@@ -2042,6 +2046,35 @@ test("shows signed-in account menu state", async ({ page }) => {
   );
   await expect(page.getByTestId("report-bug-menu-item")).toBeVisible();
   await expect(page.locator('[data-testid="sign-out-button"]:visible')).toBeVisible();
+});
+
+test("switches the interface language from settings and persists locally", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/settings/language");
+
+  await expect(page.getByRole("heading", { name: "设置" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "界面语言" })).toBeVisible();
+
+  await page.getByRole("radio", { name: /English/ }).click();
+  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Language" })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("radio", { name: /English/ })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+});
+
+test("keeps the language settings navigation usable on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/settings/language");
+
+  const nav = page.getByRole("navigation", { name: "设置" });
+  await expect(nav).toBeVisible();
+  await expect(page.getByRole("link", { name: /语言/ })).toBeVisible();
+  await expect(page.getByRole("radio", { name: /中文/ })).toBeVisible();
 });
 
 test("submits a bug report from the account menu", async ({ page }) => {

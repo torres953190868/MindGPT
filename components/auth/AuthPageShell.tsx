@@ -14,6 +14,7 @@ import {
   LockKeyhole,
   UserRound,
 } from "lucide-react";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import {
   readRememberedAuthAccountName,
   writeRememberedAuthAccountName,
@@ -35,42 +36,7 @@ type ApiResult = {
   error?: string | { message?: string };
 };
 
-const modeContent: Record<
-  AuthMode,
-  {
-    title: string;
-    eyebrow: string;
-    submitLabel: string;
-    pendingLabel: string;
-  }
-> = {
-  "sign-in": {
-    title: "Sign in",
-    eyebrow: "BranchMind account",
-    submitLabel: "Sign in",
-    pendingLabel: "Signing in...",
-  },
-  "sign-up": {
-    title: "Create account",
-    eyebrow: "Account name registration",
-    submitLabel: "Create account",
-    pendingLabel: "Creating account...",
-  },
-  "forgot-password": {
-    title: "Reset password",
-    eyebrow: "Recovery disabled",
-    submitLabel: "Send reset link",
-    pendingLabel: "Sending...",
-  },
-  "reset-password": {
-    title: "Choose new password",
-    eyebrow: "Secure your account",
-    submitLabel: "Update password",
-    pendingLabel: "Updating...",
-  },
-};
-
-function getApiError(data: unknown) {
+function getApiError(data: unknown, fallback: string) {
   if (data && typeof data === "object") {
     const error = (data as ApiResult).error;
     if (typeof error === "string") return error;
@@ -79,24 +45,50 @@ function getApiError(data: unknown) {
     }
   }
 
-  return "Authentication request failed.";
+  return fallback;
 }
 
-async function postJson(path: string, body: Record<string, unknown>) {
+async function postJson(path: string, body: Record<string, unknown>, fallbackError: string) {
   const response = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   const data = (await response.json().catch(() => null)) as ApiResult | null;
-  if (!response.ok) throw new Error(getApiError(data));
+  if (!response.ok) throw new Error(getApiError(data, fallbackError));
   return data ?? {};
 }
 
 export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthPageShellProps) {
+  const { copy } = useLanguage();
   const router = useRouter();
   const refreshAuth = useAuthStore((state) => state.refreshAuth);
-  const content = modeContent[mode];
+  const content = {
+    "sign-in": {
+      title: copy.auth.signIn,
+      eyebrow: copy.auth.branchMindAccount,
+      submitLabel: copy.auth.signIn,
+      pendingLabel: copy.auth.signingIn,
+    },
+    "sign-up": {
+      title: copy.auth.createAccount,
+      eyebrow: copy.auth.signUpEyebrow,
+      submitLabel: copy.auth.createAccount,
+      pendingLabel: copy.auth.creatingAccount,
+    },
+    "forgot-password": {
+      title: copy.auth.resetPassword,
+      eyebrow: copy.auth.forgotEyebrow,
+      submitLabel: copy.auth.sendResetLink,
+      pendingLabel: copy.auth.sending,
+    },
+    "reset-password": {
+      title: copy.auth.chooseNewPassword,
+      eyebrow: copy.auth.secureAccount,
+      submitLabel: copy.auth.updatePassword,
+      pendingLabel: copy.auth.updating,
+    },
+  }[mode];
   const needsAccountName = mode !== "reset-password";
   const needsPassword = mode !== "forgot-password";
   const needsConfirmation = mode === "sign-up" || mode === "reset-password";
@@ -121,19 +113,19 @@ export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthP
 
   function validateForm() {
     const trimmedAccountName = accountName.trim();
-    if (needsAccountName && !trimmedAccountName) return "Account name is required.";
+    if (needsAccountName && !trimmedAccountName) return copy.auth.validationAccountRequired;
     if (mode === "sign-up" && trimmedAccountName.length < 3) {
-      return "Account name must be at least 3 characters.";
+      return copy.auth.validationAccountShort;
     }
     if (mode === "sign-up" && trimmedAccountName.length > 32) {
-      return "Account name must be 32 characters or fewer.";
+      return copy.auth.validationAccountLong;
     }
     if (mode === "sign-up" && !/^[a-z0-9._-]+$/i.test(trimmedAccountName)) {
-      return "Account name can only include letters, numbers, dots, underscores, and hyphens.";
+      return copy.auth.validationAccountChars;
     }
-    if (needsPassword && password.length < 8) return "Password must be at least 8 characters.";
-    if (needsPassword && password.length > 128) return "Password must be 128 characters or fewer.";
-    if (needsConfirmation && password !== confirmPassword) return "Passwords do not match.";
+    if (needsPassword && password.length < 8) return copy.auth.validationPasswordShort;
+    if (needsPassword && password.length > 128) return copy.auth.validationPasswordLong;
+    if (needsConfirmation && password !== confirmPassword) return copy.auth.validationPasswordMismatch;
     return null;
   }
 
@@ -158,7 +150,7 @@ export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthP
           accountName,
           password,
           next: nextPath,
-        });
+        }, copy.auth.authFailed);
         await refreshAuth({ force: true });
         router.push(result.next || nextPath);
         router.refresh();
@@ -170,7 +162,7 @@ export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthP
           accountName,
           password,
           next: nextPath,
-        });
+        }, copy.auth.authFailed);
         setPassword("");
         setConfirmPassword("");
         await refreshAuth({ force: true });
@@ -183,21 +175,21 @@ export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthP
         await postJson("/api/auth/forgot-password", {
           accountName,
           next: nextPath,
-        });
-        setStatus("If that account supports recovery, a reset link is on the way.");
+        }, copy.auth.authFailed);
+        setStatus(copy.auth.recoveryStatus);
         return;
       }
 
       const result = await postJson("/api/auth/update-password", {
         password,
         next: nextPath,
-      });
+      }, copy.auth.authFailed);
       setPassword("");
       setConfirmPassword("");
       router.push(result.next || nextPath);
       router.refresh();
     } catch (authError) {
-      setError(authError instanceof Error ? authError.message : "Authentication failed.");
+      setError(authError instanceof Error ? authError.message : copy.auth.authFailed);
     } finally {
       setIsSubmitting(false);
     }
@@ -210,11 +202,11 @@ export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthP
     setStatus(null);
 
     try {
-      const result = await postJson("/api/auth/google", { next: nextPath });
-      if (!result.url) throw new Error("Google sign-in did not return a redirect URL.");
+      const result = await postJson("/api/auth/google", { next: nextPath }, copy.auth.googleSignInFailed);
+      if (!result.url) throw new Error(copy.auth.googleMissingUrl);
       window.location.assign(result.url);
     } catch (authError) {
-      setError(authError instanceof Error ? authError.message : "Google sign-in failed.");
+      setError(authError instanceof Error ? authError.message : copy.auth.googleSignInFailed);
       setIsSubmitting(false);
     }
   }
@@ -232,14 +224,14 @@ export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthP
             className="inline-flex min-h-11 items-center gap-2 rounded-[18px] border border-white/90 bg-white/75 px-4 py-2.5 text-sm font-extrabold text-neutral-800 shadow-sm transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100"
           >
             <ArrowLeft size={17} />
-            Home
+            {copy.common.home}
           </Link>
           <Link
             href="/projects"
             className="inline-flex min-h-11 items-center gap-2 rounded-[18px] bg-success-50 px-4 py-2.5 text-sm font-black text-success-700 shadow-sm transition hover:bg-success-100 focus:outline-none focus:ring-4 focus:ring-success-100"
           >
             <CheckCircle2 size={16} />
-            Projects
+            {copy.common.projects}
           </Link>
         </header>
 
@@ -258,7 +250,7 @@ export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthP
               {needsAccountName && (
                 <label className="block">
                   <span className="mb-1.5 block text-sm font-black text-neutral-800">
-                    Account name
+                    {copy.auth.accountName}
                   </span>
                   <span className="relative block">
                     <UserRound
@@ -281,7 +273,7 @@ export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthP
 
               {needsPassword && (
                 <label className="block">
-                  <span className="mb-1.5 block text-sm font-black text-neutral-800">Password</span>
+                  <span className="mb-1.5 block text-sm font-black text-neutral-800">{copy.auth.password}</span>
                   <span className="relative block">
                     <LockKeyhole
                       aria-hidden="true"
@@ -301,7 +293,7 @@ export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthP
                       type="button"
                       onClick={() => setShowPassword((visible) => !visible)}
                       className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full text-neutral-600 transition hover:bg-brand-50"
-                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      aria-label={showPassword ? copy.auth.hidePassword : copy.auth.showPassword}
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
@@ -312,7 +304,7 @@ export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthP
               {needsConfirmation && (
                 <label className="block">
                   <span className="mb-1.5 block text-sm font-black text-neutral-800">
-                    Confirm password
+                    {copy.auth.confirmPassword}
                   </span>
                   <span className="relative block">
                     <KeyRound
@@ -353,7 +345,7 @@ export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthP
                 className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[16px] border border-neutral-300 bg-neutral-50 px-4 text-sm font-black text-neutral-900 shadow-sm transition hover:border-neutral-400 hover:bg-white focus:outline-none focus:ring-4 focus:ring-neutral-200 disabled:cursor-not-allowed disabled:opacity-65"
               >
                 <Chrome size={16} />
-                Continue with Google
+                {copy.auth.continueWithGoogle}
               </button>
             )}
 
@@ -378,24 +370,24 @@ export function AuthPageShell({ mode, nextPath, initialAccountName = "" }: AuthP
 
             {(mode === "sign-in" || mode === "sign-up") && (
               <p className="mt-5 text-center text-sm font-semibold text-neutral-600">
-                {mode === "sign-up" ? "Already have an account?" : "Need an account?"}{" "}
+                {mode === "sign-up" ? copy.auth.alreadyHaveAccount : copy.auth.needAccount}{" "}
                 <Link
                   href={alternateHref}
                   className="font-black text-brand-800 underline decoration-brand-200 underline-offset-4"
                 >
-                  {mode === "sign-up" ? "Sign in" : "Create one"}
+                  {mode === "sign-up" ? copy.auth.signIn : copy.auth.createOne}
                 </Link>
               </p>
             )}
 
             {mode === "forgot-password" && (
               <p className="mt-5 text-center text-sm font-semibold text-neutral-600">
-                Remembered it?{" "}
+                {copy.auth.rememberedIt}{" "}
                 <Link
                   href={`/auth/sign-in?${new URLSearchParams({ next: nextPath }).toString()}`}
                   className="font-black text-brand-800 underline decoration-brand-200 underline-offset-4"
                 >
-                  Sign in
+                  {copy.auth.signIn}
                 </Link>
               </p>
             )}

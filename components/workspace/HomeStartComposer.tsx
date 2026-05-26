@@ -8,6 +8,7 @@ import {
   PendingAttachmentChips,
   useChatComposerControls,
 } from "@/components/chat/ChatComposerControls";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import type { ChatAttachment, ChatModelSelection } from "@/lib/types";
 
 type HomeStartComposerProps = {
@@ -35,6 +36,7 @@ export function HomeStartComposer({
   testIdsEnabled = true,
   onSubmit,
 }: HomeStartComposerProps) {
+  const { copy } = useLanguage();
   const [input, setInput] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const composerControls = useChatComposerControls({ isBusy });
@@ -67,7 +69,7 @@ export function HomeStartComposer({
 
   return (
     <form
-      aria-label="Message composer"
+      aria-label={copy.workspace.messageComposer}
       aria-busy={isComposerBusy}
       aria-describedby={displayError ? errorId : undefined}
       data-testid={testIdsEnabled ? "message-composer" : undefined}
@@ -91,7 +93,7 @@ export function HomeStartComposer({
         value={input}
         onChange={(event) => setInput(event.target.value)}
         disabled={isComposerBusy}
-        aria-label="Message instruction"
+        aria-label={copy.workspace.messageInstruction}
         aria-describedby={displayError ? errorId : undefined}
         data-testid={testIdsEnabled ? "message-instruction-input" : undefined}
         placeholder={placeholder}
@@ -122,7 +124,7 @@ export function HomeStartComposer({
       <button
         type="submit"
         disabled={isComposerBusy || !input.trim()}
-        aria-label="Send message"
+        aria-label={copy.workspace.send}
         data-testid={testIdsEnabled ? "send-message-button" : undefined}
         className="branchmind-primary-action inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
       >
@@ -133,9 +135,9 @@ export function HomeStartComposer({
         )}
         <span className="mobile-home-send-label">
           {composerControls.isPreparingAttachments
-            ? "准备中..."
+            ? copy.chat.preparing
             : isBusy
-              ? "创建中..."
+              ? copy.common.creating
               : submitLabel}
         </span>
       </button>

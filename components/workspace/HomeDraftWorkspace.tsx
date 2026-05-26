@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import { ROOT_POSITION } from "@/lib/graph";
 import type {
   ChatAttachment,
@@ -15,30 +16,19 @@ import { WorkspaceCanvasShell } from "./WorkspaceCanvasShell";
 const DRAFT_PROJECT_ID = "home-draft-project";
 const DRAFT_ROOT_NODE_ID = "home-draft-root";
 const DRAFT_TIMESTAMP = "2026-01-01T00:00:00.000Z";
-const HOME_COMPOSER_PLACEHOLDER =
-  "输入一个研究问题，BranchMind 会把理解路径拆成可探索的分支...";
-const HOME_PROMPT_SUGGESTION_GROUPS = [
-  ["拆解论文论点", "规划学习路线", "拆分复杂概念"],
-  ["找到关键假设", "生成追问清单", "搭建理解地图"],
-  ["比较不同观点", "提炼核心问题", "定位知识盲区"],
-  ["发散研究方向", "收束行动计划", "整理学习笔记"],
-];
-const HOME_HERO_TAGLINES = [
-  "你可以外包思考，但是无法外包理解。",
-  "把复杂问题拆开，理解会自己长出来。",
-  "每一次追问，都是一条新的思路分支。",
-  "让灵感发散，让理解收束。",
-];
 const HOME_TAGLINE_INTERVAL_MS = 4000;
 const HOME_TAGLINE_EXIT_MS = 260;
 const HOME_TAGLINE_ENTER_MS = 420;
 
 type HomeTaglinePhase = "idle" | "leaving" | "entering";
 
-function createDraftProject(rootPosition: NodePosition): Project {
+function createDraftProject(
+  rootPosition: NodePosition,
+  copy: ReturnType<typeof useLanguage>["copy"],
+): Project {
   return {
     id: DRAFT_PROJECT_ID,
-    title: "New workspace",
+    title: copy.home.newWorkspace,
     notes: "",
     rootNodeId: DRAFT_ROOT_NODE_ID,
     nodes: {
@@ -46,9 +36,9 @@ function createDraftProject(rootPosition: NodePosition): Project {
         id: DRAFT_ROOT_NODE_ID,
         projectId: DRAFT_PROJECT_ID,
         parentId: null,
-        title: "New node",
+        title: copy.home.newNode,
         titleManuallyEdited: false,
-        summary: "输入一个研究问题，创建你的分支学习画布。",
+        summary: copy.home.draftNodeSummary,
         messages: [],
         children: [],
         position: rootPosition,
@@ -76,6 +66,7 @@ async function ignoreMessageMutation() {
 function ignoreNodeMutation() {}
 
 export function HomeDraftWorkspace() {
+  const { copy } = useLanguage();
   const router = useRouter();
   const [selectedNodeId, setSelectedNodeId] = useState(DRAFT_ROOT_NODE_ID);
   const [rootPosition, setRootPosition] = useState<NodePosition>(ROOT_POSITION);
@@ -86,18 +77,16 @@ export function HomeDraftWorkspace() {
   const creatingProject = useBranchMindStore((state) => state.creatingProject);
   const aiError = useBranchMindStore((state) => state.aiError);
   const clearAiError = useBranchMindStore((state) => state.clearAiError);
-  const draftProject = useMemo(() => createDraftProject(rootPosition), [rootPosition]);
+  const draftProject = useMemo(() => createDraftProject(rootPosition, copy), [copy, rootPosition]);
   const promptSuggestions =
-    HOME_PROMPT_SUGGESTION_GROUPS[
-      taglineIndex % HOME_PROMPT_SUGGESTION_GROUPS.length
-    ];
+    copy.home.suggestions[taglineIndex % copy.home.suggestions.length];
 
   useEffect(() => {
     hydrate();
   }, [hydrate]);
 
   useEffect(() => {
-    if (HOME_HERO_TAGLINES.length < 2) return undefined;
+    if (copy.home.taglines.length < 2) return undefined;
 
     let exitTimer: number | undefined;
     let enterTimer: number | undefined;
@@ -105,7 +94,7 @@ export function HomeDraftWorkspace() {
       setTaglinePhase("leaving");
       exitTimer = window.setTimeout(() => {
         setTaglineIndex(
-          (currentIndex) => (currentIndex + 1) % HOME_HERO_TAGLINES.length,
+          (currentIndex) => (currentIndex + 1) % copy.home.taglines.length,
         );
         setTaglinePhase("entering");
         enterTimer = window.setTimeout(() => {
@@ -119,7 +108,7 @@ export function HomeDraftWorkspace() {
       if (exitTimer !== undefined) window.clearTimeout(exitTimer);
       if (enterTimer !== undefined) window.clearTimeout(enterTimer);
     };
-  }, []);
+  }, [copy.home.taglines]);
 
   const handleSelectNode = useCallback((nodeId: string) => {
     if (nodeId === DRAFT_ROOT_NODE_ID) setSelectedNodeId(nodeId);
@@ -186,7 +175,7 @@ export function HomeDraftWorkspace() {
             aria-live="polite"
             aria-atomic="true"
           >
-            {HOME_HERO_TAGLINES[taglineIndex]}
+            {copy.home.taglines[taglineIndex]}
           </p>
         </div>
       }
@@ -195,8 +184,8 @@ export function HomeDraftWorkspace() {
         isBusy: creatingProject,
         error: aiError,
         onSubmit: handleStartProject,
-        placeholder: HOME_COMPOSER_PLACEHOLDER,
-        submitLabel: "开始",
+        placeholder: copy.home.composerPlaceholder,
+        submitLabel: copy.home.start,
         variant: "home",
         suggestions: promptSuggestions,
         suggestionsAnimationPhase: taglinePhase,
@@ -205,8 +194,8 @@ export function HomeDraftWorkspace() {
         initialSubmit: true,
         onStartProject: handleStartProject,
         showNotesAction: false,
-        composerPlaceholder: HOME_COMPOSER_PLACEHOLDER,
-        submitLabel: "开始",
+        composerPlaceholder: copy.home.composerPlaceholder,
+        submitLabel: copy.home.start,
       }}
     />
   );

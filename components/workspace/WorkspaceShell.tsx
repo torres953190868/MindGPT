@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo } from "react";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import { ProjectLauncher } from "@/components/ProjectLauncher";
 import type { ChatAttachment, ChatModelSelection } from "@/lib/types";
 import { useBranchMindStore } from "@/store/useBranchMindStore";
@@ -11,6 +12,7 @@ type WorkspaceShellProps = {
 };
 
 export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
+  const { copy } = useLanguage();
   const hydrate = useBranchMindStore((state) => state.hydrate);
   const hydrated = useBranchMindStore((state) => state.hydrated);
   const projects = useBranchMindStore((state) => state.projects);
@@ -80,10 +82,10 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
         return;
       }
 
-      const instruction = "Continue with the next key knowledge point.";
+      const instruction = copy.workspace.initialInstruction;
       void createChildNode(nodeId, mode, instruction);
     },
-    [createBlankChildNode, createChildNode],
+    [copy.workspace.initialInstruction, createBlankChildNode, createChildNode],
   );
 
   const handleCreateFromPanel = useCallback(
@@ -110,13 +112,13 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
   if (!hydrated) {
     return (
       <main
-        aria-label="Loading BranchMind workspace"
+        aria-label={copy.workspace.loading}
         aria-busy="true"
         data-testid="workspace-loading-state"
         className="grid min-h-screen place-items-center px-5 text-lg font-black text-neutral-700"
       >
         <p role="status" aria-live="polite">
-          Loading BranchMind...
+          {copy.workspace.loading}
         </p>
       </main>
     );
@@ -137,9 +139,9 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
             id="workspace-project-not-found-title"
             className="text-3xl font-black text-neutral-900"
           >
-            Project not found
+            {copy.workspace.projectNotFound}
           </h1>
-          <p className="mt-3 text-neutral-600">Create a new BranchMind project.</p>
+          <p className="mt-3 text-neutral-600">{copy.workspace.projectNotFoundBody}</p>
           <div className="mt-6">
             <ProjectLauncher />
           </div>
@@ -169,7 +171,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
       syncFailure={
         pendingProjectSync?.status === "failed"
           ? {
-              message: `Sync failed. ${pendingProjectSync.error ?? "Your project is saved in this browser."}`,
+              message: copy.workspace.syncFailed(pendingProjectSync.error ?? undefined),
               onRetry: () => retryPendingProjectSync(projectId),
             }
           : null

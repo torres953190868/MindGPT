@@ -37,6 +37,7 @@ import {
   PendingAttachmentChips,
   useChatComposerControls,
 } from "@/components/chat/ChatComposerControls";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import {
   getHighlightedActionClass,
   useHighlightedAction,
@@ -177,11 +178,13 @@ function MessageActionButton({
 }
 
 function MessageAttachmentList({ attachments }: { attachments: ChatAttachment[] }) {
+  const { copy } = useLanguage();
+
   if (attachments.length === 0) return null;
 
   return (
     <ul
-      aria-label="Message attachments"
+      aria-label={copy.chat.pendingAttachments}
       data-testid="message-attachment-list"
       className="mt-3 flex flex-wrap gap-2"
     >
@@ -198,7 +201,10 @@ function MessageAttachmentList({ attachments }: { attachments: ChatAttachment[] 
           )}
           <span className="min-w-0 truncate">{attachment.name}</span>
           <span className="shrink-0 opacity-65">
-            {getAttachmentDetailLabel(attachment)}
+            {getAttachmentDetailLabel(attachment, {
+              knowledgePdf: copy.chat.knowledgePdf,
+              unknownType: copy.chat.unknownType,
+            })}
           </span>
         </li>
       ))}
@@ -207,15 +213,16 @@ function MessageAttachmentList({ attachments }: { attachments: ChatAttachment[] 
 }
 
 function NodeBriefCard({ node }: { node: MindNode }) {
+  const { copy } = useLanguage();
   const summary = node.summary.trim();
 
   return (
     <article
-      aria-label="Node brief"
+      aria-label={copy.workspace.nodeBrief}
       data-testid="node-brief-card"
       className="node-brief-card rounded-xl border border-brand-100 bg-brand-50 p-4 text-sm leading-6 text-neutral-700"
     >
-      <p className="mb-1 text-[11px] font-black uppercase tracking-wider text-neutral-500">Node brief</p>
+      <p className="mb-1 text-[11px] font-black uppercase tracking-wider text-neutral-500">{copy.workspace.nodeBrief}</p>
       <h3 className="text-base font-black leading-snug text-neutral-900">
         {node.title}
       </h3>
@@ -245,9 +252,10 @@ export function NodeDetailPanel({
   showNotesAction = true,
   showCollapseButton = true,
   showComposer = true,
-  composerPlaceholder = "Ask the next question...",
-  submitLabel = "Send",
+  composerPlaceholder,
+  submitLabel,
 }: NodeDetailPanelProps) {
+  const { copy } = useLanguage();
   const panelId = useId();
   const titleId = `${panelId}-title`;
   const errorId = `${panelId}-error`;
@@ -266,6 +274,8 @@ export function NodeDetailPanel({
   const clearHeaderHighlightedAction = headerHighlight.clearHighlightedAction;
   const clearModeHighlightedAction = modeHighlight.clearHighlightedAction;
   const composerControls = useChatComposerControls({ isBusy: isCreating });
+  const resolvedComposerPlaceholder = composerPlaceholder ?? copy.workspace.askNextQuestion;
+  const resolvedSubmitLabel = submitLabel ?? copy.workspace.send;
   const resetComposerAttachments = composerControls.resetAttachments;
   const messagesRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -554,7 +564,7 @@ export function NodeDetailPanel({
   if (!node) {
     return (
       <aside
-        aria-label="Node details"
+        aria-label={copy.workspace.nodeDetails}
         data-testid="node-detail-panel"
         className="node-detail-panel-surface flex h-full min-h-0 w-full max-h-full flex-col overflow-hidden rounded-2xl border border-neutral-100 bg-white p-4 shadow-lg lg:max-h-[calc(100dvh-6rem)] lg:self-center lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
       >
@@ -562,7 +572,7 @@ export function NodeDetailPanel({
           <button
             type="button"
             onClick={onCollapse}
-            aria-label="Collapse node details panel"
+            aria-label={copy.workspace.collapseNodeDetails}
             aria-expanded="true"
             data-testid="collapse-node-detail-panel-button"
             className="node-detail-icon-button grid h-10 w-10 place-items-center self-end rounded-full bg-neutral-100 text-neutral-600 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
@@ -572,7 +582,7 @@ export function NodeDetailPanel({
         )}
         <div className="grid min-h-[128px] flex-1 place-items-center text-center text-sm font-bold text-neutral-600">
           <span role="status" aria-live="polite" data-testid="node-detail-empty-state">
-            Select a node
+            {copy.workspace.nodeNotSelected}
           </span>
         </div>
       </aside>
@@ -615,7 +625,7 @@ export function NodeDetailPanel({
                   onChange={(event) => setTitleEditValue(event.target.value)}
                   onKeyDown={handleTitleEditKeyDown}
                   disabled={isTitleEditBusy}
-                  aria-label="Edit node title"
+                  aria-label={copy.workspace.editNodeTitle}
                   data-testid="node-title-edit-input"
                   maxLength={120}
                   className="min-w-0 flex-1 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-lg font-black leading-snug text-neutral-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 sm:text-xl"
@@ -625,8 +635,8 @@ export function NodeDetailPanel({
                     type="button"
                     onClick={handleCancelTitleEdit}
                     disabled={isTitleEditBusy}
-                    aria-label="Cancel node title edit"
-                    title="Cancel"
+                    aria-label={copy.common.cancel}
+                    title={copy.common.cancel}
                     data-testid="cancel-node-title-edit-button"
                     className="node-detail-icon-button grid h-10 w-10 place-items-center rounded-full bg-white/75 text-neutral-600 transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-45"
                   >
@@ -636,8 +646,8 @@ export function NodeDetailPanel({
                     type="button"
                     onClick={() => void handleSaveTitleEdit()}
                     disabled={isTitleSaveDisabled}
-                    aria-label="Save node title"
-                    title="Save"
+                    aria-label={copy.workspace.saveNodeTitle}
+                    title={copy.common.save}
                     data-testid="save-node-title-edit-button"
                     className="node-detail-icon-button node-detail-icon-button-save grid h-10 w-10 place-items-center rounded-full bg-success-100 text-success-700 transition hover:bg-success-200 focus:outline-none focus:ring-4 focus:ring-success-100 disabled:cursor-not-allowed disabled:opacity-45"
                   >
@@ -657,8 +667,8 @@ export function NodeDetailPanel({
                 type="button"
                 onClick={handleStartTitleEdit}
                 disabled={isTitleEditBusy}
-                aria-label="Edit node title"
-                title="Edit title"
+                aria-label={copy.workspace.editNodeTitle}
+                title={copy.workspace.editNodeTitle}
                 data-testid="edit-node-title-button"
                 data-highlighted={headerHighlight.getDataHighlighted("edit", {
                   enabled: isTitleEditButtonEnabled,
@@ -676,7 +686,7 @@ export function NodeDetailPanel({
               <button
                 type="button"
                 onClick={onCollapse}
-                aria-label="Collapse node details panel"
+                aria-label={copy.workspace.collapseNodeDetails}
                 aria-controls="conversation-history"
                 aria-expanded="true"
                 data-testid="collapse-node-detail-panel-button"
@@ -694,14 +704,14 @@ export function NodeDetailPanel({
               type="button"
               disabled={isCreating}
               onClick={() => onToggleNode(node.id)}
-              aria-label={node.collapsed ? "Expand node" : "Fold node"}
+              aria-label={node.collapsed ? copy.workspace.expandNode : copy.workspace.foldNode}
               aria-expanded={!node.collapsed}
               aria-controls="mind-map"
               data-testid="toggle-node-button"
               className="node-detail-tertiary-action node-detail-fold-action inline-flex h-11 items-center gap-2 rounded-xl bg-danger-100 px-3 text-sm font-black text-danger-700 transition hover:bg-danger-200 disabled:cursor-not-allowed disabled:opacity-65"
             >
               <Ribbon size={16} />
-              {node.collapsed ? "Expand" : "Fold"}
+              {node.collapsed ? copy.workspace.expandNode : copy.workspace.fold}
             </button>
           )}
           {node.parentId && (
@@ -709,7 +719,7 @@ export function NodeDetailPanel({
               type="button"
               disabled={isCreating}
               onClick={() => onDeleteNode(node.id)}
-              aria-label="Delete node"
+              aria-label={copy.workspace.deleteNode}
               data-testid="delete-node-button"
               data-highlighted={headerHighlight.getDataHighlighted("delete", {
                 enabled: isDeleteButtonEnabled,
@@ -721,14 +731,14 @@ export function NodeDetailPanel({
               )}`}
             >
               <Trash2 size={16} />
-              Delete
+              {copy.common.delete}
             </button>
           )}
           {showNotesAction && (
             <button
               type="button"
               onClick={onToggleNotes}
-              aria-label={isNotesOpen ? "Close project notes" : "Open project notes"}
+              aria-label={isNotesOpen ? copy.workspace.closeProjectNotes : copy.workspace.openProjectNotes}
               aria-controls="project-notes-panel"
               aria-expanded={isNotesOpen}
               data-testid="node-detail-notes-button"
@@ -742,7 +752,7 @@ export function NodeDetailPanel({
               )}`}
             >
               <NotebookPen size={16} />
-              Notes
+              {copy.common.notes}
             </button>
           )}
         </div>
@@ -751,7 +761,7 @@ export function NodeDetailPanel({
       <section
         id="conversation-history"
         ref={messagesRef}
-        aria-label="Conversation history"
+        aria-label={copy.workspace.conversationHistory}
         aria-busy={isCreating}
         data-testid="conversation-history"
         onKeyUp={captureSelectionAction}
@@ -790,7 +800,7 @@ export function NodeDetailPanel({
                 }`}
               >
                 <article
-                  aria-label={`${message.role} message`}
+                  aria-label={`${message.role === "user" ? copy.workspace.user : copy.workspace.assistant} message`}
                   aria-live={isStreamingAssistant ? "polite" : undefined}
                   className={`rounded-xl border p-3 ${
                     message.role === "user"
@@ -798,21 +808,23 @@ export function NodeDetailPanel({
                       : "border-brand-100 bg-brand-50"
                   }`}
                 >
-                  <p className="mb-1 text-[11px] font-black uppercase tracking-wider opacity-65">{message.role}</p>
+                  <p className="mb-1 text-[11px] font-black uppercase tracking-wider opacity-65">
+                    {message.role === "user" ? copy.workspace.user : copy.workspace.assistant}
+                  </p>
                   {isEditingMessage ? (
                     <div className="space-y-2">
                       <textarea
                         value={editingValue}
                         onChange={(event) => setEditingValue(event.target.value)}
                         disabled={isCreating}
-                        aria-label="Edit user message"
+                        aria-label={copy.workspace.editUserMessage}
                         data-testid="message-edit-input"
                         rows={4}
                         className="w-full resize-none rounded-xl border border-neutral-200 bg-white p-3 text-sm leading-6 text-success-800 outline-none focus:border-success-400 focus:ring-2 focus:ring-success-200 disabled:cursor-not-allowed disabled:opacity-65"
                       />
                       <div className="flex justify-end gap-2">
                         <MessageActionButton
-                          label="Cancel message edit"
+                          label={copy.workspace.cancelMessageEdit}
                           testId="cancel-message-edit-button"
                           onClick={handleCancelEdit}
                           disabled={isCreating}
@@ -820,7 +832,7 @@ export function NodeDetailPanel({
                           <X size={15} />
                         </MessageActionButton>
                         <MessageActionButton
-                          label="Save message edit"
+                          label={copy.workspace.saveMessageEdit}
                           testId="save-message-edit-button"
                           onClick={handleSaveEdit}
                           disabled={isCreating || !editingValue.trim()}
@@ -832,7 +844,7 @@ export function NodeDetailPanel({
                   ) : (
                     <MarkdownMessage
                       content={
-                        message.content || (isStreamingAssistant ? "Generating answer..." : "")
+                        message.content || (isStreamingAssistant ? `${copy.workspace.generatingAnswer}...` : "")
                       }
                       citations={message.citations ?? []}
                       isStreaming={isStreamingAssistant}
@@ -846,22 +858,22 @@ export function NodeDetailPanel({
                       data-testid="message-streaming-status"
                       className="mt-2 text-xs font-black uppercase tracking-[0.14em] text-neutral-600"
                     >
-                      Generating answer
+                      {copy.workspace.generatingAnswer}
                     </p>
                   )}
                 </article>
                 {!isEditingMessage && (
                   <div
                     role="group"
-                    aria-label={`${message.role} message actions`}
+                    aria-label={copy.workspace.messageActions(message.role)}
                     data-testid="conversation-message-actions"
                     className={`mt-1 flex h-8 gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 ${
                       message.role === "user" ? "justify-end pr-2" : "justify-start pl-2"
                     }`}
                   >
                     <MessageActionButton
-                      label={`Copy ${message.role} message`}
-                      title={isCopied ? "Copied" : `Copy ${message.role} message`}
+                      label={copy.workspace.copyRoleMessage(message.role)}
+                      title={isCopied ? copy.common.copied : copy.workspace.copyRoleMessage(message.role)}
                       testId="copy-message-button"
                       onClick={() => void handleCopyMessage(message, messageKey)}
                       disabled={!message.content}
@@ -871,7 +883,7 @@ export function NodeDetailPanel({
                     {!inherited && (
                       message.role === "user" ? (
                         <MessageActionButton
-                          label="Edit user message"
+                          label={copy.workspace.editUserMessage}
                           testId="edit-message-button"
                           onClick={() => handleStartEdit(message)}
                           disabled={isCreating}
@@ -881,7 +893,7 @@ export function NodeDetailPanel({
                         </MessageActionButton>
                       ) : (
                         <MessageActionButton
-                          label="Retry assistant response"
+                          label={copy.workspace.retryAssistant}
                           testId="retry-message-button"
                           onClick={() => handleRetryMessage(message)}
                           disabled={isCreating}
@@ -904,19 +916,19 @@ export function NodeDetailPanel({
           type="button"
           onMouseDown={(event) => event.preventDefault()}
           onClick={handleAskBranchMindSelection}
-          aria-label="询问 BranchMind 关于选中文本"
+          aria-label={copy.workspace.askBranchMindSelection}
           data-testid="ask-branchmind-selection-button"
           style={{ left: selectionAction.x, top: selectionAction.y }}
           className="node-selection-action fixed z-50 inline-flex h-9 min-w-[154px] items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-neutral-200/90 bg-white/95 px-3.5 text-[13px] font-bold leading-none tracking-normal text-neutral-800 shadow-lg shadow-neutral-900/10 backdrop-blur transition hover:-translate-y-0.5 hover:border-brand-200 hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100"
         >
           <MessageSquare size={14} className="shrink-0 text-brand-700" />
-          询问 BranchMind
+          {copy.workspace.askBranchMind}
         </button>
       )}
 
       {showComposer && (
         <form
-          aria-label="Message composer"
+          aria-label={copy.workspace.messageComposer}
           aria-busy={isComposerBusy}
           aria-describedby={displayError ? errorId : isComposerBusy ? statusId : undefined}
           data-testid="message-composer"
@@ -926,7 +938,7 @@ export function NodeDetailPanel({
         {!isInitialSubmit && !isBlankNode && (
           <div
             role="group"
-            aria-label="Message branch mode"
+            aria-label={copy.workspace.branch}
             data-testid="message-branch-mode"
             onMouseLeave={modeHighlight.clearHighlightedAction}
             className="grid grid-cols-2 gap-2"
@@ -935,7 +947,7 @@ export function NodeDetailPanel({
               type="button"
               onClick={() => setMode("continue")}
               disabled={isComposerBusy}
-              aria-label="Continue down"
+              aria-label={copy.workspace.continueDown}
               aria-pressed={mode === "continue"}
               data-testid="continue-down-button"
               data-highlighted={modeHighlight.getDataHighlighted("continue")}
@@ -946,13 +958,13 @@ export function NodeDetailPanel({
               )}`}
             >
               <Sprout size={16} />
-              Continue
+              {copy.workspace.continue}
             </button>
             <button
               type="button"
               onClick={() => setMode("branch")}
               disabled={isComposerBusy}
-              aria-label="Branch right"
+              aria-label={copy.workspace.branchRight}
               aria-pressed={mode === "branch"}
               data-testid="branch-right-button"
               data-highlighted={modeHighlight.getDataHighlighted("branch")}
@@ -963,7 +975,7 @@ export function NodeDetailPanel({
               )}`}
             >
               <GitBranch size={16} />
-              Branch
+              {copy.workspace.branch}
             </button>
           </div>
         )}
@@ -976,17 +988,17 @@ export function NodeDetailPanel({
           {hasSelectedTextContext && (
             <div className="px-3 pt-3">
               <div
-                aria-label="Selected text context"
+                aria-label={copy.workspace.selectedTextCount}
                 data-testid="selected-text-context-chip"
                 className="node-selected-text-chip inline-flex max-w-full items-center gap-2 rounded-full border border-neutral-200/70 bg-white/75 px-3 py-1.5 text-xs font-bold tracking-normal text-neutral-700 shadow-sm"
               >
                 <MessageSquare size={14} className="shrink-0 text-neutral-500" />
-                <span className="min-w-0 truncate">1 个已选文本片段</span>
+                <span className="min-w-0 truncate">{copy.workspace.selectedTextCount}</span>
                 <button
                   type="button"
                   onClick={clearSelectedSourceText}
                   disabled={isComposerBusy}
-                  aria-label="Remove selected text context"
+                  aria-label={copy.workspace.removeSelectedText}
                   data-testid="remove-selected-text-context-button"
                   className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-neutral-500 transition hover:bg-white hover:text-neutral-800 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -999,10 +1011,10 @@ export function NodeDetailPanel({
             value={input}
             onChange={(event) => setInput(event.target.value)}
             disabled={isComposerBusy}
-            aria-label="Message instruction"
+            aria-label={copy.workspace.messageInstruction}
             aria-describedby={displayError ? errorId : undefined}
             data-testid="message-instruction-input"
-            placeholder={composerPlaceholder}
+            placeholder={resolvedComposerPlaceholder}
             rows={3}
             className={`w-full resize-none bg-transparent px-3 pb-16 text-sm leading-6 text-neutral-900 outline-none placeholder:text-neutral-400 transition disabled:cursor-not-allowed disabled:opacity-65 sm:px-4 ${
               hasSelectedTextContext ? "pt-3" : "pt-4"
@@ -1016,7 +1028,7 @@ export function NodeDetailPanel({
             <button
               type="submit"
               disabled={isComposerBusy || !input.trim()}
-              aria-label="Send message"
+              aria-label={copy.workspace.send}
               data-testid="send-message-button"
               className="branchmind-primary-action inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-3 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
             >
@@ -1027,12 +1039,12 @@ export function NodeDetailPanel({
               )}
               <span className="node-detail-send-label">
                 {composerControls.isPreparingAttachments
-                  ? "Preparing..."
+                  ? copy.chat.preparing
                   : isCreating
                     ? isInitialSubmit
-                      ? "Creating..."
-                      : "Streaming..."
-                    : submitLabel}
+                      ? copy.common.creating
+                      : `${copy.workspace.generatingAnswer}...`
+                    : resolvedSubmitLabel}
               </span>
             </button>
           </div>
@@ -1040,10 +1052,10 @@ export function NodeDetailPanel({
         {isComposerBusy && (
           <p id={statusId} role="status" data-testid="message-send-status" className="sr-only">
             {composerControls.isPreparingAttachments
-              ? "Preparing PDF attachments for this node."
+              ? copy.workspace.preparingPdfAttachments
               : isInitialSubmit
-                ? "Creating your workspace."
-                : "Streaming answer for this node."}
+                ? copy.workspace.createWorkspace
+                : copy.workspace.streamingAnswer}
           </p>
         )}
         {displayError && (

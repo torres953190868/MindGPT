@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { CheckCircle2, ImagePlus, Loader2, Send, X } from "lucide-react";
+import { useLanguage } from "@/components/language/LanguageProvider";
 
 type BugReportDialogProps = {
   open: boolean;
@@ -27,6 +28,7 @@ export function BugReportDialog({
   onOpenChange,
   defaultContactEmail = null,
 }: BugReportDialogProps) {
+  const { copy } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const closeTimerRef = useRef<number | null>(null);
   const [title, setTitle] = useState("");
@@ -82,11 +84,11 @@ export function BugReportDialog({
       return;
     }
     if (!ACCEPTED_SCREENSHOT_TYPES.has(file.type)) {
-      setError("Screenshot must be PNG, JPG, or WebP.");
+      setError(copy.bugReport.screenshotType);
       return;
     }
     if (file.size > MAX_SCREENSHOT_BYTES) {
-      setError("Screenshot must be 5 MB or smaller.");
+      setError(copy.bugReport.screenshotTooLarge);
       return;
     }
     setScreenshot(file);
@@ -123,7 +125,7 @@ export function BugReportDialog({
         onOpenChange(false);
       }, 1600);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Failed to submit report.");
+      setError(submitError instanceof Error ? submitError.message : copy.bugReport.submitFailed);
     } finally {
       setSubmitting(false);
     }
@@ -143,16 +145,16 @@ export function BugReportDialog({
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-black">Report a bug</h2>
+            <h2 className="text-lg font-black">{copy.bugReport.reportBug}</h2>
             <p className="mt-1 text-sm font-medium text-neutral-500">
-              Send details directly to the admin queue.
+              {copy.bugReport.helper}
             </p>
           </div>
           <button
             type="button"
             onClick={closeDialog}
             disabled={submitting}
-            aria-label="Close bug report form"
+            aria-label={copy.bugReport.closeForm}
             className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-60"
           >
             <X size={17} />
@@ -161,7 +163,7 @@ export function BugReportDialog({
 
         <div className="mt-5 grid gap-3">
           <label className="grid gap-1.5 text-sm font-bold text-neutral-700">
-            Title
+            {copy.bugReport.title}
             <input
               required
               maxLength={160}
@@ -171,7 +173,7 @@ export function BugReportDialog({
             />
           </label>
           <label className="grid gap-1.5 text-sm font-bold text-neutral-700">
-            Description
+            {copy.bugReport.description}
             <textarea
               required
               maxLength={5000}
@@ -181,7 +183,7 @@ export function BugReportDialog({
             />
           </label>
           <label className="grid gap-1.5 text-sm font-bold text-neutral-700">
-            Contact email
+            {copy.bugReport.contactEmail}
             <input
               type="email"
               maxLength={240}
@@ -205,7 +207,7 @@ export function BugReportDialog({
               className="inline-flex min-h-10 items-center gap-2 rounded-md border border-neutral-200 px-3 text-sm font-black text-neutral-700 transition hover:bg-neutral-50"
             >
               <ImagePlus size={16} />
-              {screenshot ? screenshot.name : "Attach screenshot"}
+              {screenshot ? screenshot.name : copy.bugReport.attachScreenshot}
             </button>
           </div>
         </div>
@@ -222,7 +224,7 @@ export function BugReportDialog({
             {error ?? (
               <span className="inline-flex items-center gap-2">
                 <CheckCircle2 size={15} />
-                Report sent.
+                {copy.bugReport.reportSent}
               </span>
             )}
           </div>
@@ -234,7 +236,7 @@ export function BugReportDialog({
           className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-neutral-950 px-4 text-sm font-black text-white transition hover:bg-neutral-800 disabled:opacity-60"
         >
           {submitting ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-          Submit report
+          {submitting ? copy.bugReport.submitting : copy.bugReport.submitReport}
         </button>
       </form>
     </div>

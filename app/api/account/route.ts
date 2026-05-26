@@ -17,18 +17,21 @@ import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import * as projectStore from "@/lib/server/projects-store";
 import { getRagRepository } from "@/lib/server/rag/store";
 import { parseJsonBody } from "@/lib/server/validation";
+import { DEFAULT_LANGUAGE, getBranchMindLanguage, type BranchMindLanguage } from "@/lib/language";
 import { z } from "zod";
 
 const READ_ONLY_LOCAL_SESSION = { id: "", isNew: false };
 
 const updateAccountSchema = z.object({
   displayName: z.string().trim().min(1).max(100).nullable().optional(),
+  languagePreference: z.enum(["zh", "en"]).optional(),
 });
 
 export type AccountDto = {
   email: string | null;
   accountName: string | null;
   displayName: string | null;
+  languagePreference: BranchMindLanguage;
   authMode: "supabase" | "local" | "guest";
   authConfigured: boolean;
   plan: string;
@@ -54,6 +57,7 @@ async function getFileAccountData(sessionId: string): Promise<AccountDto> {
     email: null,
     accountName: null,
     displayName: null,
+    languagePreference: DEFAULT_LANGUAGE,
     authMode: "local",
     authConfigured: false,
     plan: "unlimited",
@@ -111,6 +115,7 @@ async function getSupabaseAccountData(user: SupabaseAccountUser): Promise<Accoun
     email,
     accountName,
     displayName: planInfo.displayName,
+    languagePreference: planInfo.languagePreference,
     authMode: "supabase",
     authConfigured: true,
     plan: planInfo.plan,
@@ -134,6 +139,7 @@ export async function GET(request: NextRequest) {
           email: null,
           accountName: null,
           displayName: null,
+          languagePreference: DEFAULT_LANGUAGE,
           authMode: "local",
           authConfigured: false,
           plan: "unlimited",
@@ -157,6 +163,7 @@ export async function GET(request: NextRequest) {
             email: null,
             accountName: null,
             displayName: null,
+            languagePreference: DEFAULT_LANGUAGE,
             authMode: "guest",
             authConfigured: true,
             plan: DEFAULT_ACCOUNT_PLAN,
@@ -196,11 +203,37 @@ export async function PATCH(request: NextRequest) {
         throw new HttpError("Sign in is required.", { code: "AUTH_REQUIRED", expose: true, status: 401 });
       }
 
+      if (body.displayName !== undefined || body.languagePreference !== undefined) {
+        const updatePayload: {
+          user_id: string;
+          updated_at: string;
+          display_name?: string | null;
+          language_preference?: BranchMindLanguage;
+        } = {
+          user_id: user.id,
+          updated_at: new Date().toISOString(),
+        };
+
+        if (body.displayName !== undefined) updatePayload.display_name = body.displayName;
+        if (body.languagePreference !== undefined) {
+          updatePayload.language_preference = getBranchMindLanguage(body.languagePreference);
+        }
+
+        const { error } = await getSupabaseAdminClient()
+          .from("branchmind_user_plans")
+          .upsert(updatePayload, { onConflict: "user_id" });
+
+        if (error) {
+          throw new HttpError("Failed to update account.", {
+            code: "ACCOUNT_UPDATE_FAILED",
+            expose: true,
+            status: 500,
+          });
+        }
+      }
+
       const data = await getSupabaseAccountData(user);
-      return jsonWithSession(
-        body.displayName !== undefined ? { ...data, displayName: body.displayName } : data,
-        fallbackSession,
-      );
+      return jsonWithSession(data, fallbackSession);
     }
 
     // Local file mode - no-op but return success

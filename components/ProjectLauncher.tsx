@@ -9,6 +9,7 @@ import {
   PendingAttachmentChips,
   useChatComposerControls,
 } from "@/components/chat/ChatComposerControls";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import { useBranchMindStore } from "@/store/useBranchMindStore";
 import type { ChatAttachment, ChatModelSelection } from "@/lib/types";
 
@@ -16,12 +17,6 @@ type ProjectLauncherProps = {
   compact?: boolean;
   variant?: "default" | "composer";
 };
-
-const suggestionTopics = [
-  "explain reinforcement learning",
-  "map a research paper",
-  "compare policy gradients",
-];
 
 export function ProjectLauncher({ compact = false, variant = "default" }: ProjectLauncherProps) {
   if (variant === "composer") return <ComposerProjectLauncher />;
@@ -73,6 +68,7 @@ function useProjectLauncherState() {
 }
 
 function ComposerProjectLauncher() {
+  const { copy } = useLanguage();
   const {
     aiError,
     clearAiError,
@@ -109,13 +105,13 @@ function ComposerProjectLauncher() {
 
   return (
     <section
-      aria-label="Project launcher"
+      aria-label={copy.projects.projectLauncher}
       data-testid="project-launcher"
       className="w-full space-y-3"
     >
       <form
         onSubmit={handleSubmit}
-        aria-label="Create project"
+        aria-label={copy.projects.createProject}
         aria-busy={isSubmitting}
         aria-describedby={displayError ? errorId : isSubmitting ? statusId : undefined}
         data-testid="create-project-form"
@@ -123,7 +119,7 @@ function ComposerProjectLauncher() {
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="rounded-full bg-success-50 px-3 py-1.5 text-[11px] font-black text-success-700">
-            Private workspace
+            {copy.settings.localWorkspace}
           </span>
         </div>
         <div className="mt-3">
@@ -136,7 +132,7 @@ function ComposerProjectLauncher() {
 
         <div className="relative mt-3 rounded-[20px] border border-neutral-200 bg-surface-soft shadow-sm transition focus-within:border-brand-300 focus-within:bg-white focus-within:shadow-lg focus-within:shadow-brand-100/30 focus-within:ring-4 focus-within:ring-brand-100/50">
           <label className="sr-only" htmlFor={topicInputId}>
-            Topic
+            {copy.projects.topic}
           </label>
           <textarea
             id={topicInputId}
@@ -146,7 +142,7 @@ function ComposerProjectLauncher() {
             aria-invalid={Boolean(displayError)}
             aria-describedby={displayError ? errorId : undefined}
             data-testid="project-topic-input"
-            placeholder="Start with a research question..."
+            placeholder={copy.projects.topicPlaceholder}
             rows={1}
             className="min-h-11 w-full resize-none bg-transparent px-4 pt-4 pb-16 text-base leading-6 text-neutral-900 outline-none transition placeholder:text-neutral-500 disabled:cursor-not-allowed disabled:opacity-70 md:min-h-28 md:text-lg md:leading-8"
           />
@@ -158,7 +154,7 @@ function ComposerProjectLauncher() {
             <button
               type="submit"
               disabled={isSubmitting || !topic.trim()}
-              aria-label="Create new project"
+              aria-label={copy.projects.newProject}
               data-testid="create-project-button"
               className="inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -167,13 +163,13 @@ function ComposerProjectLauncher() {
               ) : (
                 <Sparkles size={14} />
               )}
-              <span>{isSubmitting ? "Creating..." : "New Project"}</span>
+              <span>{isSubmitting ? copy.common.creating : copy.projects.newProject}</span>
             </button>
           </div>
         </div>
 
         <div className="mt-3 hidden flex-wrap gap-2 md:flex">
-          {suggestionTopics.map((suggestion) => (
+          {copy.home.suggestions[0].map((suggestion) => (
             <button
               key={suggestion}
               type="button"
@@ -193,7 +189,7 @@ function ComposerProjectLauncher() {
           data-testid="create-project-status"
           className="sr-only"
         >
-          Creating project.
+          {copy.projects.createProjectStatus}
         </p>
       )}
       {displayError && (
@@ -211,6 +207,7 @@ function ComposerProjectLauncher() {
 }
 
 function DefaultProjectLauncher({ compact = false }: Pick<ProjectLauncherProps, "compact">) {
+  const { copy } = useLanguage();
   const {
     aiError,
     creatingProject,
@@ -232,20 +229,20 @@ function DefaultProjectLauncher({ compact = false }: Pick<ProjectLauncherProps, 
 
   return (
     <section
-      aria-label="Project launcher"
+      aria-label={copy.projects.projectLauncher}
       data-testid="project-launcher"
       className="w-full space-y-3"
     >
       <form
         onSubmit={handleSubmit}
-        aria-label="Create project"
+        aria-label={copy.projects.createProject}
         aria-busy={creatingProject}
         aria-describedby={aiError ? errorId : creatingProject ? statusId : undefined}
         data-testid="create-project-form"
         className={`flex w-full gap-3 ${compact ? "flex-col sm:flex-row" : "flex-col md:flex-row"}`}
       >
         <label className="sr-only" htmlFor={topicInputId}>
-          Topic
+          {copy.projects.topic}
         </label>
         <input
           id={topicInputId}
@@ -255,13 +252,13 @@ function DefaultProjectLauncher({ compact = false }: Pick<ProjectLauncherProps, 
           aria-invalid={Boolean(aiError)}
           aria-describedby={aiError ? errorId : undefined}
           data-testid="project-topic-input"
-          placeholder="Start with a research question..."
+          placeholder={copy.projects.topicPlaceholder}
           className="min-h-14 flex-1 rounded-[22px] border border-white/80 bg-white/80 px-5 text-base text-neutral-900 shadow-sm outline-none transition placeholder:text-neutral-600 disabled:cursor-not-allowed disabled:opacity-70 focus:border-brand-400 focus:ring-4 focus:ring-brand-100"
         />
         <button
           type="submit"
           disabled={creatingProject || !topic.trim()}
-          aria-label="Create new project"
+          aria-label={copy.projects.newProject}
           data-testid="create-project-button"
           className="inline-flex min-h-14 items-center justify-center gap-2 rounded-[22px] bg-brand-600 px-5 font-bold text-white shadow-lg shadow-brand-200/30 transition hover:-translate-y-0.5 hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-65 disabled:hover:translate-y-0"
         >
@@ -270,7 +267,7 @@ function DefaultProjectLauncher({ compact = false }: Pick<ProjectLauncherProps, 
           ) : (
             <Sparkles size={18} />
           )}
-          {creatingProject ? "Creating project..." : "New Project"}
+          {creatingProject ? copy.common.creating : copy.projects.newProject}
           <ArrowRight size={18} />
         </button>
       </form>
@@ -281,7 +278,7 @@ function DefaultProjectLauncher({ compact = false }: Pick<ProjectLauncherProps, 
           data-testid="create-project-status"
           className="sr-only"
         >
-          Creating project.
+          {copy.projects.createProjectStatus}
         </p>
       )}
       {aiError && (

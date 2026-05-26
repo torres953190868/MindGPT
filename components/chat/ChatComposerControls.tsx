@@ -20,6 +20,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import { ApiRequestError, readJsonApi } from "@/lib/client/api";
 import { MAX_CHAT_ATTACHMENTS } from "@/lib/chat-attachments";
 import { createId } from "@/lib/ids";
@@ -167,8 +168,8 @@ function formatFileSize(size: number) {
   return `${value.toFixed(precision)} ${units[unitIndex]}`;
 }
 
-function getAttachmentTypeLabel(attachment: ChatAttachment) {
-  return attachment.mimeType || "Unknown type";
+function getAttachmentTypeLabel(attachment: ChatAttachment, unknownTypeLabel: string) {
+  return attachment.mimeType || unknownTypeLabel;
 }
 
 export function isKnowledgeAttachment(
@@ -177,19 +178,33 @@ export function isKnowledgeAttachment(
   return Boolean(attachment.documentId && attachment.size === 0);
 }
 
-export function getAttachmentDetailLabel(attachment: ChatAttachment) {
-  if (isKnowledgeAttachment(attachment)) return "Knowledge PDF";
-  return `${getAttachmentTypeLabel(attachment)} - ${formatFileSize(attachment.size)}`;
+export function getAttachmentDetailLabel(
+  attachment: ChatAttachment,
+  labels = {
+    knowledgePdf: "Knowledge PDF",
+    unknownType: "Unknown type",
+  },
+) {
+  if (isKnowledgeAttachment(attachment)) return labels.knowledgePdf;
+  return `${getAttachmentTypeLabel(attachment, labels.unknownType)} - ${formatFileSize(attachment.size)}`;
 }
 
-function getPendingAttachmentStatusLabel(attachment: PendingChatAttachment) {
-  if (attachment.uploadStatus === "uploading") return "Uploading";
+function getPendingAttachmentStatusLabel(
+  attachment: PendingChatAttachment,
+  labels: {
+    failed: string;
+    indexed: string;
+    ingesting: string;
+    uploading: string;
+  },
+) {
+  if (attachment.uploadStatus === "uploading") return labels.uploading;
   if (attachment.uploadStatus === "queued" || attachment.uploadStatus === "indexing") {
-    return "Ingesting";
+    return labels.ingesting;
   }
-  if (attachment.uploadStatus === "indexed") return "Indexed";
-  if (attachment.uploadStatus === "failed") return "Failed";
-  if (attachment.documentId && attachment.documentStatus === "indexed") return "Indexed";
+  if (attachment.uploadStatus === "indexed") return labels.indexed;
+  if (attachment.uploadStatus === "failed") return labels.failed;
+  if (attachment.documentId && attachment.documentStatus === "indexed") return labels.indexed;
   return null;
 }
 
@@ -445,6 +460,7 @@ export function useChatComposerControls({
   isBusy: boolean;
   maxAttachments?: number;
 }) {
+  const { copy } = useLanguage();
   const [pendingAttachments, setPendingAttachments] = useState<PendingChatAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isPreparingAttachments, setIsPreparingAttachments] = useState(false);
@@ -582,7 +598,7 @@ export function useChatComposerControls({
       } catch (loadError) {
         if (!cancelled) {
           setKnowledgeDocumentError(
-            loadError instanceof Error ? loadError.message : "Could not load PDFs.",
+            loadError instanceof Error ? loadError.message : copy.chat.couldNotLoadPdfs,
           );
         }
       } finally {
@@ -595,7 +611,7 @@ export function useChatComposerControls({
     return () => {
       cancelled = true;
     };
-  }, [isAttachmentMenuOpen]);
+  }, [copy.chat.couldNotLoadPdfs, isAttachmentMenuOpen]);
 
   useEffect(() => {
     if (!isAttachmentMenuOpen) return undefined;
@@ -671,7 +687,7 @@ export function useChatComposerControls({
         }
 
         const message =
-          ingestionError instanceof Error ? ingestionError.message : "PDF upload failed.";
+          ingestionError instanceof Error ? ingestionError.message : copy.chat.pdfUploadFailed;
         const errorRequestId =
           ingestionError instanceof ApiRequestError ? ingestionError.requestId : null;
         setAttachmentError(message);
@@ -742,7 +758,7 @@ export function useChatComposerControls({
       return prepared.map(toSendableAttachment);
     } catch (uploadError) {
       const message =
-        uploadError instanceof Error ? uploadError.message : "PDF upload failed.";
+        uploadError instanceof Error ? uploadError.message : copy.chat.pdfUploadFailed;
       const errorRequestId =
         uploadError instanceof ApiRequestError ? uploadError.requestId : null;
       setAttachmentError(message);
@@ -925,11 +941,13 @@ export function PendingAttachmentChips({
   disabled: boolean;
   onRemove: (attachmentId: string) => void;
 }) {
+  const { copy } = useLanguage();
+
   if (attachments.length === 0) return null;
 
   return (
     <ul
-      aria-label="Pending attachments"
+      aria-label={copy.chat.pendingAttachments}
       data-testid="pending-attachment-list"
       className="flex flex-wrap gap-2"
     >
@@ -950,11 +968,24 @@ export function PendingAttachmentChips({
           )}
           <span className="min-w-0 truncate">{attachment.name}</span>
           <span className="shrink-0 opacity-65">
-            {getAttachmentDetailLabel(attachment)}
+            {getAttachmentDetailLabel(attachment, {
+              knowledgePdf: copy.chat.knowledgePdf,
+              unknownType: copy.chat.unknownType,
+            })}
           </span>
-          {getPendingAttachmentStatusLabel(attachment) && (
+          {getPendingAttachmentStatusLabel(attachment, {
+            failed: copy.chat.failed,
+            indexed: copy.chat.indexed,
+            ingesting: copy.chat.ingesting,
+            uploading: copy.chat.uploading,
+          }) && (
             <span className="shrink-0 text-brand-700">
-              {getPendingAttachmentStatusLabel(attachment)}
+              {getPendingAttachmentStatusLabel(attachment, {
+                failed: copy.chat.failed,
+                indexed: copy.chat.indexed,
+                ingesting: copy.chat.ingesting,
+                uploading: copy.chat.uploading,
+              })}
             </span>
           )}
           {attachment.uploadStatus === "failed" && attachment.errorRequestId && (
@@ -966,7 +997,7 @@ export function PendingAttachmentChips({
             type="button"
             onClick={() => onRemove(attachment.id)}
             disabled={disabled}
-            aria-label={`Remove ${attachment.name}`}
+            aria-label={`${copy.common.close} ${attachment.name}`}
             data-testid="remove-pending-attachment-button"
             className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-neutral-600 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -985,6 +1016,8 @@ export function AttachmentMenuButton({
   controls: ChatComposerControlsState;
   placement?: FloatingMenuPlacement;
 }) {
+  const { copy, language } = useLanguage();
+
   return (
     <>
       <input
@@ -996,7 +1029,7 @@ export function AttachmentMenuButton({
           controls.controlsBusy ||
           controls.pendingAttachments.length >= controls.maxAttachments
         }
-        aria-label="Choose files"
+        aria-label={copy.chat.chooseFiles}
         data-testid="message-attachment-input"
         className="sr-only"
       />
@@ -1008,10 +1041,10 @@ export function AttachmentMenuButton({
             controls.controlsBusy ||
             controls.pendingAttachments.length >= controls.maxAttachments
           }
-          aria-label="Add files or knowledge"
+          aria-label={copy.chat.addFilesKnowledge}
           aria-haspopup="menu"
           aria-expanded={controls.isAttachmentMenuOpen}
-          title="Add files or knowledge"
+          title={copy.chat.addFilesKnowledge}
           data-testid="add-message-attachment-button"
           className="grid h-9 w-9 shrink-0 place-items-center rounded-[14px] border border-brand-200 bg-gradient-to-b from-white to-brand-50 text-brand-700 shadow-sm ring-1 ring-white/70 transition hover:border-brand-400 hover:from-white hover:to-white focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -1020,7 +1053,7 @@ export function AttachmentMenuButton({
         {controls.isAttachmentMenuOpen && (
           <div
             role="menu"
-            aria-label="Add attachment"
+            aria-label={copy.chat.addAttachment}
             data-testid="attachment-menu"
             onMouseLeave={() => controls.setIsKnowledgeMenuOpen(false)}
             className={`${getMenuPlacementClass(placement)} w-80 max-w-[calc(100vw-2rem)] rounded-[20px] border border-white/80 bg-white/95 p-2 shadow-2xl shadow-brand-100/55 backdrop-blur`}
@@ -1038,7 +1071,7 @@ export function AttachmentMenuButton({
                 <Upload size={16} />
               </span>
               <span className="min-w-0 flex-1 truncate text-sm font-black">
-                Upload new file
+                {language === "zh" ? "上传新文件" : "Upload new file"}
               </span>
             </button>
 
@@ -1066,7 +1099,7 @@ export function AttachmentMenuButton({
                   <BookOpen size={16} />
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm font-black">
-                  知识库
+                  {language === "zh" ? "知识库" : "Knowledge base"}
                 </span>
                 <ChevronRight
                   size={15}
@@ -1079,7 +1112,7 @@ export function AttachmentMenuButton({
               {controls.isKnowledgeMenuOpen && (
                 <div
                   role="menu"
-                  aria-label="Knowledge PDFs"
+                  aria-label={copy.chat.knowledgePdfs}
                   data-testid="knowledge-document-menu"
                   onWheel={stopFloatingMenuWheelPropagation}
                   className="nowheel mt-1 max-h-64 overflow-auto overscroll-contain rounded-[16px] border border-neutral-200 bg-brand-50/55 p-1"
@@ -1090,7 +1123,7 @@ export function AttachmentMenuButton({
                       className="flex items-center gap-2 rounded-[12px] px-3 py-3 text-sm font-bold text-neutral-600"
                     >
                       <Loader2 size={15} className="animate-spin" />
-                      Loading PDFs
+                      {language === "zh" ? "正在加载 PDF" : "Loading PDFs"}
                     </p>
                   )}
 
@@ -1104,7 +1137,7 @@ export function AttachmentMenuButton({
                     !controls.knowledgeDocumentError &&
                     controls.indexedKnowledgeDocuments.length === 0 && (
                       <p className="rounded-[12px] px-3 py-3 text-sm font-bold text-neutral-600">
-                        No indexed PDFs yet.
+                        {language === "zh" ? "还没有已索引的 PDF。" : "No indexed PDFs yet."}
                       </p>
                     )}
 
@@ -1119,8 +1152,10 @@ export function AttachmentMenuButton({
                         controls.pendingAttachments.length < controls.maxAttachments;
                       const title = document.title || document.fileName;
                       const detail = isAlreadySelected
-                        ? "Selected"
-                        : `${document.pageCount || "-"} pages`;
+                        ? copy.chat.selected
+                        : language === "zh"
+                          ? `${document.pageCount || "-"} 页`
+                          : `${document.pageCount || "-"} pages`;
 
                       return (
                         <button
@@ -1163,13 +1198,15 @@ export function ModelSelectorButton({
   controls: ChatComposerControlsState;
   placement?: FloatingMenuPlacement;
 }) {
+  const { copy } = useLanguage();
+
   return (
     <div ref={controls.modelMenuRef} className="relative shrink-0">
       <button
         type="button"
         onClick={controls.toggleModelMenu}
         disabled={controls.controlsBusy}
-        aria-label="Choose chat model"
+        aria-label={copy.chat.chooseChatModel}
         aria-haspopup="listbox"
         aria-expanded={controls.isModelMenuOpen}
         data-testid="chat-model-selector-button"
@@ -1187,7 +1224,7 @@ export function ModelSelectorButton({
       {controls.isModelMenuOpen && (
         <div
           role="listbox"
-          aria-label="Chat models"
+          aria-label={copy.chat.chatModels}
           data-testid="chat-model-menu"
           onWheel={stopFloatingMenuWheelPropagation}
           className={`${getMenuPlacementClass(placement)} nowheel max-h-72 w-72 overflow-auto overscroll-contain rounded-[20px] border border-white/80 bg-white/95 p-2 shadow-2xl shadow-brand-100/55 backdrop-blur`}
