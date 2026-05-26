@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getBranchMindAuthContext } from "@/lib/server/auth";
+import { getAccountPlanForModelAccess } from "@/lib/server/account-plan";
 import { streamDeepSeekReply } from "@/lib/server/deepseek-streaming";
 import {
   getSafeErrorMessage,
@@ -93,6 +94,7 @@ export async function POST(
       );
     }
 
+    const userPlan = await getAccountPlanForModelAccess(principal);
     const contextData = await preparePopulateBlankNodeContext(
       principal.id,
       projectId,
@@ -118,6 +120,7 @@ export async function POST(
             })),
             documentContexts,
             modelSelection: body.modelSelection,
+            userPlan,
           })) {
             if (event.type === "delta") {
               controller.enqueue(encodeSse("delta", {

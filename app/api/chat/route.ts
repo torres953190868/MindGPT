@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { getBranchMindAuthContext } from "@/lib/server/auth";
+import { getAccountPlanForModelAccess } from "@/lib/server/account-plan";
 import { requestDeepSeekReply } from "@/lib/server/deepseek";
 import { jsonWithSession, safeErrorWithSession } from "@/lib/server/http";
 import { chatModelSelectionSchema } from "@/lib/server/node-request";
@@ -58,7 +59,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const reply = await requestDeepSeekReply({ ...body, llmTask: "branch_chat" });
+    const reply = await requestDeepSeekReply({
+      ...body,
+      llmTask: "branch_chat",
+      userPlan: await getAccountPlanForModelAccess(principal),
+    });
     return jsonWithSession(reply, session);
   } catch (error) {
     return safeErrorWithSession(error, fallbackSession);

@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { getBranchMindAuthContext } from "@/lib/server/auth";
+import { getAccountPlanForModelAccess } from "@/lib/server/account-plan";
 import { requestDeepSeekReply } from "@/lib/server/deepseek";
 import { jsonWithSession, safeErrorWithSession } from "@/lib/server/http";
 import {
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest, context: NodesRouteContext) {
     }
 
     const createBody = body as Extract<typeof body, { instruction: string }>;
+    const userPlan = await getAccountPlanForModelAccess(principal);
     const contextData = await prepareChildContext(
       principal.id,
       projectId,
@@ -86,6 +88,7 @@ export async function POST(request: NextRequest, context: NodesRouteContext) {
       sourceText: createBody.sourceText,
       documentContexts,
       modelSelection: createBody.modelSelection,
+      userPlan,
     });
     const result = await createChildNodeForOwner(
       principal.id,

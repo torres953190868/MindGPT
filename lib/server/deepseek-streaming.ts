@@ -255,7 +255,7 @@ export async function* streamDeepSeekReply(
   const candidates = await resolveLlmCandidates(
     body.llmTask ?? "node_generation",
     body.modelSelection,
-    { requireJson: true, requireStreaming: true },
+    { requireJson: true, requireStreaming: true, accountPlan: body.userPlan },
   );
 
   for (let candidateIndex = 0; candidateIndex < candidates.length; candidateIndex += 1) {

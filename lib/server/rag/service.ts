@@ -176,6 +176,7 @@ export async function queryDocumentForOwner(
   documentId: string,
   question: string,
   topK?: number,
+  options: { userPlan?: string | null } = {},
 ) {
   const repository = getRagRepository();
   const document = await requireOwnedDocument(userId, documentId);
@@ -192,7 +193,7 @@ export async function queryDocumentForOwner(
     repository.getChunks(documentId),
   ]);
   const retrieved = await retrieveRelevantChunks(question, chunks, { topK });
-  return generateGroundedAnswer(question, retrieved, sections);
+  return generateGroundedAnswer(question, retrieved, sections, options);
 }
 
 export async function getWorkspaceDocumentContextsForOwner(

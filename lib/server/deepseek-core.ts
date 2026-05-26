@@ -35,6 +35,7 @@ export type BranchMindReplyRequest = {
   sourceText?: string;
   documentContexts?: ChatDocumentContext[];
   modelSelection?: ChatModelSelection;
+  userPlan?: string | null;
   llmTask?: LlmRouteTask;
 };
 

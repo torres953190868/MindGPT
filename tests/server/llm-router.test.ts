@@ -88,6 +88,99 @@ function createConfig(): LlmConfigBundle {
   };
 }
 
+function createFreePlanConfig(): LlmConfigBundle {
+  return {
+    source: "supabase",
+    providers: [
+      {
+        providerId: "deepseek",
+        displayName: "DeepSeek",
+        baseUrl: "https://api.deepseek.com/chat/completions",
+        apiKeyEnv: "DEEPSEEK_API_KEY",
+        enabled: true,
+        timeoutMs: null,
+        payloadOptions: {},
+        errorCodePrefix: "DEEPSEEK",
+      },
+      {
+        providerId: "opencode-go",
+        displayName: "OpenCode Go",
+        baseUrl: "https://opencode.ai/zen/go/v1/chat/completions",
+        apiKeyEnv: "OPENCODE_GO_API_KEY",
+        enabled: true,
+        timeoutMs: null,
+        payloadOptions: {},
+        errorCodePrefix: "OPENCODE_GO",
+      },
+    ],
+    models: [
+      {
+        providerId: "deepseek",
+        model: "deepseek-v4-flash",
+        displayName: "DeepSeek V4 Flash",
+        enabled: true,
+        supportsStreaming: true,
+        supportsJson: true,
+        notes: null,
+        sortOrder: 10,
+      },
+      {
+        providerId: "deepseek",
+        model: "deepseek-v4-pro",
+        displayName: "DeepSeek V4 Pro",
+        enabled: true,
+        supportsStreaming: true,
+        supportsJson: true,
+        notes: null,
+        sortOrder: 20,
+      },
+      {
+        providerId: "opencode-go",
+        model: "deepseek-v4-pro",
+        displayName: "DeepSeek V4 Pro",
+        enabled: true,
+        supportsStreaming: true,
+        supportsJson: true,
+        notes: null,
+        sortOrder: 10,
+      },
+      {
+        providerId: "opencode-go",
+        model: "qwen3.6-plus",
+        displayName: "Qwen 3.6 Plus",
+        enabled: true,
+        supportsStreaming: true,
+        supportsJson: true,
+        notes: null,
+        sortOrder: 20,
+      },
+    ],
+    routes: [
+      {
+        task: "branch_chat",
+        defaultProviderId: "deepseek",
+        defaultModel: "deepseek-v4-flash",
+        fallbackProviderId: "opencode-go",
+        fallbackModel: "deepseek-v4-pro",
+      },
+      {
+        task: "node_generation",
+        defaultProviderId: "deepseek",
+        defaultModel: "deepseek-v4-flash",
+        fallbackProviderId: "opencode-go",
+        fallbackModel: "qwen3.6-plus",
+      },
+      {
+        task: "pdf_qa",
+        defaultProviderId: "deepseek",
+        defaultModel: "deepseek-v4-flash",
+        fallbackProviderId: null,
+        fallbackModel: null,
+      },
+    ],
+  };
+}
+
 describe("LLM router", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -131,5 +224,60 @@ describe("LLM router", () => {
     expect(catalog.providers).toHaveLength(1);
     expect(catalog.providers[0].id).toBe("primary");
     expect(catalog.providers[0].models).toEqual(["fast"]);
+  });
+
+  it("limits free plan catalogs to official DeepSeek V4 models", () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "deepseek-key");
+    vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
+
+    const catalog = getLlmChatModelCatalogFromConfig(createFreePlanConfig(), "free");
+
+    expect(catalog.defaultSelection).toEqual({
+      providerId: "deepseek",
+      model: "deepseek-v4-flash",
+    });
+    expect(catalog.providers).toEqual([
+      {
+        id: "deepseek",
+        displayName: "DeepSeek",
+        configured: true,
+        models: ["deepseek-v4-flash", "deepseek-v4-pro"],
+      },
+    ]);
+  });
+
+  it("rejects OpenCode Go selections for free plan users", () => {
+    expect(() =>
+      resolveLlmCandidatesFromConfig(
+        createFreePlanConfig(),
+        "branch_chat",
+        { providerId: "opencode-go", model: "deepseek-v4-pro" },
+        { requireJson: true, accountPlan: "free" },
+      ),
+    ).toThrow("Selected AI model is not available on the free plan.");
+  });
+
+  it("removes non-free fallbacks while keeping the official DeepSeek default", () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "deepseek-key");
+    vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
+
+    const candidates = resolveLlmCandidatesFromConfig(
+      createFreePlanConfig(),
+      "branch_chat",
+      undefined,
+      { requireJson: true, accountPlan: "free" },
+    );
+
+    expect(
+      candidates.map((candidate) => ({
+        provider: candidate.provider.providerId,
+        model: candidate.model.model,
+      })),
+    ).toEqual([
+      {
+        provider: "deepseek",
+        model: "deepseek-v4-flash",
+      },
+    ]);
   });
 });

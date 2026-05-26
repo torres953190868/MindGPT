@@ -56,6 +56,13 @@ const geminiLlmMigration = readFileSync(
   ),
   "utf8",
 );
+const freePlanModelAccessMigration = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/20260526000000_branchmind_free_plan_model_access.sql",
+  ),
+  "utf8",
+);
 
 describe("Supabase foundation migration", () => {
   it("creates the beta persistence and distributed rate-limit tables", () => {
@@ -121,6 +128,20 @@ describe("Supabase foundation migration", () => {
     expect(userPlansMigration).not.toMatch(
       /on branchmind_user_plans\s+for update/i,
     );
+  });
+
+  it("defaults newly-created users to the free plan", () => {
+    expect(userPlansMigration).toContain("plan text not null default 'free'");
+    expect(userPlansMigration).toContain("values (new.id, 'free')");
+    expect(freePlanModelAccessMigration).toContain("alter column plan set default 'free'");
+    expect(freePlanModelAccessMigration).toContain("create trigger on_auth_user_created_plan");
+  });
+
+  it("keeps official DeepSeek V4 models available for free-plan routing", () => {
+    expect(freePlanModelAccessMigration).toContain("https://api.deepseek.com/chat/completions");
+    expect(freePlanModelAccessMigration).toContain("'DEEPSEEK_API_KEY'");
+    expect(freePlanModelAccessMigration).toContain("'deepseek-v4-flash'");
+    expect(freePlanModelAccessMigration).toContain("'deepseek-v4-pro'");
   });
 
   it("adds admin LLM routing tables and private bug report attachments", () => {

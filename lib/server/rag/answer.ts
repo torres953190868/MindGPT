@@ -165,6 +165,7 @@ async function requestAnswer(
   question: string,
   retrieved: RetrievedChunk[],
   sections: RagSection[],
+  options: { userPlan?: string | null } = {},
 ) {
   if (isMockMode()) {
     const sources = retrieved
@@ -179,7 +180,9 @@ async function requestAnswer(
     return `根据检索到的片段，问题可以从这些页面寻找依据。(${retrieved[0]?.chunk.pageStart ?? "?"}页)\n\n来源\n${sources}`;
   }
 
-  const candidates = await resolveLlmCandidates("pdf_qa");
+  const candidates = await resolveLlmCandidates("pdf_qa", undefined, {
+    accountPlan: options.userPlan,
+  });
   let lastRetryableError: RagError | null = null;
 
   for (let index = 0; index < candidates.length; index += 1) {
@@ -292,6 +295,7 @@ export async function generateGroundedAnswer(
   question: string,
   retrieved: RetrievedChunk[],
   sections: RagSection[] = [],
+  options: { userPlan?: string | null } = {},
 ): Promise<RagQueryResponse> {
   if (retrieved.length === 0) {
     return {
@@ -302,7 +306,7 @@ export async function generateGroundedAnswer(
   }
 
   return {
-    answer: await requestAnswer(question, retrieved, sections),
+    answer: await requestAnswer(question, retrieved, sections, options),
     citations: citationsFromChunks(retrieved),
     retrievedChunks: retrievedChunkDtos(retrieved),
   };

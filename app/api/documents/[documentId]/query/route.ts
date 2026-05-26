@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { getBranchMindAuthContext } from "@/lib/server/auth";
+import { getAccountPlanForModelAccess } from "@/lib/server/account-plan";
 import { jsonWithSession, safeErrorWithSession } from "@/lib/server/http";
 import { checkRateLimitAsync } from "@/lib/server/rate-limit";
 import { getOrCreateRequestId } from "@/lib/server/request";
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest, context: QueryRouteContext) {
       documentId,
       body.question,
       body.topK,
+      { userPlan: await getAccountPlanForModelAccess(principal) },
     );
     return jsonWithSession(result, session, undefined, { requestId });
   } catch (error) {

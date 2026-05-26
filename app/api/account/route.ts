@@ -5,6 +5,12 @@ import {
   getSupabaseUserPublicEmail,
 } from "@/lib/server/auth-password";
 import { HttpError, jsonWithSession, safeErrorWithSession } from "@/lib/server/http";
+import {
+  DEFAULT_ACCOUNT_PLAN,
+  DEFAULT_PLAN_LIMITS,
+  PLAN_LIMITS_DISABLED,
+  getSupabaseAccountPlanInfo,
+} from "@/lib/server/account-plan";
 import { getExistingSessionId, getOrCreateSession } from "@/lib/server/session";
 import { hasSupabaseServerConfig } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
@@ -14,12 +20,6 @@ import { parseJsonBody } from "@/lib/server/validation";
 import { z } from "zod";
 
 const READ_ONLY_LOCAL_SESSION = { id: "", isNew: false };
-const PLAN_LIMITS_DISABLED = {
-  projects: null,
-  nodes: null,
-  documents: null,
-  aiMessages: null,
-} as const;
 
 const updateAccountSchema = z.object({
   displayName: z.string().trim().min(1).max(100).nullable().optional(),
@@ -78,6 +78,7 @@ async function getSupabaseAccountData(user: SupabaseAccountUser): Promise<Accoun
   const userId = user.id;
   const email = getSupabaseUserPublicEmail(user);
   const accountName = getSupabaseUserAccountName(user);
+  const planInfo = await getSupabaseAccountPlanInfo(userId);
 
   // Count actual resources
   const { count: projectCount } = await supabase
@@ -109,16 +110,16 @@ async function getSupabaseAccountData(user: SupabaseAccountUser): Promise<Accoun
   return {
     email,
     accountName,
-    displayName: null,
+    displayName: planInfo.displayName,
     authMode: "supabase",
     authConfigured: true,
-    plan: "unlimited",
-    subscriptionStatus: "inactive",
+    plan: planInfo.plan,
+    subscriptionStatus: planInfo.subscriptionStatus,
     usage: {
-      projects: { used: projectCount ?? 0, limit: PLAN_LIMITS_DISABLED.projects },
-      nodes: { used: nodeCount, limit: PLAN_LIMITS_DISABLED.nodes },
-      documents: { used: documentCount ?? 0, limit: PLAN_LIMITS_DISABLED.documents },
-      aiMessages: { used: 0, limit: PLAN_LIMITS_DISABLED.aiMessages },
+      projects: { used: projectCount ?? 0, limit: planInfo.limits.projects },
+      nodes: { used: nodeCount, limit: planInfo.limits.nodes },
+      documents: { used: documentCount ?? 0, limit: planInfo.limits.documents },
+      aiMessages: { used: 0, limit: planInfo.limits.aiMessages },
     },
   };
 }
@@ -158,13 +159,13 @@ export async function GET(request: NextRequest) {
             displayName: null,
             authMode: "guest",
             authConfigured: true,
-            plan: "unlimited",
+            plan: DEFAULT_ACCOUNT_PLAN,
             subscriptionStatus: "inactive",
             usage: {
-              projects: { used: 0, limit: PLAN_LIMITS_DISABLED.projects },
-              nodes: { used: 0, limit: PLAN_LIMITS_DISABLED.nodes },
-              documents: { used: 0, limit: PLAN_LIMITS_DISABLED.documents },
-              aiMessages: { used: 0, limit: PLAN_LIMITS_DISABLED.aiMessages },
+              projects: { used: 0, limit: DEFAULT_PLAN_LIMITS.free.projects },
+              nodes: { used: 0, limit: DEFAULT_PLAN_LIMITS.free.nodes },
+              documents: { used: 0, limit: DEFAULT_PLAN_LIMITS.free.documents },
+              aiMessages: { used: 0, limit: DEFAULT_PLAN_LIMITS.free.aiMessages },
             },
           },
           fallbackSession,

@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { getBranchMindAuthContext } from "@/lib/server/auth";
+import { getAccountPlanForModelAccess } from "@/lib/server/account-plan";
 import { jsonWithSession, safeErrorWithSession } from "@/lib/server/http";
 import { getLlmChatModelCatalog } from "@/lib/server/llm-router";
 import { getExistingSessionId, getOrCreateSession } from "@/lib/server/session";
@@ -15,8 +16,9 @@ export async function GET(request: NextRequest) {
       return jsonWithSession(await getLlmChatModelCatalog(), READ_ONLY_LOCAL_SESSION);
     }
 
-    const { session } = await getBranchMindAuthContext(request);
-    return jsonWithSession(await getLlmChatModelCatalog(), session);
+    const { principal, session } = await getBranchMindAuthContext(request);
+    const accountPlan = await getAccountPlanForModelAccess(principal);
+    return jsonWithSession(await getLlmChatModelCatalog(accountPlan), session);
   } catch (error) {
     return safeErrorWithSession(error, fallbackSession);
   }

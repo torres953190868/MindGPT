@@ -1,5 +1,9 @@
 import { HttpError } from "@/lib/server/http";
 import {
+  isAccountPlanModelRestricted,
+  isModelAllowedForAccountPlan,
+} from "@/lib/server/account-plan";
+import {
   CHAT_COMPLETIONS_PROVIDERS,
   getConfiguredProviderId,
   getProviderAllowedModels,
@@ -50,6 +54,13 @@ export type ChatModelCatalog = {
     configured: boolean;
     models: string[];
   }>;
+};
+
+type LlmResolveOptions = {
+  requireConfigured?: boolean;
+  requireStreaming?: boolean;
+  requireJson?: boolean;
+  accountPlan?: string | null;
 };
 
 function isEnabled(value: string | undefined) {
@@ -317,12 +328,13 @@ function createCandidate(
   providerId: string,
   modelId: string,
   source: LlmRuntimeCandidate["source"],
-  options: { requireConfigured?: boolean; requireStreaming?: boolean; requireJson?: boolean },
+  options: LlmResolveOptions,
 ) {
   const provider = getProvider(bundle, providerId);
   const model = getModel(bundle, providerId, modelId);
   if (!provider || !model) return null;
   if (!provider.enabled || !model.enabled) return null;
+  if (!isModelAllowedForAccountPlan(options.accountPlan, providerId, modelId)) return null;
   if (options.requireConfigured && !isProviderConfigured(provider)) return null;
   if (options.requireStreaming && !model.supportsStreaming) return null;
   if (options.requireJson && !model.supportsJson) return null;
@@ -344,11 +356,7 @@ export function resolveLlmCandidatesFromConfig(
   bundle: LlmConfigBundle,
   task: LlmRouteTask,
   selection?: ChatModelSelection,
-  options: {
-    requireConfigured?: boolean;
-    requireStreaming?: boolean;
-    requireJson?: boolean;
-  } = {},
+  options: LlmResolveOptions = {},
 ): LlmRuntimeCandidate[] {
   if (selection) {
     const providerId = selection.providerId.trim().toLowerCase();
@@ -366,6 +374,12 @@ export function resolveLlmCandidatesFromConfig(
       throw unavailableExplicitSelectionError(
         "Selected AI model is not allowed.",
         `${provider.errorCodePrefix}_MODEL_NOT_ALLOWED`,
+      );
+    }
+    if (!isModelAllowedForAccountPlan(options.accountPlan, providerId, modelId)) {
+      throw unavailableExplicitSelectionError(
+        "Selected AI model is not available on the free plan.",
+        "PLAN_MODEL_NOT_ALLOWED",
       );
     }
     if (options.requireStreaming && !model.supportsStreaming) {
@@ -429,7 +443,10 @@ export function resolveLlmCandidatesFromConfig(
       }
     }
 
-    if (candidates.length === 0) {
+    if (
+      candidates.length === 0 &&
+      !isAccountPlanModelRestricted(options.accountPlan)
+    ) {
       throw new HttpError("No configured AI model is available for this task.", {
         code: "LLM_ROUTE_NOT_AVAILABLE",
         status: 500,
@@ -460,7 +477,7 @@ export function resolveLlmCandidatesFromConfig(
 export async function resolveLlmCandidates(
   task: LlmRouteTask,
   selection?: ChatModelSelection,
-  options: { requireStreaming?: boolean; requireJson?: boolean } = {},
+  options: LlmResolveOptions = {},
 ) {
   return resolveLlmCandidatesFromConfig(
     await getLlmConfig(),
@@ -493,21 +510,24 @@ export function getLlmRequestTimeoutMs(provider: LlmRuntimeProvider) {
   );
 }
 
-export function getLlmChatModelCatalogFromConfig(bundle: LlmConfigBundle): ChatModelCatalog {
+export function getLlmChatModelCatalogFromConfig(
+  bundle: LlmConfigBundle,
+  accountPlan?: string | null,
+): ChatModelCatalog {
   let defaultSelection: LlmRuntimeCandidate;
   try {
     defaultSelection = resolveLlmCandidatesFromConfig(
       bundle,
       "branch_chat",
       undefined,
-      { requireConfigured: true, requireJson: true },
+      { requireConfigured: true, requireJson: true, accountPlan },
     )[0];
   } catch {
     defaultSelection = resolveLlmCandidatesFromConfig(
       bundle,
       "branch_chat",
       undefined,
-      { requireJson: true },
+      { requireJson: true, accountPlan },
     )[0];
   }
 
@@ -527,7 +547,12 @@ export function getLlmChatModelCatalogFromConfig(bundle: LlmConfigBundle): ChatM
             (model) =>
               model.providerId === provider.providerId &&
               model.enabled &&
-              model.supportsJson,
+              model.supportsJson &&
+              isModelAllowedForAccountPlan(
+                accountPlan,
+                model.providerId,
+                model.model,
+              ),
           )
           .sort((left, right) => left.sortOrder - right.sortOrder || left.model.localeCompare(right.model))
           .map((model) => model.model),
@@ -536,8 +561,8 @@ export function getLlmChatModelCatalogFromConfig(bundle: LlmConfigBundle): ChatM
   };
 }
 
-export async function getLlmChatModelCatalog() {
-  return getLlmChatModelCatalogFromConfig(await getLlmConfig());
+export async function getLlmChatModelCatalog(accountPlan?: string | null) {
+  return getLlmChatModelCatalogFromConfig(await getLlmConfig(), accountPlan);
 }
 
 export async function getAdminLlmConfig() {

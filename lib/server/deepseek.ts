@@ -87,7 +87,7 @@ export async function requestDeepSeekReply(
   const candidates = await resolveLlmCandidates(
     body.llmTask ?? "branch_chat",
     body.modelSelection,
-    { requireJson: true },
+    { requireJson: true, accountPlan: body.userPlan },
   );
 
   for (let candidateIndex = 0; candidateIndex < candidates.length; candidateIndex += 1) {
