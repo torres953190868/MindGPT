@@ -414,6 +414,14 @@ textarea {
   border-radius: 12px;
 }
 
+.node-detail-panel-surface[data-has-composer="true"] {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.node-detail-panel-surface[data-has-composer="false"] {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
 .branchmind-projects-surface {
   background-color: var(--projects-surface-background);
   background-image:

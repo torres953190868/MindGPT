@@ -3705,3 +3705,181 @@ test("key pages do not overflow mobile and tablet widths", async ({ page }) => {
     }
   }
 });
+
+test("uses the blank lower mobile chat space for conversation history", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chrome", "Mobile chat layout is covered once.");
+
+  const sourceProject = makeScrollableWorkspaceProject(`mobile-chat-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/workspace/${project.id}`);
+    await page.getByTestId("workspace-mobile-view-chat").click();
+
+    const metrics = await page.evaluate(() => {
+      const panel = document.querySelector<HTMLElement>('[data-testid="node-detail-panel"]');
+      const history = document.querySelector<HTMLElement>(
+        '[data-testid="conversation-history"]',
+      );
+      const composer = document.querySelector<HTMLElement>('[data-testid="message-composer"]');
+
+      if (!panel || !history || !composer) {
+        throw new Error("Expected mobile chat panel, history, and composer.");
+      }
+
+      const panelRect = panel.getBoundingClientRect();
+      const historyRect = history.getBoundingClientRect();
+      const composerRect = composer.getBoundingClientRect();
+
+      return {
+        blankBelowComposer: panelRect.bottom - composerRect.bottom,
+        clientWidth: document.documentElement.clientWidth,
+        historyClientHeight: history.clientHeight,
+        historyHeight: historyRect.height,
+        historyScrollHeight: history.scrollHeight,
+        panelHeight: panelRect.height,
+        scrollWidth: document.documentElement.scrollWidth,
+        viewportHeight: window.innerHeight,
+      };
+    });
+
+    expect(metrics.panelHeight).toBeGreaterThan(metrics.viewportHeight - 140);
+    expect(metrics.historyHeight).toBeGreaterThan(metrics.viewportHeight * 0.32);
+    expect(metrics.historyScrollHeight).toBeGreaterThan(metrics.historyClientHeight + 24);
+    expect(metrics.blankBelowComposer).toBeLessThanOrEqual(20);
+    expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1);
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("fills the mobile map view without leaving a blank workspace tail", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chrome", "Mobile map layout is covered once.");
+
+  const sourceProject = makeWorkspaceProject(`mobile-map-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/workspace/${project.id}`);
+    await page.getByTestId("workspace-mobile-view-map").click();
+
+    const metrics = await page.evaluate(() => {
+      const map = document.querySelector<HTMLElement>('[data-testid="mind-map-canvas"]');
+      const flow = document.querySelector<HTMLElement>(
+        '[data-testid="mind-map-react-flow"]',
+      );
+
+      if (!map || !flow) {
+        throw new Error("Expected mobile map and React Flow canvas.");
+      }
+
+      const mapRect = map.getBoundingClientRect();
+      const flowRect = flow.getBoundingClientRect();
+      const gridRect = map.parentElement!.getBoundingClientRect();
+
+      return {
+        blankTailHeight: gridRect.bottom - mapRect.bottom,
+        clientWidth: document.documentElement.clientWidth,
+        flowHeight: flowRect.height,
+        mapHeight: mapRect.height,
+        resizeHandleCount: document.querySelectorAll(
+          '[data-testid="resize-mind-map-height"]',
+        ).length,
+        scrollWidth: document.documentElement.scrollWidth,
+        viewportHeight: window.innerHeight,
+      };
+    });
+
+    expect(metrics.mapHeight).toBeGreaterThan(metrics.viewportHeight - 140);
+    expect(Math.abs(metrics.flowHeight - metrics.mapHeight)).toBeLessThanOrEqual(2);
+    expect(metrics.blankTailHeight).toBeLessThanOrEqual(2);
+    expect(metrics.resizeHandleCount).toBe(0);
+    expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1);
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("starts the mobile map focused on the root node", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chrome", "Mobile map layout is covered once.");
+
+  const sourceProject = makeWorkspaceTreeProject(`mobile-root-focus-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/workspace/${project.id}`);
+    await page.getByTestId("workspace-mobile-view-map").click();
+
+    const mindMapCanvas = page.getByTestId("mind-map-react-flow");
+    const rootCard = page.locator(
+      `[data-testid="branch-node-card"][data-node-id="${project.rootNodeId}"]`,
+    );
+
+    await expect(rootCard).toBeVisible();
+    await expect
+      .poll(async () => (await getReactFlowViewport(mindMapCanvas)).zoom)
+      .toBeGreaterThan(1.05);
+
+    const metrics = await page.evaluate((rootNodeId) => {
+      const map = document.querySelector<HTMLElement>('[data-testid="mind-map-canvas"]');
+      const root = document.querySelector<HTMLElement>(
+        `[data-testid="branch-node-card"][data-node-id="${rootNodeId}"]`,
+      );
+
+      if (!map || !root) {
+        throw new Error("Expected mobile map and root node.");
+      }
+
+      const mapRect = map.getBoundingClientRect();
+      const rootRect = root.getBoundingClientRect();
+
+      return {
+        mapCenterX: mapRect.left + mapRect.width / 2,
+        mapCenterY: mapRect.top + mapRect.height / 2,
+        mapHeight: mapRect.height,
+        mapWidth: mapRect.width,
+        rootCenterX: rootRect.left + rootRect.width / 2,
+        rootCenterY: rootRect.top + rootRect.height / 2,
+        rootWidth: rootRect.width,
+      };
+    }, project.rootNodeId);
+
+    expect(Math.abs(metrics.rootCenterX - metrics.mapCenterX)).toBeLessThan(
+      metrics.mapWidth * 0.12,
+    );
+    expect(Math.abs(metrics.rootCenterY - metrics.mapCenterY)).toBeLessThan(
+      metrics.mapHeight * 0.12,
+    );
+    expect(metrics.rootWidth).toBeGreaterThan(320);
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});

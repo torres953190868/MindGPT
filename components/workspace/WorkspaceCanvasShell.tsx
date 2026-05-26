@@ -47,8 +47,6 @@ const DESKTOP_MAP_MIN_WIDTH = 220;
 const WORKSPACE_SIDEBAR_DEFAULT_WIDTH = SIDE_PANEL_PREFERRED_MIN_WIDTH;
 const DESKTOP_RESIZE_HANDLE_WIDTH = 8;
 const WORKSPACE_GRID_GAP = 0;
-const MOBILE_MAP_DEFAULT_HEIGHT = 500;
-const MOBILE_MAP_MIN_HEIGHT = 300;
 
 type MobileWorkspaceView = "map" | "outline" | "chat" | "notes";
 type ResizableSide = "left" | "right";
@@ -343,7 +341,6 @@ export function WorkspaceCanvasShell({
   const [projectNotesPanelWidth, setProjectNotesPanelWidth] = useState(
     PROJECT_NOTES_PANEL_DEFAULT_WIDTH,
   );
-  const [mobileMapHeight, setMobileMapHeight] = useState(MOBILE_MAP_DEFAULT_HEIGHT);
   const [mobileWorkspaceView, setMobileWorkspaceView] =
     useState<MobileWorkspaceView>(() => (dataDraftWorkspace ? "map" : "chat"));
   const [isWorkspaceSidebarCollapsed, setIsWorkspaceSidebarCollapsed] = useState(
@@ -395,7 +392,6 @@ export function WorkspaceCanvasShell({
     "--detail-panel-width": `${detailPanelWidth}px`,
     "--project-notes-panel-width": `${projectNotesPanelWidth}px`,
     "--workspace-grid-columns": desktopGridColumns,
-    "--mobile-map-height": `${mobileMapHeight}px`,
   } as CSSProperties;
   const canvasIntroStyle = {
     transform: `translate3d(0, ${canvasIntroPanOffsetY}px, 0)`,
@@ -403,7 +399,7 @@ export function WorkspaceCanvasShell({
   const workspaceGridClassName = usesMobileDrawers
     ? "branchmind-workspace-grid branchmind-home-workspace-grid grid min-h-0 min-w-0 flex-1 grid-cols-1 overflow-hidden bg-transparent lg:h-full lg:flex-1 lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0"
     : [
-        "branchmind-workspace-grid grid min-h-0 min-w-0 grid-cols-1 gap-3 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl md:gap-4 lg:h-full lg:flex-1 lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:shadow-none",
+        "branchmind-workspace-grid grid min-h-0 min-w-0 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-3 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl md:gap-4 lg:h-full lg:flex-1 lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:rounded-none lg:border-0 lg:shadow-none",
         dataDraftWorkspace ? "" : "flex-1",
       ].join(" ");
   const mobileTabsClassName = hasProjectNotes
@@ -417,11 +413,11 @@ export function WorkspaceCanvasShell({
   const nodeDetailMobileClassName = usesMobileDrawers
     ? "branchmind-mobile-drawer branchmind-mobile-drawer-right fixed bottom-2 right-2 top-2 z-40 flex w-[min(88vw,360px)] min-w-0 lg:contents"
     : mobileWorkspaceView === "chat"
-      ? "h-[calc(100svh-9.75rem)] min-h-0 min-w-0 overflow-hidden sm:h-[calc(100svh-12rem)] lg:contents"
+      ? "h-full max-h-full min-h-0 min-w-0 overflow-hidden lg:contents"
       : "hidden lg:contents";
   const mapShellClassName = usesMobileDrawers
     ? "branchmind-map-shell relative h-full min-h-0 overflow-hidden bg-surface-canvas lg:h-full lg:min-h-0"
-    : `branchmind-map-shell relative h-[min(var(--mobile-map-height),calc(100svh-7rem))] min-h-[300px] overflow-hidden rounded-lg border border-neutral-200 bg-surface-canvas shadow-sm lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none ${
+    : `branchmind-map-shell relative h-full min-h-0 overflow-hidden rounded-lg border border-neutral-200 bg-surface-canvas shadow-sm lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none ${
         mobileWorkspaceView === "map" ? "" : "hidden lg:block"
       }`;
   const canvasIntroClassName = usesMobileDrawers
@@ -801,46 +797,6 @@ export function WorkspaceCanvasShell({
     workspaceSidebarWidth,
   ]);
 
-  const handleMapResizeStart = useCallback((event: ResizeStartEvent) => {
-    event.preventDefault();
-    const isPointerResize = getResizeInputMode(event) === "pointer";
-
-    const startY = event.clientY;
-    const startHeight = mobileMapHeight;
-    const maxHeight = Math.max(MOBILE_MAP_MIN_HEIGHT, window.innerHeight - 220);
-
-    function resizeTo(clientY: number) {
-      const deltaY = clientY - startY;
-      setMobileMapHeight(clamp(startHeight + deltaY, MOBILE_MAP_MIN_HEIGHT, maxHeight));
-    }
-
-    function handlePointerMove(moveEvent: globalThis.PointerEvent) {
-      resizeTo(moveEvent.clientY);
-    }
-
-    function handleMouseMove(moveEvent: globalThis.MouseEvent) {
-      resizeTo(moveEvent.clientY);
-    }
-
-    function handlePointerUp() {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-    }
-
-    function handleMouseUp() {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    }
-
-    if (isPointerResize) {
-      window.addEventListener("pointermove", handlePointerMove);
-      window.addEventListener("pointerup", handlePointerUp, { once: true });
-    } else {
-      window.addEventListener("mousemove", handleMouseMove);
-      window.addEventListener("mouseup", handleMouseUp, { once: true });
-    }
-  }, [mobileMapHeight]);
-
   useEffect(() => {
     if (canvasIntro) return;
     setCanvasIntroPanOffsetY(0);
@@ -923,7 +879,7 @@ export function WorkspaceCanvasShell({
       aria-labelledby="workspace-title"
       data-testid="workspace-shell"
       data-draft-workspace={dataDraftWorkspace ? "true" : undefined}
-      className="branchmind-workspace-surface relative flex min-h-[100svh] flex-col bg-surface-bg p-2 text-neutral-900 sm:p-3 lg:h-[100dvh] lg:min-h-[640px] lg:overflow-hidden lg:p-0"
+      className="branchmind-workspace-surface relative flex h-[100svh] min-h-[100svh] flex-col overflow-hidden bg-surface-bg p-2 text-neutral-900 sm:p-3 lg:h-[100dvh] lg:min-h-[640px] lg:p-0"
     >
       <h1 id="workspace-title" className="sr-only">
         {project.title}
@@ -1092,14 +1048,6 @@ export function WorkspaceCanvasShell({
             onResizeStart={handlePanelResizeStart}
           />
         )}
-        {!usesMobileDrawers && mobileWorkspaceView === "map" && (
-          <WorkspaceResizeHandle
-            orientation="horizontal"
-            ariaLabel="Resize mind map height"
-            testId="resize-mind-map-height"
-            onResizeStart={handleMapResizeStart}
-          />
-        )}
         {!isNodeDetailPanelCollapsed && (
           <div className={nodeDetailMobileClassName}>
             <NodeDetailPanel
@@ -1143,7 +1091,7 @@ export function WorkspaceCanvasShell({
             data-testid="project-notes-window"
             className={
               isProjectNotesMobileViewOpen
-                ? "h-[calc(100svh-9.75rem)] max-h-[calc(100svh-9.75rem)] min-h-0 min-w-0 overflow-hidden sm:h-[calc(100svh-12rem)] sm:max-h-[calc(100svh-12rem)] lg:relative lg:inset-auto lg:z-auto lg:h-full lg:max-h-full lg:w-full lg:max-w-none"
+                ? "h-full max-h-full min-h-0 min-w-0 overflow-hidden lg:relative lg:inset-auto lg:z-auto lg:h-full lg:max-h-full lg:w-full lg:max-w-none"
                 : "fixed bottom-3 right-3 top-3 z-40 flex min-h-0 w-[calc(100vw-24px)] max-w-[420px] min-w-0 overflow-hidden lg:relative lg:inset-auto lg:z-auto lg:h-full lg:max-h-full lg:w-full lg:max-w-none"
             }
           >

@@ -37,6 +37,8 @@ const HOME_CANVAS_WHEEL_PAN_SPEED = 0.5;
 const HOME_HERO_MIN_VISIBLE_TOP = 16;
 const HOME_CANVAS_PAN_ACTIVATION_DISTANCE = 6;
 const LINE_SCROLL_DELTA_MULTIPLIER = 20;
+const MOBILE_ROOT_FOCUS_MEDIA_QUERY = "(max-width: 1023px)";
+const MOBILE_ROOT_FOCUS_ZOOM = 1.15;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -84,6 +86,8 @@ export function MindMap({
   const homeViewportBaselineXRef = useRef<number | null>(null);
   const homeViewportBaselineYRef = useRef<number | null>(null);
   const previousFlowBoundsRef = useRef<DOMRectReadOnly | null>(null);
+  const mobileRootFocusProjectIdRef = useRef<string | null>(null);
+  const mobileRootFocusPendingRef = useRef(false);
   const visibleNodeIds = useMemo(() => getVisibleNodeIds(project), [project]);
 
   const graphNodes = useMemo<Node<BranchNodeData>[]>(() => {
@@ -239,7 +243,69 @@ export function MindMap({
 
   useEffect(() => {
     previousFlowBoundsRef.current = null;
+    mobileRootFocusProjectIdRef.current = null;
+    mobileRootFocusPendingRef.current = false;
   }, [project.id]);
+
+  const focusMobileRootNode = useCallback(() => {
+    if (!reactFlowInstance || isHomeInlineComposer) return;
+    if (mobileRootFocusProjectIdRef.current === project.id) return;
+    if (mobileRootFocusPendingRef.current) return;
+    if (!window.matchMedia(MOBILE_ROOT_FOCUS_MEDIA_QUERY).matches) return;
+    if (!graphNodes.some((node) => node.id === project.rootNodeId)) return;
+
+    const container = flowContainerRef.current;
+    const bounds = container?.getBoundingClientRect();
+    if (!bounds || bounds.width === 0 || bounds.height === 0) return;
+
+    mobileRootFocusPendingRef.current = true;
+    void reactFlowInstance
+      .fitView({
+        nodes: [{ id: project.rootNodeId }],
+        minZoom: MOBILE_ROOT_FOCUS_ZOOM,
+        maxZoom: MOBILE_ROOT_FOCUS_ZOOM,
+        duration: 0,
+      })
+      .then((didFit) => {
+        if (didFit) {
+          mobileRootFocusProjectIdRef.current = project.id;
+        }
+      })
+      .finally(() => {
+        mobileRootFocusPendingRef.current = false;
+      });
+  }, [
+    graphNodes,
+    isHomeInlineComposer,
+    project.id,
+    project.rootNodeId,
+    reactFlowInstance,
+  ]);
+
+  useEffect(() => {
+    if (!reactFlowInstance || isHomeInlineComposer) return undefined;
+
+    const container = flowContainerRef.current;
+    if (!container) return undefined;
+
+    let animationFrame = 0;
+    const scheduleFocusRoot = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(focusMobileRootNode);
+    };
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleFocusRoot);
+
+    scheduleFocusRoot();
+    observer?.observe(container);
+    window.addEventListener("resize", scheduleFocusRoot);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      observer?.disconnect();
+      window.removeEventListener("resize", scheduleFocusRoot);
+    };
+  }, [focusMobileRootNode, isHomeInlineComposer, reactFlowInstance]);
 
   useEffect(() => {
     if (!reactFlowInstance || isHomeInlineComposer) return undefined;
