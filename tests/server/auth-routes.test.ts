@@ -256,6 +256,34 @@ describe("auth routes", () => {
     expect(createUserMock).not.toHaveBeenCalled();
   });
 
+  it("reports taken account names during sign-up", async () => {
+    createUserMock.mockResolvedValue({
+      data: { user: null },
+      error: {
+        code: "email_exists",
+        message: "A user with this email address has already been registered",
+        status: 422,
+      },
+    });
+    const { POST } = await import("@/app/api/auth/sign-up/route");
+
+    const response = await POST(
+      createJsonRequest("https://branchmind.example/api/auth/sign-up", {
+        accountName: "learner-1",
+        password: "correct horse battery",
+        next: "/projects",
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.error).toMatchObject({
+      code: "ACCOUNT_NAME_TAKEN",
+      message: "Account name is already taken.",
+    });
+    expect(signInWithPasswordMock).not.toHaveBeenCalled();
+  });
+
   it("signs in with password and migrates anonymous browser data", async () => {
     const anonymousSessionId = "anon_session_12345678901234567890";
     signInWithPasswordMock.mockResolvedValue({

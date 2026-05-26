@@ -15,6 +15,25 @@ import {
 } from "@/lib/supabase/server";
 import { parseJsonBody } from "@/lib/server/validation";
 
+function getAuthCreateErrorField(error: unknown, field: "code" | "message") {
+  if (!error || typeof error !== "object") return null;
+  const value = (error as Record<string, unknown>)[field];
+  return typeof value === "string" ? value.toLowerCase() : null;
+}
+
+function isAccountAlreadyRegisteredError(error: unknown) {
+  const code = getAuthCreateErrorField(error, "code");
+  const message = getAuthCreateErrorField(error, "message");
+  const text = [code, message].filter(Boolean).join(" ");
+
+  return (
+    text.includes("already") ||
+    text.includes("exists") ||
+    text.includes("email_exists") ||
+    text.includes("user_already_exists")
+  );
+}
+
 export async function POST(request: NextRequest) {
   const session = getAuthRouteSession(request);
 
@@ -50,8 +69,17 @@ export async function POST(request: NextRequest) {
     });
 
     if (createError) {
-      throw new HttpError("Unable to create account.", {
+      if (isAccountAlreadyRegisteredError(createError)) {
+        throw new HttpError("Account name is already taken.", {
+          code: "ACCOUNT_NAME_TAKEN",
+          expose: true,
+          status: 409,
+        });
+      }
+
+      throw new HttpError("Unable to create account. Please try again.", {
         code: "SIGN_UP_FAILED",
+        expose: true,
         status: 400,
       });
     }
