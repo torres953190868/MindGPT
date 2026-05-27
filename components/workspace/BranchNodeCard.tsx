@@ -1,6 +1,13 @@
 "use client";
 
-import { type FormEvent, type KeyboardEvent, useState } from "react";
+import {
+  type FormEvent,
+  type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type TouchEvent as ReactTouchEvent,
+  useState,
+} from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { GitBranch, Loader2, Send, Sparkles, Ribbon } from "lucide-react";
 import {
@@ -34,6 +41,14 @@ export type InlineNodeComposerData = {
   ) => Promise<string | null>;
 };
 
+export type MobileLongPressStart = {
+  pointerId: number;
+  clientX: number;
+  clientY: number;
+  button: number;
+  isPrimary: boolean;
+};
+
 export type BranchNodeData = {
   mindNode: MindNode;
   selected: boolean;
@@ -42,10 +57,36 @@ export type BranchNodeData = {
   onToggle: (nodeId: string) => void;
   isStreaming: boolean;
   creationDisabled: boolean;
+  mobileLongPressDragEnabled: boolean;
+  mobileLongPressDragging: boolean;
+  onMobileLongPressStart: (nodeId: string, event: MobileLongPressStart) => void;
+  consumeMobileNodeClickSuppression: (nodeId: string) => boolean;
   inlineComposer?: InlineNodeComposerData;
 };
 
 type QuickActionItem = "branch" | "fold";
+
+function isBlockedMobileLongPressTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return true;
+
+  return Boolean(
+    target.closest(
+      [
+        "textarea",
+        "input",
+        "select",
+        "a",
+        "[contenteditable='true']",
+        "[data-mobile-node-drag-blocker='true']",
+        ".branchmind-handle-branch",
+        ".branchmind-handle-continue",
+        ".home-inline-composer",
+        ".branch-node-quick-action",
+        "button:not([data-testid='open-node-button'])",
+      ].join(","),
+    ),
+  );
+}
 
 export function BranchNodeCard({ data }: NodeProps) {
   const { copy } = useLanguage();
@@ -58,6 +99,10 @@ export function BranchNodeCard({ data }: NodeProps) {
     onToggle,
     isStreaming,
     creationDisabled,
+    mobileLongPressDragEnabled,
+    mobileLongPressDragging,
+    onMobileLongPressStart,
+    consumeMobileNodeClickSuppression,
     inlineComposer,
   } = nodeData;
   const nodeTitleId = `branch-node-${mindNode.id}-title`;
@@ -68,6 +113,69 @@ export function BranchNodeCard({ data }: NodeProps) {
   const quickActionHighlight = useHighlightedAction<QuickActionItem>();
   const isBranchQuickActionHighlighted = quickActionHighlight.isHighlighted("branch");
   const isFoldQuickActionHighlighted = quickActionHighlight.isHighlighted("fold");
+  const canLongPressDragNode =
+    mobileLongPressDragEnabled && !hasInlineComposer && !isHomeInlineComposer;
+
+  function handleMobileLongPressPointerDownCapture(
+    event: ReactPointerEvent<HTMLElement>,
+  ) {
+    if (!canLongPressDragNode) return;
+    if (isBlockedMobileLongPressTarget(event.target)) return;
+
+    onMobileLongPressStart(mindNode.id, {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      button: event.button,
+      isPrimary: event.isPrimary,
+    });
+  }
+
+  function handleMobileLongPressMouseDownCapture(event: ReactMouseEvent<HTMLElement>) {
+    if (!canLongPressDragNode) return;
+    if (isBlockedMobileLongPressTarget(event.target)) return;
+
+    onMobileLongPressStart(mindNode.id, {
+      pointerId: -1,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      button: event.button,
+      isPrimary: true,
+    });
+  }
+
+  function handleMobileLongPressTouchStartCapture(event: ReactTouchEvent<HTMLElement>) {
+    if (!canLongPressDragNode) return;
+    if (isBlockedMobileLongPressTarget(event.target)) return;
+
+    const touch = event.changedTouches.item(0);
+    if (!touch) return;
+
+    onMobileLongPressStart(mindNode.id, {
+      pointerId: touch.identifier,
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+      button: 0,
+      isPrimary: true,
+    });
+  }
+
+  function handleSuppressedMobileClickCapture(event: ReactMouseEvent<HTMLElement>) {
+    if (!consumeMobileNodeClickSuppression(mindNode.id)) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function handleSelectNodeClick(event: ReactMouseEvent<HTMLElement>) {
+    event.stopPropagation();
+    if (consumeMobileNodeClickSuppression(mindNode.id)) {
+      event.preventDefault();
+      return;
+    }
+
+    onSelect(mindNode.id);
+  }
 
   return (
     <article
@@ -78,7 +186,14 @@ export function BranchNodeCard({ data }: NodeProps) {
       data-selected={selected ? "true" : "false"}
       data-inline-composer={hasInlineComposer ? "true" : undefined}
       data-home-composer={isHomeInlineComposer ? "true" : undefined}
+      data-mobile-long-press-dragging={mobileLongPressDragging ? "true" : undefined}
+      onPointerDownCapture={handleMobileLongPressPointerDownCapture}
+      onMouseDownCapture={handleMobileLongPressMouseDownCapture}
+      onTouchStartCapture={handleMobileLongPressTouchStartCapture}
+      onClickCapture={handleSuppressedMobileClickCapture}
       className={`branch-node-card-surface branch-node-edge-hit-area group text-left transition ${
+        canLongPressDragNode ? "branch-node-mobile-long-press-root " : ""
+      }${
         isHomeInlineComposer
           ? `w-[min(312px,calc(100vw-72px))] rounded-xl border border-neutral-200/90 bg-white/92 p-2.5 shadow-lg backdrop-blur sm:w-[360px] sm:rounded-[18px] sm:p-5 md:w-[400px] lg:w-[min(760px,calc(100vw-48px))] lg:p-6 ${
               selected
@@ -129,13 +244,12 @@ export function BranchNodeCard({ data }: NodeProps) {
 
       <div
         role="presentation"
-        onClick={(event) => {
-          event.stopPropagation();
-          onSelect(mindNode.id);
-        }}
+        onClick={handleSelectNodeClick}
         data-testid="branch-node-inner-hit-area"
         data-node-id={mindNode.id}
-        className={`branch-node-inner-hit-area nodrag rounded-[18px] ${
+        className={`branch-node-inner-hit-area rounded-[18px] ${
+          canLongPressDragNode ? "branch-node-mobile-long-press-area" : "nodrag"
+        } ${
           isHomeInlineComposer ? "" : "nopan"
         }`}
       >
@@ -151,15 +265,14 @@ export function BranchNodeCard({ data }: NodeProps) {
         ) : (
           <button
             type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onSelect(mindNode.id);
-            }}
+            onClick={handleSelectNodeClick}
             aria-label={copy.workspace.openNode(mindNode.title)}
             aria-pressed={selected}
             data-testid="open-node-button"
             data-node-id={mindNode.id}
             className={`block w-full text-left outline-none transition focus-visible:ring-4 focus-visible:ring-brand-100 ${
+              canLongPressDragNode ? "branch-node-mobile-long-press-area " : ""
+            }${
               hasInlineComposer ? "rounded-[22px]" : "rounded-[18px]"
             }`}
           >
@@ -225,7 +338,7 @@ export function BranchNodeCard({ data }: NodeProps) {
             }}
             aria-label={copy.workspace.branchRight}
             title={copy.workspace.branchRight}
-            className={`branch-node-quick-action branch-node-quick-action-branch grid h-9 w-9 place-items-center rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 ${getHighlightedActionClass(
+            className={`branch-node-quick-action branch-node-quick-action-branch nodrag nopan grid h-9 w-9 place-items-center rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 ${getHighlightedActionClass(
               isBranchQuickActionHighlighted,
               "bg-brand-100 text-brand-700",
             )}`}
@@ -253,7 +366,7 @@ export function BranchNodeCard({ data }: NodeProps) {
             data-node-id={mindNode.id}
             data-highlighted={quickActionHighlight.getDataHighlighted("fold")}
             {...quickActionHighlight.getHoverHandlers("fold")}
-            className={`branch-node-quick-action branch-node-quick-action-toggle grid h-9 w-9 place-items-center rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 ${getHighlightedActionClass(
+            className={`branch-node-quick-action branch-node-quick-action-toggle nodrag nopan grid h-9 w-9 place-items-center rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 ${getHighlightedActionClass(
               isFoldQuickActionHighlighted,
               "bg-danger-100 text-danger-600",
             )}`}

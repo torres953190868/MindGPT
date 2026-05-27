@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -21,11 +22,12 @@ import {
   type Viewport,
 } from "@xyflow/react";
 import { getVisibleNodeIds } from "@/lib/graph";
-import type { Project } from "@/lib/types";
+import type { NodePosition, Project } from "@/lib/types";
 import {
   BranchNodeCard,
   type BranchNodeData,
   type InlineNodeComposerData,
+  type MobileLongPressStart,
 } from "./BranchNodeCard";
 
 const nodeTypes: NodeTypes = {
@@ -39,6 +41,11 @@ const HOME_CANVAS_PAN_ACTIVATION_DISTANCE = 6;
 const LINE_SCROLL_DELTA_MULTIPLIER = 20;
 const MOBILE_ROOT_FOCUS_MEDIA_QUERY = "(max-width: 1023px)";
 const MOBILE_ROOT_FOCUS_ZOOM = 1.15;
+const MOBILE_NODE_LONG_PRESS_DELAY_MS = 450;
+const MOBILE_NODE_LONG_PRESS_CANCEL_DISTANCE = 8;
+const MOBILE_NODE_DRAG_LOCKED_THRESHOLD = 100_000;
+const MOBILE_NODE_DRAG_ACTIVE_THRESHOLD = 1;
+const MOBILE_MOUSE_LONG_PRESS_POINTER_ID = -1;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -68,6 +75,19 @@ type HomeCanvasGesture = {
   captured: boolean;
 };
 
+type MobileNodeLongPressGesture = {
+  nodeId: string;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startNodePosition: NodePosition;
+  startFlowPosition: NodePosition | null;
+  latestPosition: NodePosition | null;
+  timerId: number;
+  activated: boolean;
+  moved: boolean;
+};
+
 export function MindMap({
   project,
   selectedNodeId,
@@ -88,7 +108,92 @@ export function MindMap({
   const previousFlowBoundsRef = useRef<DOMRectReadOnly | null>(null);
   const mobileRootFocusProjectIdRef = useRef<string | null>(null);
   const mobileRootFocusPendingRef = useRef(false);
+  const mobileNodeLongPressGestureRef =
+    useRef<MobileNodeLongPressGesture | null>(null);
+  const activeMobileNodeDragIdRef = useRef<string | null>(null);
+  const suppressMobileNodeClickRef = useRef<string | null>(null);
   const visibleNodeIds = useMemo(() => getVisibleNodeIds(project), [project]);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [mobileLongPressDragNodeId, setMobileLongPressDragNodeId] =
+    useState<string | null>(null);
+  const [reactFlowInstance, setReactFlowInstance] =
+    useState<ReactFlowInstance<Node<BranchNodeData>, Edge> | null>(null);
+  const dragDisabled = Boolean(creatingNodeId || streamingNodeId);
+  const isHomeInlineComposer = inlineNodeComposer?.variant === "home";
+  const homeComposerNodeId = isHomeInlineComposer ? inlineNodeComposer?.nodeId : null;
+  const mobileLongPressDragEnabled =
+    isMobileViewport && !dragDisabled && !isHomeInlineComposer;
+
+  const resetMobileNodeLongPressState = useCallback((suppressClick = false) => {
+    const gesture = mobileNodeLongPressGestureRef.current;
+    const nodeIdToSuppress =
+      gesture?.nodeId ?? activeMobileNodeDragIdRef.current ?? null;
+
+    if (gesture) {
+      window.clearTimeout(gesture.timerId);
+    }
+
+    if ((suppressClick || gesture?.activated) && nodeIdToSuppress) {
+      suppressMobileNodeClickRef.current = nodeIdToSuppress;
+    }
+
+    mobileNodeLongPressGestureRef.current = null;
+    activeMobileNodeDragIdRef.current = null;
+    setMobileLongPressDragNodeId(null);
+  }, []);
+
+  const handleMobileNodeLongPressStart = useCallback(
+    (nodeId: string, event: MobileLongPressStart) => {
+      if (!mobileLongPressDragEnabled) return;
+      if (!reactFlowInstance) return;
+      if (!event.isPrimary || event.button !== 0) return;
+
+      const node = project.nodes[nodeId];
+      if (!node) return;
+
+      resetMobileNodeLongPressState(false);
+
+      const pointerId = event.pointerId;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const timerId = window.setTimeout(() => {
+        const gesture = mobileNodeLongPressGestureRef.current;
+        if (!gesture || gesture.pointerId !== pointerId || gesture.nodeId !== nodeId) {
+          return;
+        }
+
+        gesture.activated = true;
+        gesture.startFlowPosition = reactFlowInstance.screenToFlowPosition({
+          x: gesture.startX,
+          y: gesture.startY,
+        });
+        gesture.latestPosition = gesture.startNodePosition;
+        activeMobileNodeDragIdRef.current = nodeId;
+        setMobileLongPressDragNodeId(nodeId);
+      }, MOBILE_NODE_LONG_PRESS_DELAY_MS);
+
+      mobileNodeLongPressGestureRef.current = {
+        nodeId,
+        pointerId,
+        startX,
+        startY,
+        startNodePosition: node.position,
+        startFlowPosition: null,
+        latestPosition: null,
+        timerId,
+        activated: false,
+        moved: false,
+      };
+    },
+    [mobileLongPressDragEnabled, project.nodes, reactFlowInstance, resetMobileNodeLongPressState],
+  );
+
+  const consumeMobileNodeClickSuppression = useCallback((nodeId: string) => {
+    if (suppressMobileNodeClickRef.current !== nodeId) return false;
+
+    suppressMobileNodeClickRef.current = null;
+    return true;
+  }, []);
 
   const graphNodes = useMemo<Node<BranchNodeData>[]>(() => {
     return Object.values(project.nodes)
@@ -107,6 +212,10 @@ export function MindMap({
           onToggle: onToggleNode,
           isStreaming: streamingNodeId === node.id,
           creationDisabled: Boolean(creatingNodeId),
+          mobileLongPressDragEnabled,
+          mobileLongPressDragging: mobileLongPressDragNodeId === node.id,
+          onMobileLongPressStart: handleMobileNodeLongPressStart,
+          consumeMobileNodeClickSuppression,
           inlineComposer:
             inlineNodeComposer?.nodeId === node.id ? inlineNodeComposer : undefined,
         },
@@ -114,6 +223,10 @@ export function MindMap({
   }, [
     creatingNodeId,
     inlineNodeComposer,
+    consumeMobileNodeClickSuppression,
+    handleMobileNodeLongPressStart,
+    mobileLongPressDragEnabled,
+    mobileLongPressDragNodeId,
     onCreateNode,
     onSelectNode,
     onToggleNode,
@@ -122,6 +235,7 @@ export function MindMap({
     streamingNodeId,
     visibleNodeIds,
   ]);
+  const [nodes, setNodes] = useState(graphNodes);
 
   const graphEdges = useMemo<Edge[]>(() => {
     return Object.values(project.nodes).flatMap((node) =>
@@ -149,12 +263,6 @@ export function MindMap({
     );
   }, [project.nodes, selectedNodeId, visibleNodeIds]);
 
-  const [nodes, setNodes] = useState(graphNodes);
-  const [reactFlowInstance, setReactFlowInstance] =
-    useState<ReactFlowInstance<Node<BranchNodeData>, Edge> | null>(null);
-  const dragDisabled = Boolean(creatingNodeId || streamingNodeId);
-  const isHomeInlineComposer = inlineNodeComposer?.variant === "home";
-  const homeComposerNodeId = isHomeInlineComposer ? inlineNodeComposer?.nodeId : null;
   const fitViewOptions = useMemo(
     () => ({
       maxZoom: inlineNodeComposer ? 1 : 1.7,
@@ -208,6 +316,152 @@ export function MindMap({
   useEffect(() => {
     setNodes(graphNodes);
   }, [graphNodes]);
+
+  useEffect(() => {
+    const mobileQuery = window.matchMedia(MOBILE_ROOT_FOCUS_MEDIA_QUERY);
+    const updateMobileViewport = () => setIsMobileViewport(mobileQuery.matches);
+
+    updateMobileViewport();
+    mobileQuery.addEventListener("change", updateMobileViewport);
+    return () => mobileQuery.removeEventListener("change", updateMobileViewport);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileViewport || !reactFlowInstance) {
+      resetMobileNodeLongPressState(false);
+      return undefined;
+    }
+
+    const handleMobileLongPressMove = (
+      pointerId: number,
+      clientX: number,
+      clientY: number,
+      event: PointerEvent | MouseEvent | TouchEvent,
+    ) => {
+      const gesture = mobileNodeLongPressGestureRef.current;
+      if (!gesture || gesture.pointerId !== pointerId) {
+        return;
+      }
+
+      const deltaX = clientX - gesture.startX;
+      const deltaY = clientY - gesture.startY;
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+      if (gesture.activated) {
+        const startFlowPosition = gesture.startFlowPosition;
+        if (!startFlowPosition) return;
+
+        event.preventDefault();
+        const nextFlowPosition = reactFlowInstance.screenToFlowPosition({
+          x: clientX,
+          y: clientY,
+        });
+        const nextPosition = {
+          x: gesture.startNodePosition.x + nextFlowPosition.x - startFlowPosition.x,
+          y: gesture.startNodePosition.y + nextFlowPosition.y - startFlowPosition.y,
+        };
+
+        gesture.latestPosition = nextPosition;
+        gesture.moved = distance > MOBILE_NODE_LONG_PRESS_CANCEL_DISTANCE;
+        setNodes((current) =>
+          current.map((node) =>
+            node.id === gesture.nodeId ? { ...node, position: nextPosition } : node,
+          ),
+        );
+        return;
+      }
+
+      if (distance <= MOBILE_NODE_LONG_PRESS_CANCEL_DISTANCE) return;
+
+      window.clearTimeout(gesture.timerId);
+      mobileNodeLongPressGestureRef.current = null;
+    };
+
+    const handleMobileLongPressEnd = (pointerId: number) => {
+      const gesture = mobileNodeLongPressGestureRef.current;
+      if (!gesture || gesture.pointerId !== pointerId) return;
+
+      if (gesture.activated && gesture.moved && gesture.latestPosition) {
+        void onMoveNode(gesture.nodeId, gesture.latestPosition);
+      }
+
+      resetMobileNodeLongPressState(gesture.activated);
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      handleMobileLongPressMove(event.pointerId, event.clientX, event.clientY, event);
+    };
+    const handlePointerEnd = (event: PointerEvent) => {
+      handleMobileLongPressEnd(event.pointerId);
+    };
+    const handleMouseMove = (event: MouseEvent) => {
+      handleMobileLongPressMove(
+        MOBILE_MOUSE_LONG_PRESS_POINTER_ID,
+        event.clientX,
+        event.clientY,
+        event,
+      );
+    };
+    const handleMouseEnd = () => {
+      handleMobileLongPressEnd(MOBILE_MOUSE_LONG_PRESS_POINTER_ID);
+    };
+    const handleTouchMove = (event: TouchEvent) => {
+      const gesture = mobileNodeLongPressGestureRef.current;
+      if (!gesture) return;
+
+      const touch = Array.from(event.changedTouches).find(
+        (item) => item.identifier === gesture.pointerId,
+      );
+      if (!touch) return;
+
+      handleMobileLongPressMove(
+        touch.identifier,
+        touch.clientX,
+        touch.clientY,
+        event,
+      );
+    };
+    const handleTouchEnd = (event: TouchEvent) => {
+      const gesture = mobileNodeLongPressGestureRef.current;
+      if (!gesture) return;
+
+      const touch = Array.from(event.changedTouches).find(
+        (item) => item.identifier === gesture.pointerId,
+      );
+      if (!touch) return;
+
+      handleMobileLongPressEnd(touch.identifier);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", handlePointerEnd);
+    window.addEventListener("pointercancel", handlePointerEnd);
+    window.addEventListener("mousemove", handleMouseMove, { passive: false });
+    window.addEventListener("mouseup", handleMouseEnd);
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("touchend", handleTouchEnd);
+    window.addEventListener("touchcancel", handleTouchEnd);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerEnd);
+      window.removeEventListener("pointercancel", handlePointerEnd);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseEnd);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+      window.removeEventListener("touchcancel", handleTouchEnd);
+    };
+  }, [isMobileViewport, onMoveNode, reactFlowInstance, resetMobileNodeLongPressState]);
+
+  useEffect(() => {
+    resetMobileNodeLongPressState(false);
+  }, [
+    dragDisabled,
+    isHomeInlineComposer,
+    project.id,
+    resetMobileNodeLongPressState,
+  ]);
 
   useEffect(() => {
     if (!homeComposerNodeId) return undefined;
@@ -369,12 +623,35 @@ export function MindMap({
     [],
   );
 
+  const handleNodeClick = useCallback(
+    (_: ReactMouseEvent, node: Node<BranchNodeData>) => {
+      if (consumeMobileNodeClickSuppression(node.id)) return;
+
+      onSelectNode(node.id);
+    },
+    [consumeMobileNodeClickSuppression, onSelectNode],
+  );
+
+  const handleNodeDragStart: OnNodeDrag<Node<BranchNodeData>> = useCallback(
+    (_, node) => {
+      if (!isMobileViewport) return;
+
+      activeMobileNodeDragIdRef.current = node.id;
+      setMobileLongPressDragNodeId(node.id);
+    },
+    [isMobileViewport],
+  );
+
   const handleNodeDragStop: OnNodeDrag<Node<BranchNodeData>> = useCallback(
     (_, node) => {
       if (dragDisabled) return;
+      if (isMobileViewport) {
+        resetMobileNodeLongPressState(true);
+      }
+
       void onMoveNode(node.id, node.position);
     },
-    [dragDisabled, onMoveNode],
+    [dragDisabled, isMobileViewport, onMoveNode, resetMobileNodeLongPressState],
   );
 
   const handleViewportChange = useCallback(
@@ -641,16 +918,22 @@ export function MindMap({
         nodes={nodes}
         edges={graphEdges}
         nodeTypes={nodeTypes}
-        nodesDraggable={!dragDisabled}
+        nodesDraggable={!dragDisabled && !isMobileViewport}
         onInit={setReactFlowInstance}
-        onNodeClick={(_, node) => onSelectNode(node.id)}
+        onNodeClick={handleNodeClick}
         onViewportChange={handleViewportChange}
         onNodesChange={handleNodesChange}
+        onNodeDragStart={handleNodeDragStart}
         onNodeDragStop={handleNodeDragStop}
         fitView
         fitViewOptions={fitViewOptions}
         minZoom={0.25}
         maxZoom={1.7}
+        nodeDragThreshold={
+          isMobileViewport
+            ? MOBILE_NODE_DRAG_LOCKED_THRESHOLD
+            : MOBILE_NODE_DRAG_ACTIVE_THRESHOLD
+        }
         zoomOnScroll={!isHomeInlineComposer}
         panOnScroll={false}
         panOnDrag={!isHomeInlineComposer}

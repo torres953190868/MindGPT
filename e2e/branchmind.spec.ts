@@ -255,6 +255,172 @@ async function dragFromElementCenter(
   await page.mouse.up();
 }
 
+async function pointerDragFromPoint(
+  page: Page,
+  locator: Locator,
+  startX: number,
+  startY: number,
+  deltaX: number,
+  deltaY: number,
+  holdMs = 0,
+) {
+  const pointerId = 7101;
+  await locator.evaluate(
+    (element, eventInit) => {
+      element.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+          pointerId: eventInit.pointerId,
+          pointerType: "touch",
+          isPrimary: true,
+          button: 0,
+          clientX: eventInit.x,
+          clientY: eventInit.y,
+        }),
+      );
+    },
+    { pointerId, x: startX, y: startY },
+  );
+  if (holdMs > 0) {
+    await page.waitForTimeout(holdMs);
+  }
+  for (let step = 1; step <= 12; step += 1) {
+    await page.evaluate(
+      (eventInit) => {
+        window.dispatchEvent(
+          new PointerEvent("pointermove", {
+            bubbles: true,
+            cancelable: true,
+            pointerId: eventInit.pointerId,
+            pointerType: "touch",
+            isPrimary: true,
+            button: 0,
+            clientX: eventInit.x,
+            clientY: eventInit.y,
+          }),
+        );
+      },
+      {
+        pointerId,
+        x: startX + (deltaX * step) / 12,
+        y: startY + (deltaY * step) / 12,
+      },
+    );
+  }
+  await page.evaluate(
+    (eventInit) => {
+      window.dispatchEvent(
+        new PointerEvent("pointerup", {
+          bubbles: true,
+          cancelable: true,
+          pointerId: eventInit.pointerId,
+          pointerType: "touch",
+          isPrimary: true,
+          button: 0,
+          clientX: eventInit.x,
+          clientY: eventInit.y,
+        }),
+      );
+    },
+    { pointerId, x: startX + deltaX, y: startY + deltaY },
+  );
+}
+
+async function pointerDragFromElementCenter(
+  page: Page,
+  locator: Locator,
+  deltaX: number,
+  deltaY: number,
+  holdMs = 0,
+) {
+  const box = await getElementBox(locator, "pointer drag source");
+  await pointerDragFromPoint(
+    page,
+    locator,
+    box.x + box.width / 2,
+    box.y + box.height / 2,
+    deltaX,
+    deltaY,
+    holdMs,
+  );
+}
+
+async function pointerDownAtPoint(
+  locator: Locator,
+  startX: number,
+  startY: number,
+  pointerId = 7201,
+) {
+  await locator.evaluate(
+    (element, eventInit) => {
+      element.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+          pointerId: eventInit.pointerId,
+          pointerType: "touch",
+          isPrimary: true,
+          button: 0,
+          clientX: eventInit.x,
+          clientY: eventInit.y,
+        }),
+      );
+    },
+    { pointerId, x: startX, y: startY },
+  );
+}
+
+async function pointerMoveWindow(
+  page: Page,
+  pointerId: number,
+  clientX: number,
+  clientY: number,
+) {
+  await page.evaluate(
+    (eventInit) => {
+      window.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          cancelable: true,
+          pointerId: eventInit.pointerId,
+          pointerType: "touch",
+          isPrimary: true,
+          button: 0,
+          clientX: eventInit.x,
+          clientY: eventInit.y,
+        }),
+      );
+    },
+    { pointerId, x: clientX, y: clientY },
+  );
+}
+
+async function pointerUpWindow(
+  page: Page,
+  pointerId: number,
+  clientX: number,
+  clientY: number,
+) {
+  await page.evaluate(
+    (eventInit) => {
+      window.dispatchEvent(
+        new PointerEvent("pointerup", {
+          bubbles: true,
+          cancelable: true,
+          pointerId: eventInit.pointerId,
+          pointerType: "touch",
+          isPrimary: true,
+          button: 0,
+          clientX: eventInit.x,
+          clientY: eventInit.y,
+        }),
+      );
+    },
+    { pointerId, x: clientX, y: clientY },
+  );
+}
+
 async function dragResizeHandle(page: Page, handle: Locator, deltaX: number) {
   const handleBox = await handle.boundingBox();
   if (!handleBox) throw new Error("Expected resize handle to be measurable.");
@@ -3111,6 +3277,124 @@ test("splits node edge drag from inner open actions", async ({ page }, testInfo)
       .toBeGreaterThan(positionBeforeEdgeDrag.x + 20);
     expect(positionPatches).toHaveLength(1);
     expect(positionPatches[0].nodeId).toBe(root.id);
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("long-press drags mobile nodes without turning short taps into drags", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chrome", "Mobile long-press drag is covered once.");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const sourceProject = makeWorkspaceTreeProject(`mobile-long-press-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  const getCard = (nodeId: string) =>
+    page.locator(`[data-testid="branch-node-card"][data-node-id="${nodeId}"]`);
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+    const positionPatches: Array<{ nodeId: string; position: { x: number; y: number } }> = [];
+    await page.route(`**/api/projects/${project.id}/nodes/*`, async (route) => {
+      const request = route.request();
+      if (request.method() === "PATCH") {
+        const payload = request.postDataJSON() as { position?: { x: number; y: number } };
+        if (payload.position) {
+          positionPatches.push({
+            nodeId: new URL(request.url()).pathname.split("/").pop() ?? "",
+            position: payload.position,
+          });
+        }
+      }
+
+      await route.continue();
+    });
+
+    await page.goto(`/workspace/${project.id}`);
+    const root = project.nodes[project.rootNodeId];
+    const rootCard = getCard(root.id);
+    const rootOpenButton = rootCard.getByTestId("open-node-button");
+
+    await expect(rootCard).toBeVisible();
+    await expect(rootCard).toHaveClass(/branch-node-mobile-long-press-root/);
+    await rootOpenButton.click();
+    await expect(rootCard).toHaveAttribute("data-selected", "true");
+    expect(positionPatches).toEqual([]);
+
+    const positionBeforeShortDrag = (await getPersistedProject(page, project.id)).nodes[
+      root.id
+    ].position;
+    const rootBoxBeforeShortDrag = await getElementBox(
+      rootCard,
+      "root card before short mobile drag",
+    );
+    await pointerDragFromElementCenter(page, rootOpenButton, 84, 44);
+    await page.waitForTimeout(150);
+    const rootBoxAfterShortDrag = await getElementBox(
+      rootCard,
+      "root card after short mobile drag",
+    );
+    expect(Math.abs(rootBoxAfterShortDrag.x - rootBoxBeforeShortDrag.x)).toBeLessThan(2);
+    expect(Math.abs(rootBoxAfterShortDrag.y - rootBoxBeforeShortDrag.y)).toBeLessThan(2);
+    expect((await getPersistedProject(page, project.id)).nodes[root.id].position).toEqual(
+      positionBeforeShortDrag,
+    );
+    expect(positionPatches).toEqual([]);
+
+    const rootOpenButtonBox = await getElementBox(
+      rootOpenButton,
+      "root open button before long press drag",
+    );
+    const longPressStartX = rootOpenButtonBox.x + rootOpenButtonBox.width / 2;
+    const longPressStartY = rootOpenButtonBox.y + rootOpenButtonBox.height / 2;
+    const pointerId = 7201;
+    await pointerDownAtPoint(rootOpenButton, longPressStartX, longPressStartY, pointerId);
+    await page.waitForTimeout(520);
+    await expect(rootCard).toHaveAttribute("data-mobile-long-press-dragging", "true");
+    for (let step = 1; step <= 12; step += 1) {
+      await pointerMoveWindow(
+        page,
+        pointerId,
+        longPressStartX + (88 * step) / 12,
+        longPressStartY + (48 * step) / 12,
+      );
+    }
+    await pointerUpWindow(page, pointerId, longPressStartX + 88, longPressStartY + 48);
+    await expect
+      .poll(async () => (await getPersistedProject(page, project.id)).nodes[root.id].position.x)
+      .toBeGreaterThan(positionBeforeShortDrag.x + 20);
+    expect(positionPatches).toHaveLength(1);
+    expect(positionPatches[0].nodeId).toBe(root.id);
+    await expect(rootCard).not.toHaveAttribute("data-mobile-long-press-dragging", "true");
+
+    const positionBeforeHandleHold = (await getPersistedProject(page, project.id)).nodes[
+      root.id
+    ].position;
+    const handleBox = await getElementBox(
+      rootCard.locator('[data-handleid="branch-source"]'),
+      "root branch source handle",
+    );
+    await pointerDragFromPoint(
+      page,
+      rootCard.locator('[data-handleid="branch-source"]'),
+      handleBox.x + handleBox.width / 2,
+      handleBox.y + handleBox.height / 2,
+      72,
+      0,
+      520,
+    );
+    await page.waitForTimeout(150);
+    expect((await getPersistedProject(page, project.id)).nodes[root.id].position).toEqual(
+      positionBeforeHandleHold,
+    );
+    expect(positionPatches).toHaveLength(1);
   } finally {
     if (projectIdToDelete) {
       await page.request
