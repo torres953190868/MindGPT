@@ -181,6 +181,7 @@ const PDF_TOOLS_SIDEBAR_DEFAULT_WIDTH = 260;
 const PDF_SIDEBAR_MIN_WIDTH = 210;
 const PDF_VIEWER_MIN_WIDTH = 360;
 const PDF_RESIZE_HANDLE_WIDTH = 8;
+const PDF_MOBILE_MEDIA_QUERY = "(max-width: 1023px)";
 
 type PdfSidebarSide = "documents" | "tools";
 
@@ -247,6 +248,22 @@ function isRenderCancellation(error: unknown) {
     (error.name === "RenderingCancelledException" ||
       /cancelled|canceled/i.test(error.message))
   );
+}
+
+function getPdfViewerContentWidth(viewer: HTMLElement) {
+  const style = window.getComputedStyle(viewer);
+  const paddingX =
+    Number.parseFloat(style.paddingLeft || "0") +
+    Number.parseFloat(style.paddingRight || "0");
+  return Math.max(0, Math.floor(viewer.clientWidth - paddingX));
+}
+
+function getMobileFitWidthScale(pageWidth: number, viewerWidth: number) {
+  if (pageWidth <= 0 || viewerWidth <= 0) return null;
+  const fitScale = Math.max(viewerWidth - 2, 0) / pageWidth;
+  const autoFitMinScale = Math.min(MIN_SCALE, fitScale);
+  const clampedScale = clampNumber(fitScale, autoFitMinScale, MAX_SCALE);
+  return Math.floor(clampedScale * 100) / 100;
 }
 
 function hasExtractedPages(details: DocumentDetails | null) {
@@ -338,6 +355,7 @@ export function PdfReader() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
   const readerGridRef = useRef<HTMLElement | null>(null);
+  const pdfViewerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const renderTaskRef = useRef<PdfRenderTask | null>(null);
   const pdfDocumentRef = useRef<PdfDocumentProxy | null>(null);
@@ -374,6 +392,8 @@ export function PdfReader() {
   const [pageNumber, setPageNumber] = useState<number | null>(null);
   const [pageInput, setPageInput] = useState("");
   const [scale, setScale] = useState(1.05);
+  const [pdfViewerWidth, setPdfViewerWidth] = useState(0);
+  const [hasManualScale, setHasManualScale] = useState(false);
   const [documentsSidebarWidth, setDocumentsSidebarWidth] = useState(
     PDF_DOCUMENTS_SIDEBAR_DEFAULT_WIDTH,
   );
@@ -438,7 +458,7 @@ export function PdfReader() {
 
   const clampPdfSidebars = useCallback(
     (gridWidth = getReaderGridWidth()) => {
-      if (!gridWidth || window.matchMedia("(max-width: 1023px)").matches) return;
+      if (!gridWidth || window.matchMedia(PDF_MOBILE_MEDIA_QUERY).matches) return;
 
       let nextDocumentsSidebarWidth = documentsSidebarWidth;
       let nextToolsSidebarWidth = toolsSidebarWidth;
@@ -766,6 +786,34 @@ export function PdfReader() {
   }, [clampPdfSidebars]);
 
   useEffect(() => {
+    const viewer = pdfViewerRef.current;
+    if (!viewer) return undefined;
+
+    let animationFrame = 0;
+    const scheduleMeasure = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(() => {
+        const nextWidth = getPdfViewerContentWidth(viewer);
+        setPdfViewerWidth((currentWidth) =>
+          currentWidth === nextWidth ? currentWidth : nextWidth,
+        );
+      });
+    };
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleMeasure);
+
+    scheduleMeasure();
+    observer?.observe(viewer);
+    window.addEventListener("resize", scheduleMeasure);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      observer?.disconnect();
+      window.removeEventListener("resize", scheduleMeasure);
+    };
+  }, []);
+
+  useEffect(() => {
     pageParamRef.current = pageParam;
     chunkParamRef.current = chunkParam;
   }, [chunkParam, pageParam]);
@@ -910,6 +958,7 @@ export function PdfReader() {
     setPdfDocument(null);
     setPdfPageCount(0);
     setPdfError(null);
+    setHasManualScale(false);
 
     if (!pdfSourceUrl) {
       setPdfLoading(false);
@@ -928,8 +977,6 @@ export function PdfReader() {
           url: pdfSourceUrl,
           ...(isSavedPdfSource
             ? {
-                disableAutoFetch: true,
-                disableStream: true,
                 rangeChunkSize: PDF_RANGE_CHUNK_SIZE,
               }
             : {}),
@@ -984,6 +1031,20 @@ export function PdfReader() {
       .getPage(pageNumber)
       .then((pdfPage) => {
         if (cancelled) return;
+        const baseViewport = pdfPage.getViewport({ scale: 1 });
+        const shouldFitMobileWidth =
+          !hasManualScale &&
+          pdfViewerWidth > 0 &&
+          window.matchMedia(PDF_MOBILE_MEDIA_QUERY).matches;
+        const fitWidthScale = shouldFitMobileWidth
+          ? getMobileFitWidthScale(baseViewport.width, pdfViewerWidth)
+          : null;
+
+        if (fitWidthScale && Math.abs(fitWidthScale - scale) > 0.01) {
+          setScale(fitWidthScale);
+          return;
+        }
+
         const outputScale = Math.max(window.devicePixelRatio || 1, 1);
         const cssViewport = pdfPage.getViewport({ scale });
         const renderViewport = pdfPage.getViewport({ scale: scale * outputScale });
@@ -1017,7 +1078,7 @@ export function PdfReader() {
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [pageNumber, pdfDocument, scale]);
+  }, [hasManualScale, pageNumber, pdfDocument, pdfViewerWidth, scale]);
 
   useEffect(() => {
     if (
@@ -1634,6 +1695,7 @@ export function PdfReader() {
                 onKeyDown={handlePageInputKeyDown}
                 disabled={!hasActivePdf || !pageCount}
                 aria-label={copy.reader.pageNumber}
+                data-testid="pdf-page-input"
                 className="h-7 w-10 rounded-md border border-transparent bg-white text-center text-xs font-black text-neutral-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
               />
               <span className="px-1 text-xs font-black text-neutral-600">
@@ -1656,11 +1718,12 @@ export function PdfReader() {
               <button
                 type="button"
                 disabled={scale <= MIN_SCALE}
-                onClick={() =>
+                onClick={() => {
+                  setHasManualScale(true);
                   setScale((value) =>
                     Number(Math.max(MIN_SCALE, value - SCALE_STEP).toFixed(2)),
-                  )
-                }
+                  );
+                }}
                 className="grid h-9 w-9 place-items-center text-neutral-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label={copy.reader.zoomOut}
               >
@@ -1672,11 +1735,12 @@ export function PdfReader() {
               <button
                 type="button"
                 disabled={scale >= MAX_SCALE}
-                onClick={() =>
+                onClick={() => {
+                  setHasManualScale(true);
                   setScale((value) =>
                     Number(Math.min(MAX_SCALE, value + SCALE_STEP).toFixed(2)),
-                  )
-                }
+                  );
+                }}
                 className="grid h-9 w-9 place-items-center text-neutral-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label={copy.reader.zoomIn}
               >
@@ -1734,6 +1798,7 @@ export function PdfReader() {
         )}
 
         <div
+          ref={pdfViewerRef}
           data-testid="pdf-viewer"
           className="relative min-h-[380px] flex-1 overflow-auto bg-[#f4f4f7] px-3 py-4 sm:min-h-[520px] sm:px-4 sm:py-5 lg:min-h-0"
         >

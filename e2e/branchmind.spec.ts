@@ -2297,7 +2297,8 @@ test("reader opens an owned PDF at a source chunk URL", async ({ page }, testInf
   await expect(page.getByTestId("source-evidence")).toContainText(
     "Evidence chunk from page two",
   );
-  await expect(page.getByLabel("Page number")).toHaveValue("2");
+  const pageInput = page.getByTestId("pdf-page-input");
+  await expect(pageInput).toHaveValue("2");
   expect(documentDetailsRequests).toBe(1);
 
   const readerBox = await getElementBox(page.getByTestId("pdf-reader"), "PDF reader");
@@ -2359,12 +2360,12 @@ test("reader opens an owned PDF at a source chunk URL", async ({ page }, testInf
   await evidenceButton.click();
   await expect(page).toHaveURL(/document=doc-reader-e2e.*page=2/);
   await expect(page).not.toHaveURL(/chunk=chunk-reader-e2e/);
-  await expect(page.getByLabel("Page number")).toHaveValue("2");
+  await expect(pageInput).toHaveValue("2");
 
   await page.getByTestId("toc-section-button").filter({ hasText: "Chapter 1" }).click();
   await expect(page).toHaveURL(/document=doc-reader-e2e.*page=1/);
   await expect(page).not.toHaveURL(/chunk=chunk-reader-e2e/);
-  await expect(page.getByLabel("Page number")).toHaveValue("1");
+  await expect(pageInput).toHaveValue("1");
   expect(documentDetailsRequests).toBe(1);
 
   await page.getByTestId("ask-pdf-input").fill("Where is the evidence?");

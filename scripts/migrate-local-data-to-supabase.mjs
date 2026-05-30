@@ -11,6 +11,9 @@ const args = new Set(rawArgs);
 const dryRun = args.has("--dry-run");
 const projectsOnly = args.has("--projects-only");
 const ragOnly = args.has("--rag-only");
+const RAG_FILES_BUCKET = "branchmind-rag-files";
+const RAG_FILES_DIR = path.join(projectRoot, "data", "rag-files");
+
 const migrationOptions = {
   batchSize: readPositiveIntegerOption("--batch-size", 500),
   chunkBatchSize: readPositiveIntegerOption("--chunk-batch-size", 100),
@@ -371,13 +374,66 @@ async function migrateProjects(client, projects) {
   };
 }
 
-function documentToRow(document) {
+function createRagStoragePath(userId, documentId) {
+  return `users/${encodeURIComponent(normalizeOwnerId(userId) ?? "anonymous")}/${documentId}.pdf`;
+}
+
+function normalizeOwnerId(value) {
+  if (typeof value !== "string") return value ?? null;
+  const trimmed = value.trim();
+  const angleBracketMatch = /^<([^<>]+)>$/.exec(trimmed);
+  return angleBracketMatch ? angleBracketMatch[1] : trimmed;
+}
+
+function isLocalFilePath(value) {
+  if (typeof value !== "string" || !value.trim()) return false;
+  return path.isAbsolute(value) || value.includes(`${path.sep}rag-files${path.sep}`);
+}
+
+async function resolveLocalPdfPath(document) {
+  const candidates = [
+    isLocalFilePath(document.storagePath) ? document.storagePath : null,
+    path.join(RAG_FILES_DIR, `${document.id}.pdf`),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const filePath = path.resolve(candidate);
+    if (existsSync(filePath)) return filePath;
+  }
+
+  return null;
+}
+
+async function uploadRagDocumentFile(client, document) {
+  const localPdfPath = await resolveLocalPdfPath(document);
+  const hasLocalStoragePath = isLocalFilePath(document.storagePath);
+
+  if (!localPdfPath) {
+    if (hasLocalStoragePath) {
+      throw new Error(
+        `Document ${document.id} has a local storagePath, but the PDF file was not found.`,
+      );
+    }
+    return document.storagePath ?? null;
+  }
+
+  const storagePath = createRagStoragePath(document.userId, document.id);
+  const bytes = await readFile(localPdfPath);
+  const { error } = await client.storage.from(RAG_FILES_BUCKET).upload(storagePath, bytes, {
+    contentType: document.mimeType || "application/pdf",
+    upsert: true,
+  });
+  assertNoError(error, `upload PDF file for document ${document.id}`);
+  return storagePath;
+}
+
+function documentToRow(document, storagePath = document.storagePath ?? null) {
   return {
     id: document.id,
-    user_id: document.userId ?? null,
+    user_id: normalizeOwnerId(document.userId),
     file_name: document.fileName,
     file_url: document.fileUrl ?? null,
-    storage_path: document.storagePath ?? null,
+    storage_path: storagePath,
     mime_type: document.mimeType,
     page_count: document.pageCount ?? 0,
     title: document.title ?? null,
@@ -537,7 +593,10 @@ async function migrateRag(client, ragData) {
       (ragData.chunks ?? []).filter((chunk) => chunk.documentId === documentId),
     );
 
-    const upsertDocument = await client.from("documents").upsert(documentToRow(document));
+    const storagePath = await uploadRagDocumentFile(client, document);
+    const upsertDocument = await client
+      .from("documents")
+      .upsert(documentToRow(document, storagePath));
     assertNoError(upsertDocument.error, `upsert document ${documentId}`);
 
     await deleteDocumentRows(client, documentId);
