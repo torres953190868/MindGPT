@@ -1,3 +1,4 @@
+import "./dommatrix-polyfill";
 import path from "node:path";
 import { cleanPageText, removeRepeatedHeadersAndFooters } from "./cleaner";
 import { PDF_PARSER_VERSION } from "./config";
