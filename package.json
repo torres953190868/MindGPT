@@ -14,7 +14,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@napi-rs/canvas": "^1.0.1",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.1",
     "@tiptap/extension-blockquote": "^3.23.1",
@@ -34,6 +33,7 @@
     "@tiptap/starter-kit": "^3.23.1",
     "@vercel/queue": "^0.2.0",
     "@xyflow/react": "^12.8.4",
+    "dommatrix": "^0.1.1",
     "katex": "^0.16.45",
     "lucide-react": "^0.468.0",
     "next": "^15.5.0",
