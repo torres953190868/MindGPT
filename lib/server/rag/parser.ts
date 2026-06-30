@@ -68,10 +68,7 @@ function pdfAssetUrl(...segments: string[]) {
 
 async function loadPdfJs() {
   pdfjsModulePromise ??= (async () => {
-    const [pdfjs] = await Promise.all([
-      import("pdfjs-dist/legacy/build/pdf.mjs"),
-      import("pdfjs-dist/legacy/build/pdf.worker.mjs"),
-    ]);
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
     return pdfjs as PdfModule;
   })();
   return pdfjsModulePromise;
