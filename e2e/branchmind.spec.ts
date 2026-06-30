@@ -2125,6 +2125,143 @@ test("places PDF rename and delete actions on document rows", async ({
   expect(confirmedMessages.join("\n")).toContain("First Paper");
 });
 
+test("keeps the second PDF selected after switching documents in the reader", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "chromium",
+    "PDF reader document switching is covered once.",
+  );
+
+  const timestamp = new Date().toISOString();
+  const pdfBytes = createSyntheticPdf([["Switch Paper", "Page one"]]);
+  const makeDocument = (id: string, title: string, fileName: string) => ({
+    id,
+    fileName,
+    mimeType: "application/pdf",
+    pageCount: 5,
+    title,
+    status: "indexed",
+    errorMessage: null,
+    errorCode: null,
+    errorStage: null,
+    errorRequestId: null,
+    updatedAt: timestamp,
+  });
+  const documents = [
+    makeDocument("doc-switch-one", "First Paper", "first-paper.pdf"),
+    makeDocument("doc-switch-two", "Second Paper", "second-paper.pdf"),
+  ];
+
+  await page.route("**/api/documents", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fulfill({ status: 405, body: "Method not allowed" });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ documents }),
+    });
+  });
+  await page.route(
+    /\/api\/documents\/doc-switch-(one|two)$/,
+    async (route) => {
+      const documentId = new URL(route.request().url()).pathname.split("/").pop();
+      const document = documents.find((item) => item.id === documentId);
+      if (!document) {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Document not found." }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          document,
+          sections: [
+            {
+              id: `${document.id}-section`,
+              title: document.title,
+              headingPath: [document.title],
+              level: 1,
+              pageStart: 1,
+              pageEnd: 1,
+              source: "regex",
+            },
+          ],
+          chunkCount: 0,
+        }),
+      });
+    },
+  );
+  // Delay the page payload so that, on buggy code, the URL-sync effect (which
+  // re-runs on its own `details` output) fires and reverts the selection before
+  // `updateReaderUrl` for the clicked document gets a chance to run.
+  await page.route(
+    /\/api\/documents\/doc-switch-(one|two)\/pages\/\d+$/,
+    async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          page: {
+            pageNumber: 1,
+            cleanText: "Switch paper extracted text.",
+            tokenCount: 4,
+          },
+        }),
+      });
+    },
+  );
+  await page.route(
+    /\/api\/documents\/doc-switch-(one|two)\/file$/,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/pdf",
+        body: Buffer.from(pdfBytes),
+      });
+    },
+  );
+
+  await page.setViewportSize({ width: 1210, height: 768 });
+  // No `?document=` param: the reader auto-selects the first document.
+  await page.goto("/reader");
+  await expect(page).toHaveURL(/[?&]document=doc-switch-one(?:&|$)/);
+
+  const sidebar = page.getByTestId("pdf-documents-sidebar");
+  const secondRow = sidebar.locator(
+    '[data-testid="pdf-document-row"][data-document-id="doc-switch-two"]',
+  );
+  await expect(secondRow).toContainText("Second Paper");
+
+  // The reader title only renders a document title as a level-2 heading; the
+  // sidebar rows render titles as spans, so this name is unambiguous.
+  const firstTitle = page.getByRole("heading", { level: 2, name: "First Paper" });
+  const secondTitle = page.getByRole("heading", { level: 2, name: "Second Paper" });
+  await expect(firstTitle).toBeVisible();
+
+  // The selection button is the only button in the row without an aria-label.
+  await secondRow.locator("button:not([aria-label])").first().click();
+
+  // The click must select the second document and the URL must STAY there.
+  await expect(page).toHaveURL(/[?&]document=doc-switch-two(?:&|$)/);
+  await expect(secondTitle).toBeVisible();
+  await expect(firstTitle).toHaveCount(0);
+
+  // Give the buggy URL-sync race time to revert, then confirm it did not.
+  await page.waitForTimeout(900);
+  await expect(page).toHaveURL(/[?&]document=doc-switch-two(?:&|$)/);
+  await expect(secondTitle).toBeVisible();
+  await expect(firstTitle).toHaveCount(0);
+  expect(new URL(page.url()).searchParams.get("document")).toBe("doc-switch-two");
+});
+
 test("reader opens an owned PDF at a source chunk URL", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "PDF reader rendering is covered once.");
 

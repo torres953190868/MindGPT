@@ -853,10 +853,13 @@ export function PdfReader() {
         ? documentParam
         : documents[0]?.id;
     if (!requestedDocument) return;
-    if (
-      selectedIdRef.current === requestedDocument &&
-      details?.document.id === requestedDocument
-    ) {
+    // Only sync selection FROM external sources (URL param / document list).
+    // selectedIdRef tracks the user's intended document synchronously, so once
+    // it already matches the requested document there is nothing to do. We must
+    // NOT key this effect off our own `details` output: doing so re-runs it
+    // mid-click (after details load) while the URL param still lags behind, and
+    // it would then revert the user's click back to the first PDF.
+    if (selectedIdRef.current === requestedDocument) {
       return;
     }
 
@@ -868,7 +871,6 @@ export function PdfReader() {
       setError(loadError instanceof Error ? loadError.message : "Load failed.");
     });
   }, [
-    details?.document.id,
     documentParam,
     documents,
     documentsReady,
