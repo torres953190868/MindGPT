@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
@@ -50,6 +51,31 @@ import type {
   MindNode,
 } from "@/lib/types";
 import { MarkdownMessage } from "./MarkdownMessage";
+import {
+  getResizeInputMode,
+  type ResizeStartEvent,
+  WorkspaceResizeHandle,
+} from "./WorkspaceResizeHandle";
+
+const RESIZE_STORAGE_KEY = "branchmind:node-detail-resize";
+const MIN_COMPOSER_HEIGHT = 120;
+
+function readStoredComposerHeight(): number | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = localStorage.getItem(RESIZE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { composerHeight?: number };
+    return typeof parsed.composerHeight === "number" ? parsed.composerHeight : null;
+  } catch {
+    return null;
+  }
+}
+
+function clampHeight(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
 
 type NodeDetailPanelProps = {
   node: MindNode | null;
@@ -274,6 +300,8 @@ export function NodeDetailPanel({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [isCheckingInitialSubmit, setIsCheckingInitialSubmit] = useState(false);
   const [titleEditValue, setTitleEditValue] = useState("");
+  const [composerHeight, setComposerHeight] = useState<number | null>(null);
+  const panelRef = useRef<HTMLElement>(null);
   const headerHighlight = useHighlightedAction<HeaderActionItem>();
   const modeHighlight = useHighlightedAction<ModeActionItem>({ defaultAction: mode });
   const clearHeaderHighlightedAction = headerHighlight.clearHighlightedAction;
@@ -369,6 +397,41 @@ export function NodeDetailPanel({
     );
 
     setSelectionAction({ text, x, y });
+  }, []);
+
+  useEffect(() => {
+    setComposerHeight(readStoredComposerHeight());
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      localStorage.setItem(
+        RESIZE_STORAGE_KEY,
+        JSON.stringify({ composerHeight }),
+      );
+    } catch {
+      // Storage may be unavailable in private mode or due to quota.
+    }
+  }, [composerHeight]);
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return undefined;
+
+    function clampHeights() {
+      const panelHeight = panel?.clientHeight ?? 0;
+      if (!panelHeight) return;
+      const maxHeight = Math.floor(panelHeight * 0.5);
+      setComposerHeight((current) =>
+        current === null ? null : clampHeight(current, MIN_COMPOSER_HEIGHT, maxHeight),
+      );
+    }
+
+    clampHeights();
+    window.addEventListener("resize", clampHeights);
+    return () => window.removeEventListener("resize", clampHeights);
   }, []);
 
   useEffect(() => {
@@ -586,6 +649,62 @@ export function NodeDetailPanel({
     void onRetryAssistantMessage(node.id, message.id, composerControls.selectedModel);
   }
 
+  function getPanelMaxResizeHeight() {
+    const panelHeight = panelRef.current?.clientHeight ?? 0;
+    return panelHeight > 0 ? Math.floor(panelHeight * 0.5) : Number.MAX_SAFE_INTEGER;
+  }
+
+  function getCurrentComposerHeight() {
+    const composerElement = panelRef.current?.querySelector(
+      ".node-detail-composer",
+    ) as HTMLElement | null;
+    return composerElement?.clientHeight ?? MIN_COMPOSER_HEIGHT;
+  }
+
+  const handleComposerResizeStart = useCallback((event: ResizeStartEvent) => {
+    event.preventDefault();
+    const isPointerResize = getResizeInputMode(event) === "pointer";
+    const startY = event.clientY;
+    const startHeight = composerHeight ?? getCurrentComposerHeight();
+    const maxHeight = getPanelMaxResizeHeight();
+
+    function resizeTo(clientY: number) {
+      const deltaY = startY - clientY;
+      const nextHeight = clampHeight(
+        startHeight + deltaY,
+        MIN_COMPOSER_HEIGHT,
+        maxHeight,
+      );
+      setComposerHeight(nextHeight);
+    }
+
+    function handlePointerMove(moveEvent: globalThis.PointerEvent) {
+      resizeTo(moveEvent.clientY);
+    }
+
+    function handleMouseMove(moveEvent: globalThis.MouseEvent) {
+      resizeTo(moveEvent.clientY);
+    }
+
+    function handlePointerUp() {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    }
+
+    function handleMouseUp() {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    }
+
+    if (isPointerResize) {
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerUp, { once: true });
+    } else {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp, { once: true });
+    }
+  }, [composerHeight]);
+
   if (!node) {
     return (
       <aside
@@ -628,14 +747,21 @@ export function NodeDetailPanel({
   const isContinueModeHighlighted = modeHighlight.isHighlighted("continue");
   const isBranchModeHighlighted = modeHighlight.isHighlighted("branch");
 
+  const panelStyle = {
+    "--node-detail-composer-height":
+      composerHeight === null ? undefined : `${composerHeight}px`,
+  } as CSSProperties;
+
   return (
     <aside
+      ref={panelRef}
       aria-labelledby={titleId}
       data-testid="node-detail-panel"
       data-has-composer={showComposer ? "true" : "false"}
       className="node-detail-panel-surface grid h-full min-h-0 w-full max-h-[calc(100svh-1rem)] overflow-hidden rounded-[22px] border border-white/80 bg-white p-3 shadow-lg shadow-brand-100/35 sm:max-h-[calc(100svh-2rem)] sm:rounded-[28px] sm:p-4 lg:max-h-[calc(100dvh-6rem)] lg:self-center lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
+      style={panelStyle}
     >
-      <div className="node-detail-header shrink-0 space-y-3 border-b border-neutral-200 pb-3 sm:pb-4">
+      <div className="node-detail-header min-h-0 shrink-0 space-y-3 overflow-y-auto border-b border-neutral-200 pb-3 sm:pb-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1 space-y-3">
             <p className="text-[11px] font-black uppercase tracking-wider text-neutral-500">
@@ -792,7 +918,7 @@ export function NodeDetailPanel({
         onKeyUp={captureSelectionAction}
         onMouseUp={captureSelectionAction}
         onTouchEnd={captureSelectionAction}
-        className="min-h-0 flex-1 space-y-3 overflow-auto overscroll-contain py-4 pr-1"
+        className="relative min-h-0 flex-1 space-y-3 overflow-auto overscroll-contain py-4 pr-1"
       >
         {displayMessages.length === 0 && node ? (
           <NodeBriefCard node={node} />
@@ -958,8 +1084,16 @@ export function NodeDetailPanel({
           aria-describedby={displayError ? errorId : isComposerBusy ? statusId : undefined}
           data-testid="message-composer"
           onSubmit={handleSubmit}
-          className="node-detail-composer shrink-0 space-y-3 border-t border-neutral-200 pt-3 sm:pt-4"
-      >
+          className="node-detail-composer relative min-h-0 shrink-0 overflow-y-auto space-y-3 border-t border-neutral-200 pt-3 sm:pt-4"
+        >
+        <WorkspaceResizeHandle
+          orientation="horizontal"
+          showOnDesktop
+          className="absolute -top-3 left-0 right-0 z-10"
+          ariaLabel={copy.workspace.resizeConversationComposer}
+          testId="resize-conversation-composer"
+          onResizeStart={handleComposerResizeStart}
+        />
         {!isInitialSubmit && !isBlankNode && (
           <div
             role="group"

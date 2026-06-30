@@ -14,6 +14,13 @@ type WorkspaceResizeHandleProps = {
   orientation: "vertical" | "horizontal";
   desktopBreakpoint?: "lg" | "xl";
   variant?: "full" | "compact";
+  /**
+   * When orientation is "horizontal", the handle is hidden on desktop by
+   * default because it is designed for mobile drawer separators. Set this
+   * to true to make the horizontal handle visible on desktop (e.g. for
+   * resizable panel sections inside the right detail panel).
+   */
+  showOnDesktop?: boolean;
   className?: string;
   ariaLabel: string;
   testId: string;
@@ -36,6 +43,7 @@ export function WorkspaceResizeHandle({
   orientation,
   desktopBreakpoint = "lg",
   variant = "full",
+  showOnDesktop = false,
   className = "",
   ariaLabel,
   testId,
@@ -68,10 +76,11 @@ export function WorkspaceResizeHandle({
     onResizeStart(event);
   };
 
+  const desktopVisibilityClass = showOnDesktop ? "hidden lg:block" : "lg:hidden";
   return (
     <div
       className={`relative ${
-        isVertical ? verticalWrapperClassName : "h-6 cursor-row-resize lg:hidden"
+        isVertical ? verticalWrapperClassName : `h-6 cursor-row-resize ${desktopVisibilityClass}`
       } ${className}`}
     >
       {!isVertical && (
