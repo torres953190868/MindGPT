@@ -1,4 +1,5 @@
 import "./dommatrix-polyfill";
+import "./pdf-worker";
 
 import path from "node:path";
 import { cleanPageText, removeRepeatedHeadersAndFooters } from "./cleaner";
@@ -69,15 +70,15 @@ function pdfAssetUrl(...segments: string[]) {
 
 async function loadPdfJs() {
   pdfjsModulePromise ??= (async () => {
+    const [workerModule] = await Promise.all([
+      import("./pdf-worker"),
+      import("pdfjs-dist/legacy/build/pdf.worker.mjs"),
+    ]);
+    await workerModule.loadWorkerMessageHandler();
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
     return pdfjs as PdfModule;
   })();
   return pdfjsModulePromise;
-}
-
-function setupPdfWorker(pdfjs: PdfModule) {
-  // @ts-expect-error pdf.js internal API for setting fake worker source path
-  pdfjs.GlobalWorkerOptions.workerSrc = "./pdf.worker.mjs";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -268,7 +269,6 @@ function assertTextBasedPdf(pages: ParsedPage[]) {
 
 export async function parsePdf(bytes: Uint8Array): Promise<ParsedDocument> {
   const pdfjs = await loadPdfJs();
-  setupPdfWorker(pdfjs);
   const loadingTask = pdfjs.getDocument({
     data: new Uint8Array(bytes),
     cMapPacked: true,
