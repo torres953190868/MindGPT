@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AccountDto } from "@/app/api/account/route";
+import { getEffectiveUpgradePlan } from "@/store/useAuthStore";
 
 const signedInSession = {
   configured: true,
@@ -128,5 +129,28 @@ describe("useAuthStore", () => {
       accountStatus: "idle",
       account: null,
     });
+  });
+});
+
+describe("getEffectiveUpgradePlan", () => {
+  const freeAccount: AccountDto = { ...account, plan: "free" };
+  const proAccount: AccountDto = { ...account, plan: "pro" };
+
+  it("returns the account plan when account data is loaded", () => {
+    expect(getEffectiveUpgradePlan(freeAccount, "authenticated", "loaded")).toBe("free");
+    expect(getEffectiveUpgradePlan(proAccount, "authenticated", "loaded")).toBe("pro");
+  });
+
+  it("falls back to free for authenticated users when account fetch fails", () => {
+    expect(getEffectiveUpgradePlan(null, "authenticated", "error")).toBe("free");
+  });
+
+  it("returns null while account data is still loading", () => {
+    expect(getEffectiveUpgradePlan(null, "authenticated", "loading")).toBeNull();
+  });
+
+  it("returns null for anonymous or local sessions", () => {
+    expect(getEffectiveUpgradePlan(null, "anonymous", "idle")).toBeNull();
+    expect(getEffectiveUpgradePlan(null, "local", "idle")).toBeNull();
   });
 });

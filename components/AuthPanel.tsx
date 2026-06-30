@@ -20,7 +20,7 @@ import {
 import { BugReportDialog } from "@/components/BugReportLauncher";
 import { useLanguage } from "@/components/language/LanguageProvider";
 import { writeRememberedAuthAccountName } from "@/lib/client/auth-email";
-import { useAuthStore } from "@/store/useAuthStore";
+import { getEffectiveUpgradePlan, useAuthStore } from "@/store/useAuthStore";
 import type { AccountDto } from "@/app/api/account/route";
 
 type AuthPanelProps = {
@@ -292,8 +292,13 @@ export function AuthPanel({
   const displayAccountName = account?.accountName ?? session?.user?.accountName ?? displayEmail;
   const displayName = account?.displayName ?? displayAccountName;
   const plan = account?.plan ?? null;
+  const effectiveUpgradePlan = getEffectiveUpgradePlan(
+    account,
+    sessionStatus,
+    accountStatus,
+  );
   const highestUsage = account ? getHighestUsageItem(account.usage) : null;
-  const isFreePlan = plan === "free";
+  const isFreePlan = effectiveUpgradePlan === "free";
   const isUsageSettingsActive = pathname.startsWith("/settings/usage");
   const isBillingSettingsActive = pathname.startsWith("/settings/billing");
   const isAccountSettingsActive =

@@ -504,6 +504,43 @@ export type Database = {
         };
         Relationships: [];
       };
+      branchmind_plan_model_access: {
+        Row: {
+          plan: string;
+          provider_id: string;
+          model: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          plan: string;
+          provider_id: string;
+          model: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          plan?: string;
+          provider_id?: string;
+          model?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "branchmind_plan_model_access_plan_fkey";
+            columns: ["plan"];
+            referencedRelation: "branchmind_plan_limits";
+            referencedColumns: ["plan"];
+          },
+          {
+            foreignKeyName: "branchmind_plan_model_access_model_fkey";
+            columns: ["provider_id", "model"];
+            referencedRelation: "branchmind_llm_models";
+            referencedColumns: ["provider_id", "model"];
+          },
+        ];
+      };
       branchmind_llm_providers: {
         Row: {
           provider_id: string;

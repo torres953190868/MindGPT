@@ -18,6 +18,16 @@ export type AuthSessionStatus =
 
 export type AuthAccountStatus = "idle" | "loading" | "loaded" | "error";
 
+export function getEffectiveUpgradePlan(
+  account: AccountDto | null,
+  sessionStatus: AuthSessionStatus,
+  accountStatus: AuthAccountStatus,
+): string | null {
+  if (account) return account.plan;
+  if (sessionStatus === "authenticated" && accountStatus === "error") return "free";
+  return null;
+}
+
 type LoadOptions = {
   force?: boolean;
 };

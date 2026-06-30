@@ -591,7 +591,7 @@ export function NodeDetailPanel({
       <aside
         aria-label={copy.workspace.nodeDetails}
         data-testid="node-detail-panel"
-        className="node-detail-panel-surface flex h-full min-h-0 w-full max-h-full flex-col overflow-hidden rounded-2xl border border-neutral-100 bg-white p-4 shadow-lg lg:max-h-[calc(100dvh-6rem)] lg:self-center lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
+        className="node-detail-panel-surface flex h-full min-h-0 w-full max-h-[calc(100svh-1rem)] flex-col overflow-hidden rounded-2xl border border-neutral-100 bg-white p-4 shadow-lg sm:max-h-[calc(100svh-2rem)] lg:max-h-[calc(100dvh-6rem)] lg:self-center lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
       >
         {showCollapseButton && (
           <button
@@ -633,7 +633,7 @@ export function NodeDetailPanel({
       aria-labelledby={titleId}
       data-testid="node-detail-panel"
       data-has-composer={showComposer ? "true" : "false"}
-      className="node-detail-panel-surface grid h-full min-h-0 w-full max-h-full overflow-hidden rounded-[22px] border border-white/80 bg-white p-3 shadow-lg shadow-brand-100/35 sm:rounded-[28px] sm:p-4 lg:max-h-[calc(100dvh-6rem)] lg:self-center lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
+      className="node-detail-panel-surface grid h-full min-h-0 w-full max-h-[calc(100svh-1rem)] overflow-hidden rounded-[22px] border border-white/80 bg-white p-3 shadow-lg shadow-brand-100/35 sm:max-h-[calc(100svh-2rem)] sm:rounded-[28px] sm:p-4 lg:max-h-[calc(100dvh-6rem)] lg:self-center lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
     >
       <div className="node-detail-header shrink-0 space-y-3 border-b border-neutral-200 pb-3 sm:pb-4">
         <div className="flex items-start justify-between gap-3">

@@ -11,6 +11,8 @@ import {
   PLAN_LIMITS_DISABLED,
   getSupabaseAccountPlanInfo,
 } from "@/lib/server/account-plan";
+import { checkRateLimitAsync } from "@/lib/server/rate-limit";
+import { assertValidRequestOrigin } from "@/lib/server/security";
 import { getExistingSessionId, getOrCreateSession } from "@/lib/server/session";
 import { hasSupabaseServerConfig } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
@@ -21,6 +23,9 @@ import { DEFAULT_LANGUAGE, getBranchMindLanguage, type BranchMindLanguage } from
 import { z } from "zod";
 
 const READ_ONLY_LOCAL_SESSION = { id: "", isNew: false };
+
+const PATCH_ACCOUNT_LIMIT = 120;
+const PATCH_ACCOUNT_WINDOW_MS = 60_000;
 
 const updateAccountSchema = z.object({
   displayName: z.string().trim().min(1).max(100).nullable().optional(),
@@ -195,12 +200,32 @@ export async function PATCH(request: NextRequest) {
   const fallbackSession = getOrCreateSession(request);
 
   try {
+    assertValidRequestOrigin(request, {
+      allowMissingOrigin: process.env.NODE_ENV !== "production",
+    });
     const body = await parseJsonBody(request, updateAccountSchema, { maxBytes: 8 * 1024 });
 
     if (hasSupabaseServerConfig()) {
       const user = await getOptionalSupabaseUser();
       if (!user) {
         throw new HttpError("Sign in is required.", { code: "AUTH_REQUIRED", expose: true, status: 401 });
+      }
+
+      const rateLimit = await checkRateLimitAsync(request, {
+        action: "patch-account",
+        sessionId: user.id,
+        limit: PATCH_ACCOUNT_LIMIT,
+        windowMs: PATCH_ACCOUNT_WINDOW_MS,
+      });
+      if (!rateLimit.allowed) {
+        return jsonWithSession(
+          { error: "Too many requests." },
+          fallbackSession,
+          {
+            status: 429,
+            headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+          },
+        );
       }
 
       if (body.displayName !== undefined || body.languagePreference !== undefined) {

@@ -85,7 +85,9 @@ describe("document file route", () => {
       'inline; filename="memory.pdf"',
     );
     expect(response.headers.get("accept-ranges")).toBe("bytes");
-    expect(response.headers.get("cache-control")).toBe("private, max-age=300");
+    expect(response.headers.get("cache-control")).toBe(
+      "private, max-age=300, stale-while-revalidate=3600",
+    );
     expect(response.headers.get("content-length")).toBe("4");
     expect(getDocumentFileSourceForOwnerMock).toHaveBeenCalledWith(
       "user_route",
@@ -170,7 +172,9 @@ describe("document file route", () => {
     expect(response.headers.get("location")).toBe(
       "https://storage.example/signed.pdf?token=abc",
     );
-    expect(response.headers.get("cache-control")).toBe("private, max-age=300");
+    expect(response.headers.get("cache-control")).toBe(
+      "private, max-age=300, stale-while-revalidate=3600",
+    );
   });
 
   it("serves non-ASCII PDF filenames with an ASCII-safe response header", async () => {

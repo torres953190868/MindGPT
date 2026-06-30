@@ -1,3 +1,4 @@
+import { HttpError } from "@/lib/server/http";
 import {
   getLlmRequestTimeoutMs,
   requireLlmProviderApiKey,
@@ -180,9 +181,22 @@ async function requestAnswer(
     return `根据检索到的片段，问题可以从这些页面寻找依据。(${retrieved[0]?.chunk.pageStart ?? "?"}页)\n\n来源\n${sources}`;
   }
 
-  const candidates = await resolveLlmCandidates("pdf_qa", undefined, {
-    accountPlan: options.userPlan,
-  });
+  let candidates: LlmRuntimeCandidate[];
+  try {
+    candidates = await resolveLlmCandidates("pdf_qa", undefined, {
+      accountPlan: options.userPlan,
+    });
+  } catch (error) {
+    if (error instanceof HttpError) {
+      throw new RagError(error.message, {
+        code: error.code,
+        status: error.status,
+        details: error.details,
+        expose: error.expose,
+      });
+    }
+    throw error;
+  }
   let lastRetryableError: RagError | null = null;
 
   for (let index = 0; index < candidates.length; index += 1) {

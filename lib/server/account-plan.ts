@@ -1,4 +1,7 @@
-import { getSupabaseAdminClient } from "@/lib/supabase/server";
+import {
+  getSupabaseAdminClient,
+  hasSupabaseServerConfig,
+} from "@/lib/supabase/server";
 import { DEFAULT_LANGUAGE, getBranchMindLanguage, type BranchMindLanguage } from "@/lib/language";
 
 export type AccountPlan = "free" | "pro" | "max";
@@ -47,6 +50,14 @@ const FREE_PLAN_DEEPSEEK_MODELS = new Set([
   "deepseek-v4-pro",
 ]);
 
+export type PlanModelAccess = {
+  plan: AccountPlan;
+  providerId: string;
+  model: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type SupabaseAccountPlanInfo = {
   plan: AccountPlan;
   displayName: string | null;
@@ -69,7 +80,7 @@ export function normalizeAccountPlan(value: string | null | undefined): AccountP
 }
 
 export function isAccountPlanModelRestricted(plan: string | null | undefined) {
-  return plan !== undefined && normalizeAccountPlan(plan) === "free";
+  return plan != null && normalizeAccountPlan(plan) === "free";
 }
 
 export function isModelAllowedForAccountPlan(
@@ -83,6 +94,69 @@ export function isModelAllowedForAccountPlan(
     providerId.trim().toLowerCase() === "deepseek" &&
     FREE_PLAN_DEEPSEEK_MODELS.has(model.trim())
   );
+}
+
+function getStaticFreePlanModelAccess(): PlanModelAccess[] {
+  return Array.from(FREE_PLAN_DEEPSEEK_MODELS).map((model) => ({
+    plan: "free",
+    providerId: "deepseek",
+    model,
+  }));
+}
+
+export function isModelAllowedByPlanAccess(
+  accessList: PlanModelAccess[],
+  providerId: string,
+  model: string,
+) {
+  const normalizedProviderId = providerId.trim().toLowerCase();
+  const normalizedModel = model.trim();
+  return accessList.some(
+    (access) =>
+      access.providerId.trim().toLowerCase() === normalizedProviderId &&
+      access.model.trim() === normalizedModel,
+  );
+}
+
+export async function getPlanModelAccess(
+  plan: string | null | undefined,
+): Promise<PlanModelAccess[]> {
+  if (!isAccountPlanModelRestricted(plan)) return [];
+
+  const normalizedPlan = normalizeAccountPlan(plan);
+
+  if (!hasSupabaseServerConfig()) {
+    return getStaticFreePlanModelAccess();
+  }
+
+  try {
+    const supabase = getSupabaseAdminClient();
+    const { data, error } = await supabase
+      .from("branchmind_plan_model_access")
+      .select("plan, provider_id, model, created_at, updated_at")
+      .eq("plan", normalizedPlan);
+
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      return getStaticFreePlanModelAccess();
+    }
+
+    return data.map((row) => ({
+      plan: row.plan as AccountPlan,
+      providerId: row.provider_id,
+      model: row.model,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  } catch (error) {
+    console.error("BranchMind plan model access lookup failed", {
+      plan: normalizedPlan,
+      table: "branchmind_plan_model_access",
+      error,
+    });
+    return getStaticFreePlanModelAccess();
+  }
 }
 
 async function ensureSupabaseFreePlan(userId: string) {
@@ -100,7 +174,11 @@ async function ensureSupabaseFreePlan(userId: string) {
     );
 
   if (error) {
-    console.error("BranchMind user free plan initialization failed", error);
+    console.error("BranchMind user free plan initialization failed", {
+      userId,
+      table: "branchmind_user_plans",
+      error,
+    });
   }
 }
 
@@ -125,7 +203,11 @@ export async function getSupabaseAccountPlanInfo(
     .maybeSingle();
 
   if (planError) {
-    console.error("BranchMind user plan lookup failed", planError);
+    console.error("BranchMind user plan lookup failed", {
+      userId,
+      table: "branchmind_user_plans",
+      error: planError,
+    });
     return defaultPlanInfo();
   }
 
@@ -142,7 +224,11 @@ export async function getSupabaseAccountPlanInfo(
     .maybeSingle();
 
   if (limitsError) {
-    console.error("BranchMind plan limits lookup failed", limitsError);
+    console.error("BranchMind plan limits lookup failed", {
+      userId,
+      table: "branchmind_plan_limits",
+      error: limitsError,
+    });
   }
 
   return {

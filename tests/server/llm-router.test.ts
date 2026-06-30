@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { type PlanModelAccess } from "@/lib/server/account-plan";
 import {
   getLlmChatModelCatalogFromConfig,
   resolveLlmCandidatesFromConfig,
@@ -254,7 +255,11 @@ describe("LLM router", () => {
         { providerId: "opencode-go", model: "deepseek-v4-pro" },
         { requireJson: true, accountPlan: "free" },
       ),
-    ).toThrow("Selected AI model is not available on the free plan.");
+    ).toThrow(expect.objectContaining({
+      message: "Selected AI model is not available on the free plan.",
+      code: "PLAN_MODEL_NOT_ALLOWED",
+      status: 403,
+    }));
   });
 
   it("removes non-free fallbacks while keeping the official DeepSeek default", () => {
@@ -278,6 +283,207 @@ describe("LLM router", () => {
         provider: "deepseek",
         model: "deepseek-v4-flash",
       },
+    ]);
+  });
+
+  it("returns PLAN_MODEL_NOT_ALLOWED 403 when free plan route has no allowed candidates", () => {
+    const blockedConfig: LlmConfigBundle = {
+      ...createFreePlanConfig(),
+      routes: [
+        {
+          task: "branch_chat",
+          defaultProviderId: "opencode-go",
+          defaultModel: "qwen3.6-plus",
+          fallbackProviderId: "opencode-go",
+          fallbackModel: "deepseek-v4-pro",
+        },
+        ...createFreePlanConfig().routes.filter((route) => route.task !== "branch_chat"),
+      ],
+    };
+
+    expect(() =>
+      resolveLlmCandidatesFromConfig(
+        blockedConfig,
+        "branch_chat",
+        undefined,
+        { requireJson: true, accountPlan: "free" },
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        message: "No AI model for this task is available on the free plan.",
+        code: "PLAN_MODEL_NOT_ALLOWED",
+        status: 403,
+      }),
+    );
+  });
+
+  it("falls back normally for unrestricted plans when the primary candidate is unavailable", () => {
+    vi.stubEnv("PRIMARY_KEY", "primary-key");
+    vi.stubEnv("FALLBACK_KEY", "fallback-key");
+
+    const candidates = resolveLlmCandidatesFromConfig(
+      createConfig(),
+      "branch_chat",
+      undefined,
+      { requireJson: true, accountPlan: "pro" },
+    );
+
+    expect(candidates.map((candidate) => candidate.model.model)).toEqual([
+      "fast",
+      "steady",
+    ]);
+  });
+
+  it("falls back normally when no account plan context is provided", () => {
+    vi.stubEnv("PRIMARY_KEY", "primary-key");
+    vi.stubEnv("FALLBACK_KEY", "fallback-key");
+
+    const candidates = resolveLlmCandidatesFromConfig(
+      createConfig(),
+      "branch_chat",
+      undefined,
+      { requireJson: true },
+    );
+
+    expect(candidates.map((candidate) => candidate.model.model)).toEqual([
+      "fast",
+      "steady",
+    ]);
+  });
+
+  it("treats null and undefined account plans as unrestricted", () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "deepseek-key");
+    vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
+
+    const nullCatalog = getLlmChatModelCatalogFromConfig(createFreePlanConfig(), null);
+    const undefinedCatalog = getLlmChatModelCatalogFromConfig(
+      createFreePlanConfig(),
+      undefined,
+    );
+
+    expect(nullCatalog.providers.map((provider) => provider.id)).toEqual([
+      "deepseek",
+      "opencode-go",
+    ]);
+    expect(undefinedCatalog).toEqual(nullCatalog);
+  });
+
+  it("returns LLM_ROUTE_NOT_AVAILABLE 500 for genuine missing route configuration", () => {
+    const configWithoutPdfQa: LlmConfigBundle = {
+      ...createConfig(),
+      routes: createConfig().routes.filter((route) => route.task !== "pdf_qa"),
+    };
+
+    expect(() =>
+      resolveLlmCandidatesFromConfig(
+        configWithoutPdfQa,
+        "pdf_qa",
+        undefined,
+        { requireJson: true, accountPlan: "pro" },
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        message: "No configured AI model is available for this task.",
+        code: "LLM_ROUTE_NOT_AVAILABLE",
+        status: 500,
+      }),
+    );
+  });
+
+  it("uses DB-backed planModelAccess to allow only configured free-plan models", () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "deepseek-key");
+    vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
+
+    const access: PlanModelAccess[] = [
+      { plan: "free", providerId: "deepseek", model: "deepseek-v4-flash" },
+    ];
+
+    const catalog = getLlmChatModelCatalogFromConfig(
+      createFreePlanConfig(),
+      "free",
+      access,
+    );
+
+    expect(catalog.defaultSelection).toEqual({
+      providerId: "deepseek",
+      model: "deepseek-v4-flash",
+    });
+    expect(catalog.providers).toEqual([
+      {
+        id: "deepseek",
+        displayName: "DeepSeek",
+        configured: true,
+        models: ["deepseek-v4-flash"],
+      },
+    ]);
+  });
+
+  it("rejects a free-plan model that is not in planModelAccess", () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "deepseek-key");
+
+    const access: PlanModelAccess[] = [
+      { plan: "free", providerId: "deepseek", model: "deepseek-v4-flash" },
+    ];
+
+    expect(() =>
+      resolveLlmCandidatesFromConfig(
+        createFreePlanConfig(),
+        "branch_chat",
+        { providerId: "deepseek", model: "deepseek-v4-pro" },
+        { requireJson: true, accountPlan: "free", planModelAccess: access },
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        message: "Selected AI model is not available on the free plan.",
+        code: "PLAN_MODEL_NOT_ALLOWED",
+        status: 403,
+      }),
+    );
+  });
+
+  it("rejects non-DeepSeek providers even when planModelAccess is empty", () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "deepseek-key");
+    vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
+
+    expect(() =>
+      resolveLlmCandidatesFromConfig(
+        createFreePlanConfig(),
+        "branch_chat",
+        { providerId: "opencode-go", model: "deepseek-v4-pro" },
+        { requireJson: true, accountPlan: "free", planModelAccess: [] },
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        message: "Selected AI model is not available on the free plan.",
+        code: "PLAN_MODEL_NOT_ALLOWED",
+        status: 403,
+      }),
+    );
+  });
+
+  it("leaves unrestricted plan behavior unchanged when planModelAccess is provided", () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "deepseek-key");
+    vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
+
+    const access: PlanModelAccess[] = [
+      { plan: "free", providerId: "deepseek", model: "deepseek-v4-flash" },
+    ];
+
+    const candidates = resolveLlmCandidatesFromConfig(
+      createFreePlanConfig(),
+      "branch_chat",
+      undefined,
+      { requireJson: true, accountPlan: "pro", planModelAccess: access },
+    );
+
+    expect(
+      candidates.map((candidate) => ({
+        provider: candidate.provider.providerId,
+        model: candidate.model.model,
+      })),
+    ).toEqual([
+      { provider: "deepseek", model: "deepseek-v4-flash" },
+      { provider: "opencode-go", model: "deepseek-v4-pro" },
     ]);
   });
 });

@@ -20,7 +20,7 @@ type ByteRange = {
   end: number;
 };
 
-const PDF_CACHE_CONTROL = "private, max-age=3600";
+const PDF_CACHE_CONTROL = "private, max-age=300, stale-while-revalidate=3600";
 
 function encodeContentDispositionFileName(fileName: string) {
   const cleaned = fileName.replace(/[\r\n]/g, "_").trim() || "document.pdf";

@@ -1,7 +1,10 @@
 import { HttpError } from "@/lib/server/http";
 import {
+  getPlanModelAccess,
   isAccountPlanModelRestricted,
+  isModelAllowedByPlanAccess,
   isModelAllowedForAccountPlan,
+  type PlanModelAccess,
 } from "@/lib/server/account-plan";
 import {
   CHAT_COMPLETIONS_PROVIDERS,
@@ -61,6 +64,7 @@ type LlmResolveOptions = {
   requireStreaming?: boolean;
   requireJson?: boolean;
   accountPlan?: string | null;
+  planModelAccess?: PlanModelAccess[];
 };
 
 function isEnabled(value: string | undefined) {
@@ -334,7 +338,14 @@ function createCandidate(
   const model = getModel(bundle, providerId, modelId);
   if (!provider || !model) return null;
   if (!provider.enabled || !model.enabled) return null;
-  if (!isModelAllowedForAccountPlan(options.accountPlan, providerId, modelId)) return null;
+  const planModelAccess = options.planModelAccess;
+  if (isAccountPlanModelRestricted(options.accountPlan)) {
+    if (planModelAccess && planModelAccess.length > 0) {
+      if (!isModelAllowedByPlanAccess(planModelAccess, providerId, modelId)) return null;
+    } else if (!isModelAllowedForAccountPlan(options.accountPlan, providerId, modelId)) {
+      return null;
+    }
+  }
   if (options.requireConfigured && !isProviderConfigured(provider)) return null;
   if (options.requireStreaming && !model.supportsStreaming) return null;
   if (options.requireJson && !model.supportsJson) return null;
@@ -376,11 +387,18 @@ export function resolveLlmCandidatesFromConfig(
         `${provider.errorCodePrefix}_MODEL_NOT_ALLOWED`,
       );
     }
-    if (!isModelAllowedForAccountPlan(options.accountPlan, providerId, modelId)) {
-      throw unavailableExplicitSelectionError(
-        "Selected AI model is not available on the free plan.",
-        "PLAN_MODEL_NOT_ALLOWED",
-      );
+    if (isAccountPlanModelRestricted(options.accountPlan)) {
+      const planModelAccess = options.planModelAccess;
+      const allowed = planModelAccess && planModelAccess.length > 0
+        ? isModelAllowedByPlanAccess(planModelAccess, providerId, modelId)
+        : isModelAllowedForAccountPlan(options.accountPlan, providerId, modelId);
+      if (!allowed) {
+        throw new HttpError("Selected AI model is not available on the free plan.", {
+          code: "PLAN_MODEL_NOT_ALLOWED",
+          expose: true,
+          status: 403,
+        });
+      }
     }
     if (options.requireStreaming && !model.supportsStreaming) {
       throw unavailableExplicitSelectionError(
@@ -443,10 +461,17 @@ export function resolveLlmCandidatesFromConfig(
       }
     }
 
-    if (
-      candidates.length === 0 &&
-      !isAccountPlanModelRestricted(options.accountPlan)
-    ) {
+    if (candidates.length === 0) {
+      if (isAccountPlanModelRestricted(options.accountPlan)) {
+        throw new HttpError(
+          "No AI model for this task is available on the free plan.",
+          {
+            code: "PLAN_MODEL_NOT_ALLOWED",
+            expose: true,
+            status: 403,
+          },
+        );
+      }
       throw new HttpError("No configured AI model is available for this task.", {
         code: "LLM_ROUTE_NOT_AVAILABLE",
         status: 500,
@@ -455,6 +480,17 @@ export function resolveLlmCandidatesFromConfig(
   }
 
   if (candidates.length > 0) return candidates;
+
+  if (isAccountPlanModelRestricted(options.accountPlan)) {
+    throw new HttpError(
+      "No AI model for this task is available on the free plan.",
+      {
+        code: "PLAN_MODEL_NOT_ALLOWED",
+        expose: true,
+        status: 403,
+      },
+    );
+  }
 
   const firstAvailable = bundle.models
     .sort((left, right) => left.sortOrder - right.sortOrder || left.model.localeCompare(right.model))
@@ -479,11 +515,14 @@ export async function resolveLlmCandidates(
   selection?: ChatModelSelection,
   options: LlmResolveOptions = {},
 ) {
+  const planModelAccess = isAccountPlanModelRestricted(options.accountPlan)
+    ? await getPlanModelAccess(options.accountPlan)
+    : [];
   return resolveLlmCandidatesFromConfig(
     await getLlmConfig(),
     task,
     selection,
-    options,
+    { ...options, planModelAccess },
   );
 }
 
@@ -513,6 +552,7 @@ export function getLlmRequestTimeoutMs(provider: LlmRuntimeProvider) {
 export function getLlmChatModelCatalogFromConfig(
   bundle: LlmConfigBundle,
   accountPlan?: string | null,
+  planModelAccess?: PlanModelAccess[],
 ): ChatModelCatalog {
   let defaultSelection: LlmRuntimeCandidate;
   try {
@@ -520,16 +560,29 @@ export function getLlmChatModelCatalogFromConfig(
       bundle,
       "branch_chat",
       undefined,
-      { requireConfigured: true, requireJson: true, accountPlan },
+      {
+        requireConfigured: true,
+        requireJson: true,
+        accountPlan,
+        planModelAccess,
+      },
     )[0];
   } catch {
     defaultSelection = resolveLlmCandidatesFromConfig(
       bundle,
       "branch_chat",
       undefined,
-      { requireJson: true, accountPlan },
+      { requireJson: true, accountPlan, planModelAccess },
     )[0];
   }
+
+  const accessList = planModelAccess;
+  const hasPlanAccess =
+    isAccountPlanModelRestricted(accountPlan) && accessList && accessList.length > 0;
+  const isModelAllowed = (providerId: string, model: string) =>
+    hasPlanAccess
+      ? isModelAllowedByPlanAccess(accessList, providerId, model)
+      : isModelAllowedForAccountPlan(accountPlan, providerId, model);
 
   return {
     defaultSelection: {
@@ -548,11 +601,7 @@ export function getLlmChatModelCatalogFromConfig(
               model.providerId === provider.providerId &&
               model.enabled &&
               model.supportsJson &&
-              isModelAllowedForAccountPlan(
-                accountPlan,
-                model.providerId,
-                model.model,
-              ),
+              isModelAllowed(model.providerId, model.model),
           )
           .sort((left, right) => left.sortOrder - right.sortOrder || left.model.localeCompare(right.model))
           .map((model) => model.model),
@@ -562,7 +611,10 @@ export function getLlmChatModelCatalogFromConfig(
 }
 
 export async function getLlmChatModelCatalog(accountPlan?: string | null) {
-  return getLlmChatModelCatalogFromConfig(await getLlmConfig(), accountPlan);
+  const planModelAccess = isAccountPlanModelRestricted(accountPlan)
+    ? await getPlanModelAccess(accountPlan)
+    : [];
+  return getLlmChatModelCatalogFromConfig(await getLlmConfig(), accountPlan, planModelAccess);
 }
 
 export async function getAdminLlmConfig() {
