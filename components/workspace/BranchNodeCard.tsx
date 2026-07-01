@@ -510,20 +510,13 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
             disabled={isComposerBusy || !input.trim()}
             aria-label={copy.workspace.send}
             data-testid="send-message-button"
-            className="branchmind-primary-action home-inline-send-button inline-flex h-10 w-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-brand-600 px-0 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-5"
+            className="branchmind-primary-action home-inline-send-button inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-600 p-0 text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {composerControls.isPreparingAttachments || composer.isBusy || isCheckingSubmit ? (
               <Loader2 size={15} className="animate-spin" />
             ) : (
               <Send size={15} />
             )}
-            <span className="node-detail-send-label hidden sm:inline">
-              {composerControls.isPreparingAttachments
-                ? copy.chat.preparing
-                : composer.isBusy || isCheckingSubmit
-                  ? copy.common.creating
-                  : composer.submitLabel}
-            </span>
           </button>
         </div>
         {displayError && (
@@ -568,7 +561,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
           rows={3}
           className="w-full resize-none bg-transparent px-4 pt-4 pb-16 text-sm leading-6 text-neutral-900 outline-none placeholder:text-neutral-500 disabled:cursor-not-allowed disabled:opacity-65"
         />
-        <div className="absolute bottom-3 left-3 flex items-center gap-2">
+        <div className="absolute bottom-3 right-14 flex max-w-[calc(100%-4.75rem)] items-center justify-end gap-2">
           <AttachmentMenuButton controls={composerControls} placement="below" />
           <ModelSelectorButton controls={composerControls} placement="below" />
         </div>
@@ -578,20 +571,13 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
             disabled={isComposerBusy || !input.trim()}
             aria-label={copy.workspace.send}
             data-testid="send-message-button"
-            className="branchmind-primary-action inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-3 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
+            className="branchmind-primary-action inline-flex h-9 w-9 items-center justify-center rounded-full bg-brand-600 p-0 text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {composerControls.isPreparingAttachments || composer.isBusy || isCheckingSubmit ? (
               <Loader2 size={14} className="animate-spin" />
             ) : (
               <Send size={14} />
             )}
-            <span className="node-detail-send-label">
-              {composerControls.isPreparingAttachments
-                ? copy.chat.preparing
-                : composer.isBusy || isCheckingSubmit
-                  ? copy.common.creating
-                  : composer.submitLabel}
-            </span>
           </button>
         </div>
       </div>

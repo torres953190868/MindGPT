@@ -296,7 +296,6 @@ export function NodeDetailPanel({
   showCollapseButton = true,
   showComposer = true,
   composerPlaceholder,
-  submitLabel,
 }: NodeDetailPanelProps) {
   const { copy } = useLanguage();
   const panelId = useId();
@@ -325,7 +324,6 @@ export function NodeDetailPanel({
     autoPreparePdfAttachments,
   });
   const resolvedComposerPlaceholder = composerPlaceholder ?? copy.workspace.askNextQuestion;
-  const resolvedSubmitLabel = submitLabel ?? copy.workspace.send;
   const resetComposerAttachments = composerControls.resetAttachments;
   const messagesRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -1281,7 +1279,7 @@ export function NodeDetailPanel({
                 hasSelectedTextContext ? "pt-3" : "pt-4"
               }`}
             />
-            <div className="absolute bottom-3 left-3 flex max-w-[calc(100%-4.75rem)] items-center gap-2">
+            <div className="absolute bottom-3 right-14 flex max-w-[calc(100%-4.75rem)] items-center justify-end gap-2">
               <AttachmentMenuButton controls={composerControls} />
               <ModelSelectorButton controls={composerControls} />
             </div>
@@ -1291,22 +1289,13 @@ export function NodeDetailPanel({
                 disabled={isComposerBusy || !input.trim()}
                 aria-label={copy.workspace.send}
                 data-testid="send-message-button"
-                className="branchmind-primary-action inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-3 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
+                className="branchmind-primary-action inline-flex h-9 w-9 items-center justify-center rounded-full bg-brand-600 p-0 text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {composerControls.isPreparingAttachments || isCheckingInitialSubmit ? (
                   <Loader2 size={14} className="animate-spin" />
                 ) : (
                   <Send size={14} />
                 )}
-                <span className="node-detail-send-label">
-                  {composerControls.isPreparingAttachments
-                    ? copy.chat.preparing
-                    : isCreating || isCheckingInitialSubmit
-                      ? isInitialSubmit
-                        ? copy.common.creating
-                        : `${copy.workspace.generatingAnswer}...`
-                      : resolvedSubmitLabel}
-                </span>
               </button>
             </div>
           </div>

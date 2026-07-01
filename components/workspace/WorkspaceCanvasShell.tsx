@@ -37,8 +37,9 @@ import {
 } from "./WorkspaceResizeHandle";
 import { WorkspaceSidebar } from "./WorkspaceSidebar";
 
-const SIDE_PANEL_MIN_WIDTH = 170;
-const SIDE_PANEL_SNAP_WIDTH = SIDE_PANEL_MIN_WIDTH / 2;
+const SIDE_PANEL_LAYOUT_WIDTH = 300;
+const SIDE_PANEL_MIN_WIDTH = 48;
+const SIDE_PANEL_COLLAPSE_WIDTH = 32;
 const SIDE_PANEL_PREFERRED_MIN_WIDTH = 300;
 const DETAIL_PANEL_DEFAULT_WIDTH = 344;
 const PROJECT_NOTES_PANEL_DEFAULT_WIDTH = 344;
@@ -233,7 +234,7 @@ function getSidePanelResizeBounds({
 
   return {
     minWidth: SIDE_PANEL_MIN_WIDTH,
-    snapWidth: SIDE_PANEL_SNAP_WIDTH,
+    collapseWidth: SIDE_PANEL_COLLAPSE_WIDTH,
     maxWidth: Math.max(SIDE_PANEL_MIN_WIDTH, Math.floor(maxWidthForViewport)),
   };
 }
@@ -433,6 +434,7 @@ export function WorkspaceCanvasShell({
     "--workspace-sidebar-width": `${workspaceSidebarWidth}px`,
     "--detail-panel-width": `${detailPanelWidth}px`,
     "--project-notes-panel-width": `${projectNotesPanelWidth}px`,
+    "--workspace-side-panel-layout-width": `${SIDE_PANEL_LAYOUT_WIDTH}px`,
     "--workspace-grid-columns": desktopGridColumns,
   } as CSSProperties;
   const canvasIntroStyle = {
@@ -449,18 +451,18 @@ export function WorkspaceCanvasShell({
     : "branchmind-mobile-tabs grid grid-cols-3 gap-1.5 rounded-[18px] border border-white/80 bg-white/68 p-1.5 shadow-sm sm:gap-2 sm:rounded-[24px] sm:p-2 lg:hidden";
   const workspaceSidebarMobileClassName = usesMobileDrawers
     ? isWorkspaceSidebarMobileDrawerOpen
-      ? "branchmind-mobile-drawer branchmind-mobile-drawer-left fixed bottom-2 left-2 top-2 z-40 flex w-[min(86vw,320px)] min-w-0 lg:contents"
-      : "hidden lg:contents"
+      ? "branchmind-mobile-drawer branchmind-mobile-drawer-left branchmind-side-panel-clip branchmind-side-panel-clip-left fixed bottom-2 left-2 top-2 z-40 flex w-[min(86vw,320px)] min-w-0 lg:relative lg:inset-auto lg:z-auto lg:h-full lg:w-full lg:overflow-hidden"
+      : "branchmind-side-panel-clip branchmind-side-panel-clip-left hidden lg:flex lg:min-w-0 lg:overflow-hidden"
     : mobileWorkspaceView === "outline"
-      ? "contents"
-      : "hidden lg:contents";
+      ? "branchmind-side-panel-clip branchmind-side-panel-clip-left contents lg:flex lg:min-w-0 lg:overflow-hidden"
+      : "branchmind-side-panel-clip branchmind-side-panel-clip-left hidden lg:flex lg:min-w-0 lg:overflow-hidden";
   const nodeDetailMobileClassName = usesMobileDrawers
     ? isNodeDetailMobileDrawerOpen
-      ? "branchmind-mobile-drawer branchmind-mobile-drawer-right fixed bottom-2 right-2 top-2 z-40 flex w-[min(88vw,360px)] min-w-0 lg:contents"
-      : "hidden lg:contents"
+      ? "branchmind-mobile-drawer branchmind-mobile-drawer-right branchmind-side-panel-clip branchmind-side-panel-clip-right fixed bottom-2 right-2 top-2 z-40 flex w-[min(88vw,360px)] min-w-0 lg:relative lg:inset-auto lg:z-auto lg:h-full lg:w-full lg:overflow-hidden"
+      : "branchmind-side-panel-clip branchmind-side-panel-clip-right hidden lg:flex lg:min-w-0 lg:overflow-hidden"
     : mobileWorkspaceView === "chat"
-      ? "h-full max-h-full min-h-0 min-w-0 overflow-hidden lg:contents"
-      : "hidden lg:contents";
+      ? "branchmind-side-panel-clip branchmind-side-panel-clip-right h-full max-h-full min-h-0 min-w-0 overflow-hidden lg:flex"
+      : "branchmind-side-panel-clip branchmind-side-panel-clip-right hidden lg:flex lg:min-w-0 lg:overflow-hidden";
   const mapShellClassName = usesMobileDrawers
     ? "branchmind-map-shell relative h-full min-h-0 overflow-hidden bg-surface-canvas lg:h-full lg:min-h-0"
     : `branchmind-map-shell relative h-full min-h-0 overflow-hidden rounded-lg border border-neutral-200 bg-surface-canvas shadow-sm lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none ${
@@ -777,7 +779,7 @@ export function WorkspaceCanvasShell({
       const deltaX = side === "left" ? clientX - startX : startX - clientX;
       const rawWidth = startWidth + deltaX;
 
-      if (rawWidth < bounds.snapWidth) {
+      if (rawWidth < bounds.collapseWidth) {
         restoreWidthRef.current = startWidth;
         if (side === "left") {
           setIsWorkspaceSidebarCollapsed(true);

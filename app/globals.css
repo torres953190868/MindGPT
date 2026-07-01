@@ -415,6 +415,28 @@ textarea {
   border-radius: 12px;
 }
 
+@media (min-width: 1024px) {
+  .branchmind-side-panel-clip {
+    align-items: stretch;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .branchmind-side-panel-clip-left {
+    justify-content: flex-start;
+  }
+
+  .branchmind-side-panel-clip-right {
+    justify-content: flex-end;
+  }
+
+  .branchmind-side-panel-clip > [data-testid="workspace-sidebar"],
+  .branchmind-side-panel-clip > [data-testid="node-detail-panel"] {
+    flex-shrink: 0;
+    min-width: var(--workspace-side-panel-layout-width, 300px);
+  }
+}
+
 .node-detail-panel-surface[data-has-composer="true"] {
   grid-template-rows:
     var(--node-detail-header-height, auto)
@@ -1079,12 +1101,6 @@ textarea {
   .react-flow__controls button {
     width: 44px !important;
     height: 44px !important;
-  }
-}
-
-@media (max-width: 380px) {
-  .node-detail-send-label {
-    display: none;
   }
 }
 

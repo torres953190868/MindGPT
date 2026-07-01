@@ -692,7 +692,7 @@ test("home opens directly into a draft workspace", async ({ page }) => {
     "输入一个研究问题，BranchMind 会把理解路径拆成可探索的分支...",
   );
   await expect(page.getByTestId("home-prompt-suggestion")).toHaveCount(3);
-  await expect(page.getByTestId("send-message-button")).toContainText("开始");
+  await expect(page.getByTestId("send-message-button")).toHaveAttribute("aria-label", "发送");
   const mindMapCanvas = page.getByTestId("mind-map-canvas");
   const mapWidthWithPanelsCollapsed = await getElementWidth(mindMapCanvas);
   const mindMapCanvasBox = await getElementBox(mindMapCanvas, "mind map canvas");
@@ -810,9 +810,7 @@ test("home shows the canvas-first mobile launcher with collapsed side panels", a
       )
       .toBeGreaterThan(40);
     await expect(page.getByTestId("send-message-button")).toBeVisible();
-    await expect(
-      page.getByTestId("send-message-button").locator(".node-detail-send-label:visible"),
-    ).toHaveCount(0);
+    await expect(page.getByTestId("send-message-button")).toHaveText("");
     await expect(page.locator('[data-testid="home-prompt-suggestion"]:visible')).toHaveCount(1);
     const suggestionRotator = page.locator(".home-prompt-suggestion-rotator");
     await expect(suggestionRotator).toHaveCount(1);
@@ -1203,14 +1201,27 @@ test("home draft workspace sidebars resize and snap like workspace", async ({
   await dragResizeHandle(
     page,
     page.getByTestId("resize-workspace-sidebar"),
-    -(wideSidebarWidth + 120),
+    -(wideSidebarWidth - 260),
+  );
+  await expect
+    .poll(() => getElementWidth(workspaceSidebar))
+    .toBeGreaterThanOrEqual(300);
+  await expect(workspaceSidebar).toBeVisible();
+
+  const visibleSidebarWidthBeforeCollapse = await getElementWidth(workspaceSidebar);
+  await dragResizeHandle(
+    page,
+    page.getByTestId("resize-workspace-sidebar"),
+    -(visibleSidebarWidthBeforeCollapse + 120),
   );
   await expect(workspaceSidebar).toHaveCount(0);
   await expect(mindMapCanvas.getByTestId("expand-workspace-sidebar-button")).toBeVisible();
 
   await mindMapCanvas.getByTestId("expand-workspace-sidebar-button").click();
   await expect(workspaceSidebar).toBeVisible();
-  await expect.poll(() => getElementWidth(workspaceSidebar)).toBeGreaterThan(560);
+  await expect
+    .poll(() => getElementWidth(workspaceSidebar))
+    .toBeGreaterThanOrEqual(visibleSidebarWidthBeforeCollapse - 1);
 
   const detailWidthBeforeSnap = await getElementWidth(nodeDetailPanel);
   await dragResizeHandle(
@@ -3223,7 +3234,7 @@ test("selected conversation text is attached as BranchMind context", async ({ pa
     });
 
     await expect(page.getByTestId("selected-text-context-chip")).toHaveCount(0);
-    await expect(page.getByTestId("send-message-button")).toContainText("Send");
+    await expect(page.getByTestId("send-message-button")).toHaveAttribute("aria-label", "Send");
 
     await selectConversationText(page, clearedPhrase);
     await page.getByTestId("ask-branchmind-selection-button").click();

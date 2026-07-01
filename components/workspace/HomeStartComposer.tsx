@@ -32,7 +32,6 @@ export function HomeStartComposer({
   isBusy,
   error,
   placeholder,
-  submitLabel,
   suggestions,
   suggestionsAnimationPhase,
   testIdsEnabled = true,
@@ -149,20 +148,13 @@ export function HomeStartComposer({
         disabled={isComposerBusy || !input.trim()}
         aria-label={copy.workspace.send}
         data-testid={testIdsEnabled ? "send-message-button" : undefined}
-        className="branchmind-primary-action inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+        className="branchmind-primary-action inline-flex h-11 w-11 items-center justify-center self-end rounded-full bg-brand-600 p-0 text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {composerControls.isPreparingAttachments || isBusy || isCheckingSubmit ? (
           <Loader2 size={16} className="animate-spin" />
         ) : (
           <Send size={16} />
         )}
-        <span className="mobile-home-send-label">
-          {composerControls.isPreparingAttachments
-            ? copy.chat.preparing
-            : isBusy || isCheckingSubmit
-              ? copy.common.creating
-              : submitLabel}
-        </span>
       </button>
 
       {displayError && (

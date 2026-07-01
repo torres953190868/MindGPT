@@ -1205,7 +1205,7 @@ export function ModelSelectorButton({
   const { copy } = useLanguage();
 
   return (
-    <div ref={controls.modelMenuRef} className="relative shrink-0">
+    <div ref={controls.modelMenuRef} className="relative min-w-0 shrink">
       <button
         type="button"
         onClick={controls.toggleModelMenu}
@@ -1214,7 +1214,7 @@ export function ModelSelectorButton({
         aria-haspopup="listbox"
         aria-expanded={controls.isModelMenuOpen}
         data-testid="chat-model-selector-button"
-        className="inline-flex h-9 min-w-[90px] max-w-[150px] items-center justify-center gap-1.5 rounded-[14px] border border-brand-200 bg-white/82 px-2.5 text-xs font-black text-neutral-800 shadow-sm transition hover:border-brand-400 hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex h-9 w-full min-w-0 max-w-[150px] items-center justify-center gap-1.5 rounded-[14px] border border-brand-200 bg-white/82 px-2.5 text-xs font-black text-neutral-800 shadow-sm transition hover:border-brand-400 hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <BrainCircuit size={14} className="shrink-0 text-brand-600" />
         <span className="min-w-0 truncate">{controls.selectedModelLabel}</span>
