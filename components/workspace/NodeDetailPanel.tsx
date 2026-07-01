@@ -4,6 +4,8 @@ import {
   type CSSProperties,
   type FormEvent,
   type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -54,22 +56,33 @@ import { MarkdownMessage } from "./MarkdownMessage";
 import {
   getResizeInputMode,
   type ResizeStartEvent,
-  WorkspaceResizeHandle,
 } from "./WorkspaceResizeHandle";
 
 const RESIZE_STORAGE_KEY = "branchmind:node-detail-resize";
 const MIN_COMPOSER_HEIGHT = 120;
+const MIN_HEADER_HEIGHT = 96;
 
-function readStoredComposerHeight(): number | null {
-  if (typeof window === "undefined") return null;
+function readStoredResize(): {
+  composerHeight: number | null;
+  headerHeight: number | null;
+} {
+  if (typeof window === "undefined") return { composerHeight: null, headerHeight: null };
 
   try {
     const raw = localStorage.getItem(RESIZE_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { composerHeight?: number };
-    return typeof parsed.composerHeight === "number" ? parsed.composerHeight : null;
+    if (!raw) return { composerHeight: null, headerHeight: null };
+    const parsed = JSON.parse(raw) as {
+      composerHeight?: number;
+      headerHeight?: number;
+    };
+    return {
+      composerHeight:
+        typeof parsed.composerHeight === "number" ? parsed.composerHeight : null,
+      headerHeight:
+        typeof parsed.headerHeight === "number" ? parsed.headerHeight : null,
+    };
   } catch {
-    return null;
+    return { composerHeight: null, headerHeight: null };
   }
 }
 
@@ -301,6 +314,7 @@ export function NodeDetailPanel({
   const [isCheckingInitialSubmit, setIsCheckingInitialSubmit] = useState(false);
   const [titleEditValue, setTitleEditValue] = useState("");
   const [composerHeight, setComposerHeight] = useState<number | null>(null);
+  const [headerHeight, setHeaderHeight] = useState<number | null>(null);
   const panelRef = useRef<HTMLElement>(null);
   const headerHighlight = useHighlightedAction<HeaderActionItem>();
   const modeHighlight = useHighlightedAction<ModeActionItem>({ defaultAction: mode });
@@ -316,6 +330,8 @@ export function NodeDetailPanel({
   const messagesRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const copyTimeoutRef = useRef<number | null>(null);
+  const headerResizePointerStartedAtRef = useRef(-Infinity);
+  const composerResizePointerStartedAtRef = useRef(-Infinity);
   const streamingContent =
     node?.messages.find((message) => message.id === streamingMessageId)?.content ?? "";
   const displayMessages =
@@ -400,7 +416,9 @@ export function NodeDetailPanel({
   }, []);
 
   useEffect(() => {
-    setComposerHeight(readStoredComposerHeight());
+    const stored = readStoredResize();
+    setComposerHeight(stored.composerHeight);
+    setHeaderHeight(stored.headerHeight);
   }, []);
 
   useEffect(() => {
@@ -409,12 +427,12 @@ export function NodeDetailPanel({
     try {
       localStorage.setItem(
         RESIZE_STORAGE_KEY,
-        JSON.stringify({ composerHeight }),
+        JSON.stringify({ composerHeight, headerHeight }),
       );
     } catch {
       // Storage may be unavailable in private mode or due to quota.
     }
-  }, [composerHeight]);
+  }, [composerHeight, headerHeight]);
 
   useEffect(() => {
     const panel = panelRef.current;
@@ -705,12 +723,83 @@ export function NodeDetailPanel({
     }
   }, [composerHeight]);
 
+  const handleComposerResizePointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    composerResizePointerStartedAtRef.current = event.timeStamp;
+    handleComposerResizeStart(event);
+  }, [handleComposerResizeStart]);
+
+  const handleComposerResizeMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if (event.timeStamp - composerResizePointerStartedAtRef.current < 100) return;
+    handleComposerResizeStart(event);
+  }, [handleComposerResizeStart]);
+
+  function getCurrentHeaderHeight() {
+    const headerElement = panelRef.current?.querySelector(
+      ".node-detail-header-region",
+    ) as HTMLElement | null;
+    return headerElement?.clientHeight ?? MIN_HEADER_HEIGHT;
+  }
+
+  const handleHeaderResizeStart = useCallback((event: ResizeStartEvent) => {
+    event.preventDefault();
+    const isPointerResize = getResizeInputMode(event) === "pointer";
+    const startY = event.clientY;
+    const startHeight = headerHeight ?? getCurrentHeaderHeight();
+    const maxHeight = getPanelMaxResizeHeight();
+
+    function resizeTo(clientY: number) {
+      const deltaY = clientY - startY;
+      const nextHeight = clampHeight(
+        startHeight + deltaY,
+        MIN_HEADER_HEIGHT,
+        maxHeight,
+      );
+      setHeaderHeight(nextHeight);
+    }
+
+    function handlePointerMove(moveEvent: globalThis.PointerEvent) {
+      resizeTo(moveEvent.clientY);
+    }
+
+    function handleMouseMove(moveEvent: globalThis.MouseEvent) {
+      resizeTo(moveEvent.clientY);
+    }
+
+    function handlePointerUp() {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    }
+
+    function handleMouseUp() {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    }
+
+    if (isPointerResize) {
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerUp, { once: true });
+    } else {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp, { once: true });
+    }
+  }, [headerHeight]);
+
+  const handleHeaderResizePointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    headerResizePointerStartedAtRef.current = event.timeStamp;
+    handleHeaderResizeStart(event);
+  }, [handleHeaderResizeStart]);
+
+  const handleHeaderResizeMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if (event.timeStamp - headerResizePointerStartedAtRef.current < 100) return;
+    handleHeaderResizeStart(event);
+  }, [handleHeaderResizeStart]);
+
   if (!node) {
     return (
       <aside
         aria-label={copy.workspace.nodeDetails}
         data-testid="node-detail-panel"
-        className="node-detail-panel-surface flex h-full min-h-0 w-full max-h-[calc(100svh-1rem)] flex-col overflow-hidden rounded-2xl border border-neutral-100 bg-white p-4 shadow-lg sm:max-h-[calc(100svh-2rem)] lg:max-h-[calc(100dvh-6rem)] lg:self-center lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
+        className="node-detail-panel-surface flex h-full min-h-0 w-full flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white p-4 shadow-sm lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
       >
         {showCollapseButton && (
           <button
@@ -750,6 +839,8 @@ export function NodeDetailPanel({
   const panelStyle = {
     "--node-detail-composer-height":
       composerHeight === null ? undefined : `${composerHeight}px`,
+    "--node-detail-header-height":
+      headerHeight === null ? undefined : `${headerHeight}px`,
   } as CSSProperties;
 
   return (
@@ -758,155 +849,165 @@ export function NodeDetailPanel({
       aria-labelledby={titleId}
       data-testid="node-detail-panel"
       data-has-composer={showComposer ? "true" : "false"}
-      className="node-detail-panel-surface grid h-full min-h-0 w-full max-h-[calc(100svh-1rem)] overflow-hidden rounded-[22px] border border-white/80 bg-white p-3 shadow-lg shadow-brand-100/35 sm:max-h-[calc(100svh-2rem)] sm:rounded-[28px] sm:p-4 lg:max-h-[calc(100dvh-6rem)] lg:self-center lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
+      className="node-detail-panel-surface grid h-full min-h-0 w-full overflow-hidden rounded-lg border border-neutral-200 bg-white p-4 shadow-sm lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
       style={panelStyle}
     >
-      <div className="node-detail-header min-h-0 shrink-0 space-y-3 overflow-y-auto border-b border-neutral-200 pb-3 sm:pb-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1 space-y-3">
-            <p className="text-[11px] font-black uppercase tracking-wider text-neutral-500">
-              {node.branchType}
-            </p>
-            {isEditingTitle ? (
-              <div className="flex items-start gap-2">
-                <input
-                  ref={titleInputRef}
-                  id={titleId}
-                  value={titleEditValue}
-                  onChange={(event) => setTitleEditValue(event.target.value)}
-                  onKeyDown={handleTitleEditKeyDown}
+      <div className="node-detail-header-region relative min-h-0 shrink-0 overflow-hidden border-b border-neutral-200 pb-3 sm:pb-4">
+        <section className="node-detail-header min-h-0 space-y-3 overflow-y-auto">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex shrink-0 items-center gap-2">
+              {showCollapseButton && (
+                <button
+                  type="button"
+                  onClick={onCollapse}
+                  aria-label={copy.workspace.collapseNodeDetails}
+                  aria-controls="conversation-history"
+                  aria-expanded="true"
+                  data-testid="collapse-node-detail-panel-button"
+                  className="node-detail-icon-button grid h-10 w-10 place-items-center rounded-full bg-neutral-100 text-neutral-600 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                >
+                  <PanelRightClose size={18} />
+                </button>
+              )}
+              {!isInitialSubmit && !isEditingTitle && (
+                <button
+                  type="button"
+                  onClick={handleStartTitleEdit}
                   disabled={isTitleEditBusy}
                   aria-label={copy.workspace.editNodeTitle}
-                  data-testid="node-title-edit-input"
-                  maxLength={120}
-                  className="min-w-0 flex-1 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-lg font-black leading-snug text-neutral-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 sm:text-xl"
-                />
-                <div className="flex shrink-0 gap-1">
-                  <button
-                    type="button"
-                    onClick={handleCancelTitleEdit}
+                  title={copy.workspace.editNodeTitle}
+                  data-testid="edit-node-title-button"
+                  data-highlighted={headerHighlight.getDataHighlighted("edit", {
+                    enabled: isTitleEditButtonEnabled,
+                  })}
+                  {...headerHighlight.getHoverHandlers("edit", { clearOnMouseLeave: true })}
+                  className={`node-detail-icon-button grid h-10 w-10 place-items-center rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-45 ${getHighlightedActionClass(
+                    isTitleEditButtonHighlighted,
+                    "bg-neutral-100 text-brand-600",
+                  )}`}
+                >
+                  <Pencil size={16} />
+                </button>
+              )}
+            </div>
+            <div className="min-w-0 flex-1 space-y-3 text-right">
+              <p className="text-[11px] font-black uppercase tracking-wider text-neutral-500">
+                {node.branchType}
+              </p>
+              {isEditingTitle ? (
+                <div className="flex items-start justify-end gap-2">
+                  <input
+                    ref={titleInputRef}
+                    id={titleId}
+                    value={titleEditValue}
+                    onChange={(event) => setTitleEditValue(event.target.value)}
+                    onKeyDown={handleTitleEditKeyDown}
                     disabled={isTitleEditBusy}
-                    aria-label={copy.common.cancel}
-                    title={copy.common.cancel}
-                    data-testid="cancel-node-title-edit-button"
-                    className="node-detail-icon-button grid h-10 w-10 place-items-center rounded-full bg-white/75 text-neutral-600 transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    <X size={16} />
-                  </button>
+                    aria-label={copy.workspace.editNodeTitle}
+                    data-testid="node-title-edit-input"
+                    maxLength={120}
+                    className="min-w-0 flex-1 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-right text-lg font-black leading-snug text-neutral-900 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 sm:text-xl"
+                  />
+                  <div className="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      onClick={handleCancelTitleEdit}
+                      disabled={isTitleEditBusy}
+                      aria-label={copy.common.cancel}
+                      title={copy.common.cancel}
+                      data-testid="cancel-node-title-edit-button"
+                      className="node-detail-icon-button grid h-10 w-10 place-items-center rounded-full bg-white/75 text-neutral-600 transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <X size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleSaveTitleEdit()}
+                      disabled={isTitleSaveDisabled}
+                      aria-label={copy.workspace.saveNodeTitle}
+                      title={copy.common.save}
+                      data-testid="save-node-title-edit-button"
+                      className="node-detail-icon-button node-detail-icon-button-save grid h-10 w-10 place-items-center rounded-full bg-success-100 text-success-700 transition hover:bg-success-200 focus:outline-none focus:ring-4 focus:ring-success-100 disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <Save size={16} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <h2 id={titleId} className="text-lg font-black leading-snug text-neutral-900 sm:text-xl">
+                  {node.title}
+                </h2>
+              )}
+              <p className="text-sm leading-6 text-neutral-600">{node.summary}</p>
+              <div className="flex flex-wrap justify-end gap-2">
+                {node.children.length > 0 && (
                   <button
                     type="button"
-                    onClick={() => void handleSaveTitleEdit()}
-                    disabled={isTitleSaveDisabled}
-                    aria-label={copy.workspace.saveNodeTitle}
-                    title={copy.common.save}
-                    data-testid="save-node-title-edit-button"
-                    className="node-detail-icon-button node-detail-icon-button-save grid h-10 w-10 place-items-center rounded-full bg-success-100 text-success-700 transition hover:bg-success-200 focus:outline-none focus:ring-4 focus:ring-success-100 disabled:cursor-not-allowed disabled:opacity-45"
+                    disabled={isCreating}
+                    onClick={() => onToggleNode(node.id)}
+                    aria-label={node.collapsed ? copy.workspace.expandNode : copy.workspace.foldNode}
+                    aria-expanded={!node.collapsed}
+                    aria-controls="mind-map"
+                    data-testid="toggle-node-button"
+                    className="node-detail-tertiary-action node-detail-fold-action inline-flex h-11 items-center gap-2 rounded-xl bg-danger-100 px-3 text-sm font-black text-danger-700 transition hover:bg-danger-200 disabled:cursor-not-allowed disabled:opacity-65"
                   >
-                    <Save size={16} />
+                    <Ribbon size={16} />
+                    {node.collapsed ? copy.workspace.expandNode : copy.workspace.fold}
                   </button>
-                </div>
+                )}
+                {node.parentId && (
+                  <button
+                    type="button"
+                    disabled={isCreating}
+                    onClick={() => onDeleteNode(node.id)}
+                    aria-label={copy.workspace.deleteNode}
+                    data-testid="delete-node-button"
+                    data-highlighted={headerHighlight.getDataHighlighted("delete", {
+                      enabled: isDeleteButtonEnabled,
+                    })}
+                    {...headerHighlight.getHoverHandlers("delete", { clearOnMouseLeave: true })}
+                    className={`node-detail-tertiary-action node-detail-delete-action inline-flex h-11 items-center gap-2 rounded-xl px-3 text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-danger-100 disabled:cursor-not-allowed disabled:opacity-65 ${getHighlightedActionClass(
+                      isDeleteButtonHighlighted,
+                      "bg-danger-50 text-danger-600",
+                    )}`}
+                  >
+                    <Trash2 size={16} />
+                    {copy.common.delete}
+                  </button>
+                )}
+                {showNotesAction && (
+                  <button
+                    type="button"
+                    onClick={onToggleNotes}
+                    aria-label={isNotesOpen ? copy.workspace.closeProjectNotes : copy.workspace.openProjectNotes}
+                    aria-controls="project-notes-panel"
+                    aria-expanded={isNotesOpen}
+                    data-testid="node-detail-notes-button"
+                    data-highlighted={headerHighlight.getDataHighlighted("notes", {
+                      active: isNotesOpen,
+                    })}
+                    {...headerHighlight.getHoverHandlers("notes", { clearOnMouseLeave: true })}
+                    className={`node-detail-tertiary-action node-detail-notes-action inline-flex h-11 items-center gap-2 rounded-xl px-3 text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 ${getHighlightedActionClass(
+                      isNotesButtonHighlighted,
+                      "bg-neutral-100 text-neutral-700",
+                    )}`}
+                  >
+                    <NotebookPen size={16} />
+                    {copy.common.notes}
+                  </button>
+                )}
               </div>
-            ) : (
-              <h2 id={titleId} className="text-lg font-black leading-snug text-neutral-900 sm:text-xl">
-                {node.title}
-              </h2>
-            )}
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {!isInitialSubmit && !isEditingTitle && (
-              <button
-                type="button"
-                onClick={handleStartTitleEdit}
-                disabled={isTitleEditBusy}
-                aria-label={copy.workspace.editNodeTitle}
-                title={copy.workspace.editNodeTitle}
-                data-testid="edit-node-title-button"
-                data-highlighted={headerHighlight.getDataHighlighted("edit", {
-                  enabled: isTitleEditButtonEnabled,
-                })}
-                {...headerHighlight.getHoverHandlers("edit", { clearOnMouseLeave: true })}
-                className={`node-detail-icon-button grid h-10 w-10 place-items-center rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-45 ${getHighlightedActionClass(
-                  isTitleEditButtonHighlighted,
-                  "bg-neutral-100 text-brand-600",
-                )}`}
-              >
-                <Pencil size={16} />
-              </button>
-            )}
-            {showCollapseButton && (
-              <button
-                type="button"
-                onClick={onCollapse}
-                aria-label={copy.workspace.collapseNodeDetails}
-                aria-controls="conversation-history"
-                aria-expanded="true"
-                data-testid="collapse-node-detail-panel-button"
-                className="node-detail-icon-button grid h-10 w-10 place-items-center rounded-full bg-neutral-100 text-neutral-600 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
-              >
-                <PanelRightClose size={18} />
-              </button>
-            )}
-          </div>
-        </div>
-        <p className="text-sm leading-6 text-neutral-600">{node.summary}</p>
-        <div className="flex flex-wrap gap-2">
-          {node.children.length > 0 && (
-            <button
-              type="button"
-              disabled={isCreating}
-              onClick={() => onToggleNode(node.id)}
-              aria-label={node.collapsed ? copy.workspace.expandNode : copy.workspace.foldNode}
-              aria-expanded={!node.collapsed}
-              aria-controls="mind-map"
-              data-testid="toggle-node-button"
-              className="node-detail-tertiary-action node-detail-fold-action inline-flex h-11 items-center gap-2 rounded-xl bg-danger-100 px-3 text-sm font-black text-danger-700 transition hover:bg-danger-200 disabled:cursor-not-allowed disabled:opacity-65"
-            >
-              <Ribbon size={16} />
-              {node.collapsed ? copy.workspace.expandNode : copy.workspace.fold}
-            </button>
-          )}
-          {node.parentId && (
-            <button
-              type="button"
-              disabled={isCreating}
-              onClick={() => onDeleteNode(node.id)}
-              aria-label={copy.workspace.deleteNode}
-              data-testid="delete-node-button"
-              data-highlighted={headerHighlight.getDataHighlighted("delete", {
-                enabled: isDeleteButtonEnabled,
-              })}
-              {...headerHighlight.getHoverHandlers("delete", { clearOnMouseLeave: true })}
-              className={`node-detail-tertiary-action node-detail-delete-action inline-flex h-11 items-center gap-2 rounded-xl px-3 text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-danger-100 disabled:cursor-not-allowed disabled:opacity-65 ${getHighlightedActionClass(
-                isDeleteButtonHighlighted,
-                "bg-danger-50 text-danger-600",
-              )}`}
-            >
-              <Trash2 size={16} />
-              {copy.common.delete}
-            </button>
-          )}
-          {showNotesAction && (
-            <button
-              type="button"
-              onClick={onToggleNotes}
-              aria-label={isNotesOpen ? copy.workspace.closeProjectNotes : copy.workspace.openProjectNotes}
-              aria-controls="project-notes-panel"
-              aria-expanded={isNotesOpen}
-              data-testid="node-detail-notes-button"
-              data-highlighted={headerHighlight.getDataHighlighted("notes", {
-                active: isNotesOpen,
-              })}
-              {...headerHighlight.getHoverHandlers("notes", { clearOnMouseLeave: true })}
-              className={`node-detail-tertiary-action node-detail-notes-action inline-flex h-11 items-center gap-2 rounded-xl px-3 text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 ${getHighlightedActionClass(
-                isNotesButtonHighlighted,
-                "bg-neutral-100 text-neutral-700",
-              )}`}
-            >
-              <NotebookPen size={16} />
-              {copy.common.notes}
-            </button>
-          )}
-        </div>
+        </section>
+        <div
+          role="separator"
+          aria-label={copy.workspace.resizeConversationHeader}
+          aria-orientation="horizontal"
+          onPointerDown={handleHeaderResizePointerDown}
+          onMouseDown={handleHeaderResizeMouseDown}
+          className="absolute -bottom-2 left-0 z-10 h-4 w-full cursor-row-resize transition hover:bg-brand-50/40 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
+        />
       </div>
 
       <section
@@ -1078,156 +1179,158 @@ export function NodeDetailPanel({
       )}
 
       {showComposer && (
-        <form
-          aria-label={copy.workspace.messageComposer}
-          aria-busy={isComposerBusy}
-          aria-describedby={displayError ? errorId : isComposerBusy ? statusId : undefined}
-          data-testid="message-composer"
-          onSubmit={handleSubmit}
-          className="node-detail-composer relative min-h-0 shrink-0 overflow-y-auto space-y-3 border-t border-neutral-200 pt-3 sm:pt-4"
-        >
-        <WorkspaceResizeHandle
-          orientation="horizontal"
-          showOnDesktop
-          className="absolute -top-3 left-0 right-0 z-10"
-          ariaLabel={copy.workspace.resizeConversationComposer}
-          testId="resize-conversation-composer"
-          onResizeStart={handleComposerResizeStart}
-        />
-        {!isInitialSubmit && !isBlankNode && (
+        <section className="node-detail-composer relative flex min-h-0 shrink-0 flex-col border-t border-neutral-200">
           <div
-            role="group"
-            aria-label={copy.workspace.branch}
-            data-testid="message-branch-mode"
-            onMouseLeave={modeHighlight.clearHighlightedAction}
-            className="grid grid-cols-2 gap-2"
+            role="separator"
+            aria-label={copy.workspace.resizeConversationComposer}
+            aria-orientation="horizontal"
+            onPointerDown={handleComposerResizePointerDown}
+            onMouseDown={handleComposerResizeMouseDown}
+            className="absolute -top-2 left-0 z-10 h-4 w-full cursor-row-resize transition hover:bg-brand-50/40 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
+          />
+          <form
+            aria-label={copy.workspace.messageComposer}
+            aria-busy={isComposerBusy}
+            aria-describedby={displayError ? errorId : isComposerBusy ? statusId : undefined}
+            data-testid="message-composer"
+            onSubmit={handleSubmit}
+            className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-y-auto pt-3"
           >
-            <button
-              type="button"
-              onClick={() => setMode("continue")}
-              disabled={isComposerBusy}
-              aria-label={copy.workspace.continueDown}
-              aria-pressed={mode === "continue"}
-              data-testid="continue-down-button"
-              data-highlighted={modeHighlight.getDataHighlighted("continue")}
-              {...modeHighlight.getPointerHoverHandlers("continue")}
-              className={`node-detail-mode-button node-detail-mode-continue inline-flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 sm:h-11 ${getHighlightedActionClass(
-                isContinueModeHighlighted,
-                "bg-neutral-100 text-neutral-700",
-              )}`}
+          {!isInitialSubmit && !isBlankNode && (
+            <div
+              role="group"
+              aria-label={copy.workspace.branch}
+              data-testid="message-branch-mode"
+              onMouseLeave={modeHighlight.clearHighlightedAction}
+              className="grid grid-cols-2 gap-2"
             >
-              <Sprout size={16} />
-              {copy.workspace.continue}
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("branch")}
-              disabled={isComposerBusy}
-              aria-label={copy.workspace.branchRight}
-              aria-pressed={mode === "branch"}
-              data-testid="branch-right-button"
-              data-highlighted={modeHighlight.getDataHighlighted("branch")}
-              {...modeHighlight.getPointerHoverHandlers("branch")}
-              className={`node-detail-mode-button node-detail-mode-branch inline-flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 sm:h-11 ${getHighlightedActionClass(
-                isBranchModeHighlighted,
-                "bg-neutral-100 text-neutral-700",
-              )}`}
-            >
-              <GitBranch size={16} />
-              {copy.workspace.branch}
-            </button>
-          </div>
-        )}
-        <PendingAttachmentChips
-          attachments={composerControls.pendingAttachments}
-          disabled={isComposerBusy}
-          onRemove={composerControls.removePendingAttachment}
-        />
-        <div className="node-detail-composer-box relative rounded-[20px] border border-neutral-200/80 bg-white shadow-sm transition focus-within:border-brand-300 focus-within:shadow-md focus-within:shadow-brand-100/20 focus-within:ring-4 focus-within:ring-brand-100/30">
-          {hasSelectedTextContext && (
-            <div className="px-3 pt-3">
-              <div
-                aria-label={copy.workspace.selectedTextCount}
-                data-testid="selected-text-context-chip"
-                className="node-selected-text-chip inline-flex max-w-full items-center gap-2 rounded-full border border-neutral-200/70 bg-white/75 px-3 py-1.5 text-xs font-bold tracking-normal text-neutral-700 shadow-sm"
+              <button
+                type="button"
+                onClick={() => setMode("continue")}
+                disabled={isComposerBusy}
+                aria-label={copy.workspace.continueDown}
+                aria-pressed={mode === "continue"}
+                data-testid="continue-down-button"
+                data-highlighted={modeHighlight.getDataHighlighted("continue")}
+                {...modeHighlight.getPointerHoverHandlers("continue")}
+                className={`node-detail-mode-button node-detail-mode-continue inline-flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 sm:h-11 ${getHighlightedActionClass(
+                  isContinueModeHighlighted,
+                  "bg-neutral-100 text-neutral-700",
+                )}`}
               >
-                <MessageSquare size={14} className="shrink-0 text-neutral-500" />
-                <span className="min-w-0 truncate">{copy.workspace.selectedTextCount}</span>
-                <button
-                  type="button"
-                  onClick={clearSelectedSourceText}
-                  disabled={isComposerBusy}
-                  aria-label={copy.workspace.removeSelectedText}
-                  data-testid="remove-selected-text-context-button"
-                  className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-neutral-500 transition hover:bg-white hover:text-neutral-800 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <X size={12} />
-                </button>
-              </div>
+                <Sprout size={16} />
+                {copy.workspace.continue}
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("branch")}
+                disabled={isComposerBusy}
+                aria-label={copy.workspace.branchRight}
+                aria-pressed={mode === "branch"}
+                data-testid="branch-right-button"
+                data-highlighted={modeHighlight.getDataHighlighted("branch")}
+                {...modeHighlight.getPointerHoverHandlers("branch")}
+                className={`node-detail-mode-button node-detail-mode-branch inline-flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 sm:h-11 ${getHighlightedActionClass(
+                  isBranchModeHighlighted,
+                  "bg-neutral-100 text-neutral-700",
+                )}`}
+              >
+                <GitBranch size={16} />
+                {copy.workspace.branch}
+              </button>
             </div>
           )}
-          <textarea
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
+          <PendingAttachmentChips
+            attachments={composerControls.pendingAttachments}
             disabled={isComposerBusy}
-            aria-label={copy.workspace.messageInstruction}
-            aria-describedby={displayError ? errorId : undefined}
-            data-testid="message-instruction-input"
-            placeholder={resolvedComposerPlaceholder}
-            rows={3}
-            className={`w-full resize-none bg-transparent px-3 pb-16 text-sm leading-6 text-neutral-900 outline-none placeholder:text-neutral-400 transition disabled:cursor-not-allowed disabled:opacity-65 sm:px-4 ${
-              hasSelectedTextContext ? "pt-3" : "pt-4"
-            }`}
+            onRemove={composerControls.removePendingAttachment}
           />
-          <div className="absolute bottom-3 left-3 flex max-w-[calc(100%-4.75rem)] items-center gap-2">
-            <AttachmentMenuButton controls={composerControls} />
-            <ModelSelectorButton controls={composerControls} />
+          <div className="node-detail-composer-box relative min-h-[132px] flex-1 rounded-[20px] border border-neutral-200/80 bg-white shadow-sm transition focus-within:border-brand-300 focus-within:shadow-md focus-within:shadow-brand-100/20 focus-within:ring-4 focus-within:ring-brand-100/30">
+            {hasSelectedTextContext && (
+              <div className="px-3 pt-3">
+                <div
+                  aria-label={copy.workspace.selectedTextCount}
+                  data-testid="selected-text-context-chip"
+                  className="node-selected-text-chip inline-flex max-w-full items-center gap-2 rounded-full border border-neutral-200/70 bg-white/75 px-3 py-1.5 text-xs font-bold tracking-normal text-neutral-700 shadow-sm"
+                >
+                  <MessageSquare size={14} className="shrink-0 text-neutral-500" />
+                  <span className="min-w-0 truncate">{copy.workspace.selectedTextCount}</span>
+                  <button
+                    type="button"
+                    onClick={clearSelectedSourceText}
+                    disabled={isComposerBusy}
+                    aria-label={copy.workspace.removeSelectedText}
+                    data-testid="remove-selected-text-context-button"
+                    className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-neutral-500 transition hover:bg-white hover:text-neutral-800 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              </div>
+            )}
+            <textarea
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              disabled={isComposerBusy}
+              aria-label={copy.workspace.messageInstruction}
+              aria-describedby={displayError ? errorId : undefined}
+              data-testid="message-instruction-input"
+              placeholder={resolvedComposerPlaceholder}
+              rows={3}
+              className={`h-full min-h-[132px] w-full resize-none bg-transparent px-3 pb-16 text-sm leading-6 text-neutral-900 outline-none placeholder:text-neutral-400 transition disabled:cursor-not-allowed disabled:opacity-65 sm:px-4 ${
+                hasSelectedTextContext ? "pt-3" : "pt-4"
+              }`}
+            />
+            <div className="absolute bottom-3 left-3 flex max-w-[calc(100%-4.75rem)] items-center gap-2">
+              <AttachmentMenuButton controls={composerControls} />
+              <ModelSelectorButton controls={composerControls} />
+            </div>
+            <div className="absolute bottom-3 right-3">
+              <button
+                type="submit"
+                disabled={isComposerBusy || !input.trim()}
+                aria-label={copy.workspace.send}
+                data-testid="send-message-button"
+                className="branchmind-primary-action inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-3 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
+              >
+                {composerControls.isPreparingAttachments || isCheckingInitialSubmit ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Send size={14} />
+                )}
+                <span className="node-detail-send-label">
+                  {composerControls.isPreparingAttachments
+                    ? copy.chat.preparing
+                    : isCreating || isCheckingInitialSubmit
+                      ? isInitialSubmit
+                        ? copy.common.creating
+                        : `${copy.workspace.generatingAnswer}...`
+                      : resolvedSubmitLabel}
+                </span>
+              </button>
+            </div>
           </div>
-          <div className="absolute bottom-3 right-3">
-            <button
-              type="submit"
-              disabled={isComposerBusy || !input.trim()}
-              aria-label={copy.workspace.send}
-              data-testid="send-message-button"
-              className="branchmind-primary-action inline-flex h-9 items-center gap-1.5 rounded-full bg-brand-600 px-3 text-sm font-black text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
+          {isComposerBusy && (
+            <p id={statusId} role="status" data-testid="message-send-status" className="sr-only">
+              {composerControls.isPreparingAttachments
+                ? copy.workspace.preparingPdfAttachments
+                : isInitialSubmit
+                  ? copy.workspace.createWorkspace
+                  : copy.workspace.streamingAnswer}
+            </p>
+          )}
+          {displayError && (
+            <p
+              id={errorId}
+              role="alert"
+              data-testid="message-error-alert"
+              className="rounded-xl border border-danger-200 bg-danger-50 px-3 py-2 text-sm font-bold text-danger-700"
             >
-              {composerControls.isPreparingAttachments || isCheckingInitialSubmit ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <Send size={14} />
-              )}
-              <span className="node-detail-send-label">
-                {composerControls.isPreparingAttachments
-                  ? copy.chat.preparing
-                  : isCreating || isCheckingInitialSubmit
-                    ? isInitialSubmit
-                      ? copy.common.creating
-                      : `${copy.workspace.generatingAnswer}...`
-                    : resolvedSubmitLabel}
-              </span>
-            </button>
-          </div>
-        </div>
-        {isComposerBusy && (
-          <p id={statusId} role="status" data-testid="message-send-status" className="sr-only">
-            {composerControls.isPreparingAttachments
-              ? copy.workspace.preparingPdfAttachments
-              : isInitialSubmit
-                ? copy.workspace.createWorkspace
-                : copy.workspace.streamingAnswer}
-          </p>
-        )}
-        {displayError && (
-          <p
-            id={errorId}
-            role="alert"
-            data-testid="message-error-alert"
-            className="rounded-xl border border-danger-200 bg-danger-50 px-3 py-2 text-sm font-bold text-danger-700"
-          >
-            {displayError}
-          </p>
-        )}
-      </form>
+              {displayError}
+            </p>
+          )}
+        </form>
+      </section>
       )}
     </aside>
   );

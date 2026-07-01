@@ -233,7 +233,7 @@ Run all migrations before using Supabase-backed storage in production. The later
 
 ### Dev Tools
 
-`ElementInspectorPlugin` (dev-only, activated via `Alt+I`) provides a DOM element inspector that copies CSS selectors to clipboard.
+`ElementInspectorPlugin` (dev-only, activated via `Ctrl+I`) provides a DOM element inspector that copies CSS selectors to clipboard. It loads the vendored helper `public/useElementInspector.js` (from `torres953190868/element-inspector-helper`), which is gitignored, so a fresh clone needs to re-download it before the inspector works in dev. Note: the trigger uses `Ctrl` rather than `Alt`, because on macOS `Option + <letter>` yields a dead key so `event.key` is never the base letter.
 
 ## Conventions
 

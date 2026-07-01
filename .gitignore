@@ -22,3 +22,6 @@ pnpm-debug.log*
 *.tsbuildinfo
 .vercel
 screenshots/
+
+# Vendored dev-only element inspector helper (torres953190868/element-inspector-helper)
+public/useElementInspector.js

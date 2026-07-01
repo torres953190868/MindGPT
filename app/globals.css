@@ -417,14 +417,14 @@ textarea {
 
 .node-detail-panel-surface[data-has-composer="true"] {
   grid-template-rows:
-    auto
+    var(--node-detail-header-height, auto)
     minmax(0, 1fr)
     var(--node-detail-composer-height, auto);
 }
 
 .node-detail-panel-surface[data-has-composer="false"] {
   grid-template-rows:
-    auto
+    var(--node-detail-header-height, auto)
     minmax(0, 1fr);
 }
 
@@ -620,7 +620,8 @@ textarea {
   color: var(--theme-text-secondary);
 }
 
-[data-theme="warm-limestone"] .workspace-sidebar-panel {
+[data-theme="warm-limestone"] .workspace-sidebar-panel,
+[data-theme="warm-limestone"] .node-detail-panel-surface {
   border-radius: 12px;
 }
 

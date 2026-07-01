@@ -7,8 +7,8 @@ import {
 } from "react";
 
 export type ResizeStartEvent =
-  | PointerEvent<HTMLButtonElement>
-  | MouseEvent<HTMLButtonElement>;
+  | PointerEvent<HTMLElement>
+  | MouseEvent<HTMLElement>;
 
 type WorkspaceResizeHandleProps = {
   orientation: "vertical" | "horizontal";
