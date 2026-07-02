@@ -4,6 +4,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -561,45 +562,54 @@ export function MindMap({
     };
   }, [focusMobileRootNode, isHomeInlineComposer, reactFlowInstance]);
 
+  const preserveViewportPosition = useCallback(() => {
+    if (!reactFlowInstance || isHomeInlineComposer) return;
+    const container = flowContainerRef.current;
+    if (!container) return;
+
+    const nextBounds = container.getBoundingClientRect();
+
+    if (nextBounds.width === 0 || nextBounds.height === 0) {
+      previousFlowBoundsRef.current = null;
+      return;
+    }
+
+    const previousBounds = previousFlowBoundsRef.current;
+    previousFlowBoundsRef.current = nextBounds;
+
+    if (!previousBounds) return;
+
+    const deltaX = previousBounds.left - nextBounds.left;
+    const deltaY = previousBounds.top - nextBounds.top;
+
+    if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return;
+
+    const viewport = reactFlowInstance.getViewport();
+    void reactFlowInstance.setViewport(
+      {
+        ...viewport,
+        x: viewport.x + deltaX,
+        y: viewport.y + deltaY,
+      },
+      { duration: 0 },
+    );
+  }, [isHomeInlineComposer, reactFlowInstance]);
+
+  useLayoutEffect(() => {
+    preserveViewportPosition();
+  });
+
   useEffect(() => {
     if (!reactFlowInstance || isHomeInlineComposer) return undefined;
 
-    const container = flowContainerRef.current;
-    if (!container) return undefined;
-
     let animationFrame = 0;
-    const preserveViewportPosition = () => {
-      const nextBounds = container.getBoundingClientRect();
-
-      if (nextBounds.width === 0 || nextBounds.height === 0) {
-        previousFlowBoundsRef.current = null;
-        return;
-      }
-
-      const previousBounds = previousFlowBoundsRef.current;
-      previousFlowBoundsRef.current = nextBounds;
-
-      if (!previousBounds) return;
-
-      const deltaX = previousBounds.left - nextBounds.left;
-      const deltaY = previousBounds.top - nextBounds.top;
-
-      if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return;
-
-      const viewport = reactFlowInstance.getViewport();
-      void reactFlowInstance.setViewport(
-        {
-          ...viewport,
-          x: viewport.x + deltaX,
-          y: viewport.y + deltaY,
-        },
-        { duration: 0 },
-      );
-    };
     const schedulePreserveViewportPosition = () => {
       window.cancelAnimationFrame(animationFrame);
       animationFrame = window.requestAnimationFrame(preserveViewportPosition);
     };
+    const container = flowContainerRef.current;
+    if (!container) return undefined;
+
     const observer =
       typeof ResizeObserver === "undefined"
         ? null
@@ -614,7 +624,12 @@ export function MindMap({
       observer?.disconnect();
       window.removeEventListener("resize", schedulePreserveViewportPosition);
     };
-  }, [isHomeInlineComposer, reactFlowInstance, project.id]);
+  }, [
+    isHomeInlineComposer,
+    preserveViewportPosition,
+    reactFlowInstance,
+    project.id,
+  ]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {

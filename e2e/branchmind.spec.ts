@@ -3569,11 +3569,38 @@ test("workspace sidebars resize and snap like VS Code", async ({ page }, testInf
     const mindMapCanvas = page.getByTestId("mind-map-canvas");
     const workspaceSidebar = page.getByTestId("workspace-sidebar");
     const nodeDetailPanel = page.getByTestId("node-detail-panel");
+    const rootCard = page.locator(
+      `[data-testid="branch-node-card"][data-node-id="${project.rootNodeId}"]`,
+    );
 
     await expect(workspaceSidebar).toBeVisible();
     await expect(nodeDetailPanel).toBeVisible();
+    await expect(rootCard).toBeVisible();
 
-    await dragResizeHandle(page, page.getByTestId("resize-workspace-sidebar"), 430);
+    const rootBoxBeforeResize = await getElementBox(rootCard, "root card before sidebar resize");
+    const workspaceResizeHandleBox = await page
+      .getByTestId("resize-workspace-sidebar")
+      .boundingBox();
+    if (!workspaceResizeHandleBox) {
+      throw new Error("Expected workspace sidebar resize handle to be measurable.");
+    }
+
+    const resizeStartX = workspaceResizeHandleBox.x + workspaceResizeHandleBox.width / 2;
+    const resizeStartY = workspaceResizeHandleBox.y + workspaceResizeHandleBox.height / 2;
+    const expectRootCardToStayStill = async (label: string) => {
+      await expect.poll(async () => {
+        const rootBoxAfterResize = await getElementBox(rootCard, label);
+        return Math.abs(rootBoxAfterResize.x - rootBoxBeforeResize.x);
+      }).toBeLessThan(2);
+    };
+
+    await page.mouse.move(resizeStartX, resizeStartY);
+    await page.mouse.down();
+    await page.mouse.move(resizeStartX + 215, resizeStartY, { steps: 4 });
+    await expectRootCardToStayStill("root card during sidebar resize");
+    await page.mouse.move(resizeStartX + 430, resizeStartY, { steps: 4 });
+    await expectRootCardToStayStill("root card after sidebar resize");
+    await page.mouse.up();
     await expect.poll(() => getElementWidth(workspaceSidebar)).toBeGreaterThan(560);
     await expect.poll(() => getElementWidth(mindMapCanvas)).toBeGreaterThan(219);
     await expectNoHorizontalOverflow(page);

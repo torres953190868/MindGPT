@@ -67,11 +67,13 @@ export function WorkspaceResizeHandle({
     : "h-10 w-0.5 opacity-0 group-hover:opacity-80";
 
   const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
     lastPointerStartAtRef.current = event.timeStamp;
     onResizeStart(event);
   };
 
   const handleMouseDown = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
     if (event.timeStamp - lastPointerStartAtRef.current < 100) return;
     onResizeStart(event);
   };
