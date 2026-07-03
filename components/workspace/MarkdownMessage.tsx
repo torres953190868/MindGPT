@@ -1,5 +1,7 @@
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import { replaceChatCitationMarkers } from "@/lib/chat-citations";
 import type { ChatCitation } from "@/lib/types";
 
@@ -139,7 +141,27 @@ function createMarkdownComponents(): Components {
   };
 }
 
-const remarkPlugins = [remarkGfm];
+const remarkPlugins = [remarkGfm, remarkMath];
+const rehypePlugins = [rehypeKatex];
+
+const BLOCK_MATH_PATTERN = /\\\[([\s\S]+?)\\\]/g;
+const INLINE_MATH_PATTERN = /\\\(([\s\S]+?)\\\)/g;
+
+// Some models (and RAG-sourced text) emit LaTeX with \[...\] / \(...\) delimiters,
+// which remark-math does not recognize. Rewrite them to the $$...$$ / $...$ forms
+// it understands, leaving fenced code blocks untouched.
+function normalizeMathDelimiters(content: string) {
+  return content
+    .split(/(```[\s\S]*?```)/g)
+    .map((segment, index) =>
+      index % 2 === 1
+        ? segment
+        : segment
+            .replace(BLOCK_MATH_PATTERN, (_match, body) => `$$${body}$$`)
+            .replace(INLINE_MATH_PATTERN, (_match, body) => `$${body}$`),
+    )
+    .join("");
+}
 
 export function MarkdownMessage({
   content,
@@ -147,13 +169,19 @@ export function MarkdownMessage({
   isStreaming = false,
   testId = "conversation-message-content",
 }: MarkdownMessageProps) {
-  const renderedContent = renderCitationMarkers(content, citations);
+  const renderedContent = normalizeMathDelimiters(
+    renderCitationMarkers(content, citations),
+  );
   const markdownComponents = createMarkdownComponents();
 
   return (
     <div data-testid={testId} className="overflow-x-auto break-words">
       <div data-testid={isStreaming ? "streaming-assistant-response" : undefined}>
-        <ReactMarkdown components={markdownComponents} remarkPlugins={remarkPlugins}>
+        <ReactMarkdown
+          components={markdownComponents}
+          remarkPlugins={remarkPlugins}
+          rehypePlugins={rehypePlugins}
+        >
           {renderedContent}
         </ReactMarkdown>
       </div>

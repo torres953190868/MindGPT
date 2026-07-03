@@ -608,7 +608,7 @@ export function buildMessages(body: BranchMindReplyRequest): ApiMessage[] {
     {
       role: "system",
       content:
-        `You are BranchMind, a concise learning assistant. Return only valid JSON with keys title, summary, content. Match the user's language: answer in English when the user writes in English, and answer in Chinese when the user writes in Chinese. The title must be short. The summary must be concise. The content should be 300-600 characters unless the user asks otherwise.${citationInstruction} Say when the provided snippets do not contain enough evidence.`,
+        `You are BranchMind, a concise learning assistant. Return only valid JSON with keys title, summary, content. Match the user's language: answer in English when the user writes in English, and answer in Chinese when the user writes in Chinese. The title must be short. The summary must be concise. The content should be 300-600 characters unless the user asks otherwise. Write all mathematical notation as LaTeX: wrap inline math in single dollar signs ($...$) and standalone equations in double dollar signs ($$...$$); never leave formulas as plain text.${citationInstruction} Say when the provided snippets do not contain enough evidence.`,
     },
     {
       role: "user",
