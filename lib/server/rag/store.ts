@@ -244,6 +244,7 @@ function toDocument(row: DocumentRow): RagDocument {
     fileUrl: row.file_url,
     storagePath: row.storage_path,
     mimeType: row.mime_type,
+    contentHash: row.content_hash,
     pageCount: row.page_count,
     title: row.title,
     status: row.status,
@@ -262,6 +263,7 @@ function toDocument(row: DocumentRow): RagDocument {
 function normalizeDocument(document: RagDocument): RagDocument {
   return {
     ...document,
+    contentHash: document.contentHash ?? null,
     errorCode: document.errorCode ?? null,
     errorStage: document.errorStage ?? null,
     errorRequestId: document.errorRequestId ?? null,
@@ -518,6 +520,13 @@ class FileRagRepository implements RagRepository {
   async createUploadedDocument(upload: RagUpload) {
     return enqueueWrite(async () => {
       const data = await readDataFile();
+      const existingDocument = data.documents.find(
+        (document) =>
+          document.userId === upload.userId &&
+          document.contentHash === upload.contentHash,
+      );
+      if (existingDocument) return normalizeDocument(existingDocument);
+
       const id = createId("doc");
       const createdAt = now();
       const storagePath = path.join(RAG_FILES_DIR, `${id}.pdf`);
@@ -528,6 +537,7 @@ class FileRagRepository implements RagRepository {
         fileUrl: null,
         storagePath,
         mimeType: upload.mimeType,
+        contentHash: upload.contentHash,
         pageCount: 0,
         title: null,
         status: "uploaded",
@@ -764,6 +774,7 @@ class SupabaseRagRepository implements RagRepository {
       file_url: null,
       storage_path: storagePath,
       mime_type: upload.mimeType,
+      content_hash: upload.contentHash,
       page_count: 0,
       title: null,
       status: "uploaded",
@@ -783,6 +794,19 @@ class SupabaseRagRepository implements RagRepository {
       .insert(row)
       .select("*")
       .single();
+    if (error?.code === "23505") {
+      await storage.remove([storagePath]);
+      let duplicateQuery = getSupabaseAdminClient()
+        .from("documents")
+        .select("*")
+        .eq("content_hash", upload.contentHash);
+      duplicateQuery = upload.userId
+        ? duplicateQuery.eq("user_id", upload.userId)
+        : duplicateQuery.is("user_id", null);
+      const duplicateResult = await duplicateQuery.maybeSingle();
+      assertNoError(duplicateResult.error, "find duplicate document");
+      return toDocument(requireRow(duplicateResult.data, "find duplicate document"));
+    }
     if (error) {
       await storage.remove([storagePath]);
       assertNoError(error, "create document");

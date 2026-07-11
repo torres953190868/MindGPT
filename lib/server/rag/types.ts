@@ -55,6 +55,7 @@ export type RagDocument = {
   fileUrl: string | null;
   storagePath: string | null;
   mimeType: string;
+  contentHash?: string | null;
   pageCount: number;
   title: string | null;
   status: DocumentStatus;
@@ -117,6 +118,7 @@ export type RagUpload = {
   fileName: string;
   mimeType: string;
   bytes: Uint8Array;
+  contentHash: string;
   userId: string | null;
 };
 

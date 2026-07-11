@@ -176,6 +176,7 @@ describe("rag store", () => {
       fileName: "storage.pdf",
       mimeType: "application/pdf",
       bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+      contentHash: "a".repeat(64),
     });
 
     expect(storageFromMock).toHaveBeenCalledWith("branchmind-rag-files");
@@ -188,6 +189,7 @@ describe("rag store", () => {
       expect.objectContaining({
         id: "doc_storage",
         storage_path: "users/user_storage/doc_storage.pdf",
+        content_hash: "a".repeat(64),
       }),
     );
     expect(document.storagePath).toBe("users/user_storage/doc_storage.pdf");

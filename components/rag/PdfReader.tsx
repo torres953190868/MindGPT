@@ -194,17 +194,34 @@ type PdfSidebarResizeBoundsOptions = {
 
 let pdfJsModulePromise: Promise<PdfJsModule> | null = null;
 
-function statusLabel(status: DocumentStatus) {
-  const labels: Record<DocumentStatus, string> = {
-    queued: "Queued",
-    uploaded: "Uploaded",
-    parsing: "Parsing",
-    parsed: "Parsed",
-    indexing: "Indexing",
-    indexed: "Indexed",
-    failed: "Failed",
+function statusLabel(status: DocumentStatus, language: "zh" | "en") {
+  const labels: Record<"zh" | "en", Record<DocumentStatus, string>> = {
+    zh: {
+      queued: "等待处理",
+      uploaded: "已上传",
+      parsing: "解析中",
+      parsed: "已解析",
+      indexing: "索引中",
+      indexed: "已完成",
+      failed: "处理失败",
+    },
+    en: {
+      queued: "Queued",
+      uploaded: "Uploaded",
+      parsing: "Parsing",
+      parsed: "Parsed",
+      indexing: "Indexing",
+      indexed: "Ready",
+      failed: "Failed",
+    },
   };
-  return labels[status];
+  return labels[language][status];
+}
+
+function documentStatusDotClass(status: DocumentStatus) {
+  if (status === "failed") return "bg-[#d97757]";
+  if (status === "indexed") return "bg-[#788c5d]";
+  return "bg-[#6a9bcc]";
 }
 
 function pagesLabel(start: number, end: number) {
@@ -1589,8 +1606,17 @@ export function PdfReader() {
                           {document.title || document.fileName}
                         </span>
                         <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-neutral-600">
-                          <span className={`h-1.5 w-1.5 rounded-full ${isSelected ? "bg-success-400" : "bg-neutral-300"}`} />
-                          {language === "zh" ? `${document.pageCount || "-"} 页` : `${document.pageCount || "-"} pages`}
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${documentStatusDotClass(document.status)}`}
+                          />
+                          <span className={document.status === "failed" ? "text-[#9b4a43]" : undefined}>
+                            {statusLabel(document.status, language)}
+                            {document.pageCount > 0
+                              ? language === "zh"
+                                ? ` · ${document.pageCount} 页`
+                                : ` · ${document.pageCount} pages`
+                              : ""}
+                          </span>
                         </span>
                       </span>
                       {isSelected && (
@@ -1667,7 +1693,7 @@ export function PdfReader() {
                   ? copy.reader.localPreviewUploading
                   : copy.reader.localPreview
                 : selectedDocument
-                  ? statusLabel(selectedDocument.status)
+                  ? statusLabel(selectedDocument.status, language)
                   : copy.reader.noPdfSelected}
               {pageCount ? (language === "zh" ? ` - ${pageCount} 页` : ` - ${pageCount} pages`) : ""}
             </p>

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { ChatAttachment, ChatDocumentContext } from "@/lib/types";
 import { generateGroundedAnswer } from "./answer";
 import { getMaxPdfSizeBytes } from "./config";
@@ -82,6 +83,7 @@ export async function uploadPdfForOwner(
     fileName: file.name,
     mimeType: file.type || "application/pdf",
     bytes,
+    contentHash: createHash("sha256").update(bytes).digest("hex"),
   });
 }
 

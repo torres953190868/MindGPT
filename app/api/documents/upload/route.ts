@@ -55,6 +55,15 @@ export async function POST(request: NextRequest) {
       principal.id,
       getPdfFile(await request.formData()),
     );
+    const duplicate = document.status !== "uploaded";
+    if (document.status !== "uploaded" && document.status !== "failed") {
+      return jsonWithSession(
+        { document, duplicate, job: null },
+        session,
+        { status: 200 },
+        { requestId },
+      );
+    }
     const job = await enqueueRagProcessingJob(
       principal.id,
       document.id,
@@ -63,7 +72,7 @@ export async function POST(request: NextRequest) {
     );
 
     return jsonWithSession(
-      { document: { ...document, status: "queued" }, job },
+      { document: { ...document, status: "queued" }, duplicate, job },
       session,
       { status: 202 },
       { requestId },

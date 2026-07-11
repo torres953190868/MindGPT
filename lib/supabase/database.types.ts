@@ -159,6 +159,7 @@ export type Database = {
           file_url: string | null;
           storage_path: string | null;
           mime_type: string;
+          content_hash: string | null;
           page_count: number;
           title: string | null;
           status:
@@ -186,6 +187,7 @@ export type Database = {
           file_url?: string | null;
           storage_path?: string | null;
           mime_type: string;
+          content_hash?: string | null;
           page_count?: number;
           title?: string | null;
           status?:
@@ -213,6 +215,7 @@ export type Database = {
           file_url?: string | null;
           storage_path?: string | null;
           mime_type?: string;
+          content_hash?: string | null;
           page_count?: number;
           title?: string | null;
           status?:

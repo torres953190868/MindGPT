@@ -102,6 +102,7 @@ describe("document upload route", () => {
       documentId: "doc_upload",
       messageId: "msg_upload",
     });
+    expect(body.duplicate).toBe(false);
     expect(uploadPdfForOwner).toHaveBeenCalledWith(
       "user_upload_route",
       expect.any(File),
@@ -111,6 +112,50 @@ describe("document upload route", () => {
       "doc_upload",
       "index",
       "req_upload_route",
+    );
+  });
+
+  it("reuses an already indexed duplicate without queueing it again", async () => {
+    vi.mocked(uploadPdfForOwner).mockResolvedValue({
+      ...uploadedDocument,
+      status: "indexed",
+      pageCount: 15,
+    });
+    const { POST } = await import("@/app/api/documents/upload/route");
+
+    const response = await POST(createUploadRequest("req_upload_duplicate"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      document: { id: "doc_upload", status: "indexed", pageCount: 15 },
+      duplicate: true,
+      job: null,
+    });
+    expect(enqueueRagProcessingJob).not.toHaveBeenCalled();
+  });
+
+  it("retries a failed duplicate using its existing document id", async () => {
+    vi.mocked(uploadPdfForOwner).mockResolvedValue({
+      ...uploadedDocument,
+      status: "failed",
+      errorMessage: "Previous parsing failed.",
+    });
+    const { POST } = await import("@/app/api/documents/upload/route");
+
+    const response = await POST(createUploadRequest("req_upload_retry"));
+    const body = await response.json();
+
+    expect(response.status).toBe(202);
+    expect(body).toMatchObject({
+      document: { id: "doc_upload", status: "queued" },
+      duplicate: true,
+    });
+    expect(enqueueRagProcessingJob).toHaveBeenCalledWith(
+      "user_upload_route",
+      "doc_upload",
+      "index",
+      "req_upload_retry",
     );
   });
 
