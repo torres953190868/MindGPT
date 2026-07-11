@@ -1192,8 +1192,9 @@ export function NodeDetailPanel({
             aria-describedby={displayError ? errorId : isComposerBusy ? statusId : undefined}
             data-testid="message-composer"
             onSubmit={handleSubmit}
-            className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-y-auto pt-3"
+            className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto pt-3"
           >
+          <div className="mt-auto flex shrink-0 flex-col gap-3">
           {!isInitialSubmit && !isBlankNode && (
             <div
               role="group"
@@ -1243,7 +1244,7 @@ export function NodeDetailPanel({
             disabled={isComposerBusy}
             onRemove={composerControls.removePendingAttachment}
           />
-          <div className="node-detail-composer-box relative min-h-[132px] flex-1 rounded-[20px] border border-neutral-200/80 bg-white shadow-sm transition focus-within:border-brand-300 focus-within:shadow-md focus-within:shadow-brand-100/20 focus-within:ring-4 focus-within:ring-brand-100/30">
+          <div className="node-detail-composer-box relative min-h-[132px] shrink-0 rounded-[20px] border border-neutral-200/80 bg-white shadow-sm transition focus-within:border-brand-300 focus-within:shadow-md focus-within:shadow-brand-100/20 focus-within:ring-4 focus-within:ring-brand-100/30">
             {hasSelectedTextContext && (
               <div className="px-3 pt-3">
                 <div
@@ -1318,6 +1319,7 @@ export function NodeDetailPanel({
               {displayError}
             </p>
           )}
+          </div>
         </form>
       </section>
       )}
