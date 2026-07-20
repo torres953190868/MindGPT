@@ -18,7 +18,7 @@ const privacySections = [
     title: "What BranchMind Collects",
     body: [
       "During the beta, BranchMind stores the project titles, prompts, AI responses, node summaries, node positions, timestamps, and related workspace data needed to run the branching conversation experience.",
-      "BranchMind may also process basic technical data that your browser and the app send with requests, such as request timing and error context. The beta does not intentionally collect payment details or special category personal data.",
+      "BranchMind may also process basic technical data that your browser and the app send with requests, such as request timing and error context. The beta does not intentionally collect payment details or special categories of personal data.",
     ],
   },
   {
@@ -36,7 +36,7 @@ const privacySections = [
     ],
   },
   {
-    title: "Data Export And Deletion",
+    title: "Data Export and Deletion",
     body: [
       "The beta includes per-project JSON export so you can keep a local copy of your project data.",
       "Project deletion removes the selected project from the BranchMind project store. Deletion is intended to be permanent for the beta workspace, although operational backups or logs, if any, may take additional time to expire.",

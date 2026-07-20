@@ -105,11 +105,7 @@ async function postConfigAction(action: unknown) {
   });
   const data = (await response.json().catch(() => null)) as AdminLlmConfigResponse | null;
   if (!response.ok || !data) {
-    const message =
-      data && typeof data === "object" && "error" in data
-        ? "Failed to save LLM config."
-        : "Failed to save LLM config.";
-    throw new Error(message);
+    throw new Error("Failed to save LLM config.");
   }
   return data;
 }
@@ -369,11 +365,11 @@ export function AdminModelsClient() {
         <div className={cardClassName}>
           <h2 className="text-base font-black text-[#25222b]">Add or edit provider</h2>
           <div className="mt-4 grid gap-3">
-            <input className={fieldClassName} placeholder="provider id" value={providerForm.providerId} onChange={(event) => setProviderForm({ ...providerForm, providerId: event.target.value })} />
-            <input className={fieldClassName} placeholder="display name" value={providerForm.displayName} onChange={(event) => setProviderForm({ ...providerForm, displayName: event.target.value })} />
+            <input className={fieldClassName} placeholder="Provider id" value={providerForm.providerId} onChange={(event) => setProviderForm({ ...providerForm, providerId: event.target.value })} />
+            <input className={fieldClassName} placeholder="Display name" value={providerForm.displayName} onChange={(event) => setProviderForm({ ...providerForm, displayName: event.target.value })} />
             <input className={fieldClassName} placeholder="https://provider.example/v1/chat/completions" value={providerForm.baseUrl} onChange={(event) => setProviderForm({ ...providerForm, baseUrl: event.target.value })} />
             <input className={fieldClassName} placeholder="API_KEY_ENV_NAME" value={providerForm.apiKeyEnv} onChange={(event) => setProviderForm({ ...providerForm, apiKeyEnv: event.target.value })} />
-            <input className={fieldClassName} placeholder="timeout ms, optional" inputMode="numeric" value={providerForm.timeoutMs} onChange={(event) => setProviderForm({ ...providerForm, timeoutMs: event.target.value })} />
+            <input className={fieldClassName} placeholder="Timeout ms, optional" inputMode="numeric" value={providerForm.timeoutMs} onChange={(event) => setProviderForm({ ...providerForm, timeoutMs: event.target.value })} />
             <textarea className={`${codeFieldClassName} min-h-24`} value={providerForm.payloadOptionsText} onChange={(event) => setProviderForm({ ...providerForm, payloadOptionsText: event.target.value })} />
             <label className="inline-flex items-center gap-2 text-sm font-bold text-[#5d5363]">
               <input type="checkbox" checked={providerForm.enabled} onChange={(event) => setProviderForm({ ...providerForm, enabled: event.target.checked })} className="h-4 w-4 accent-[#25222b]" />
@@ -394,10 +390,10 @@ export function AdminModelsClient() {
                 <option key={provider.providerId} value={provider.providerId}>{provider.displayName}</option>
               ))}
             </select>
-            <input className={fieldClassName} placeholder="model id" value={modelForm.model} onChange={(event) => setModelForm({ ...modelForm, model: event.target.value })} />
-            <input className={fieldClassName} placeholder="display name" value={modelForm.displayName} onChange={(event) => setModelForm({ ...modelForm, displayName: event.target.value })} />
-            <input className={fieldClassName} placeholder="sort order" inputMode="numeric" value={modelForm.sortOrder} onChange={(event) => setModelForm({ ...modelForm, sortOrder: event.target.value })} />
-            <textarea className={`${fieldClassName} min-h-20`} placeholder="notes" value={modelForm.notes} onChange={(event) => setModelForm({ ...modelForm, notes: event.target.value })} />
+            <input className={fieldClassName} placeholder="Model id" value={modelForm.model} onChange={(event) => setModelForm({ ...modelForm, model: event.target.value })} />
+            <input className={fieldClassName} placeholder="Display name" value={modelForm.displayName} onChange={(event) => setModelForm({ ...modelForm, displayName: event.target.value })} />
+            <input className={fieldClassName} placeholder="Sort order" inputMode="numeric" value={modelForm.sortOrder} onChange={(event) => setModelForm({ ...modelForm, sortOrder: event.target.value })} />
+            <textarea className={`${fieldClassName} min-h-20`} placeholder="Notes" value={modelForm.notes} onChange={(event) => setModelForm({ ...modelForm, notes: event.target.value })} />
             <div className="flex flex-wrap gap-4 text-sm font-bold text-[#5d5363]">
               <label className="inline-flex items-center gap-2"><input type="checkbox" checked={modelForm.enabled} onChange={(event) => setModelForm({ ...modelForm, enabled: event.target.checked })} className="h-4 w-4 accent-[#25222b]" /> Enabled</label>
               <label className="inline-flex items-center gap-2"><input type="checkbox" checked={modelForm.supportsStreaming} onChange={(event) => setModelForm({ ...modelForm, supportsStreaming: event.target.checked })} className="h-4 w-4 accent-[#25222b]" /> Streaming</label>

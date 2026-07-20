@@ -1064,7 +1064,7 @@ export function NodeDetailPanel({
                       message.role === "user" ? "text-brand-600" : "text-text-muted"
                     }`}
                   >
-                    {message.role === "user" ? copy.workspace.user : copy.workspace.assistant}
+                    {message.role === "user" ? copy.workspace.userShort : copy.workspace.assistant}
                   </p>
                   {isEditingMessage ? (
                     <div className="space-y-2">

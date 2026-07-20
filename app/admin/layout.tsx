@@ -18,7 +18,10 @@ export default async function AdminLayout({ children }: { children: ReactNode })
         <section className="max-w-md rounded-lg border border-[#e4ddd4] bg-[#fffdf9] p-6 text-center shadow-[0_14px_34px_rgba(35,31,26,0.06)]">
           <h1 className="text-2xl font-black">Admin access required</h1>
           <p className="mt-2 text-sm font-semibold leading-6 text-[#7b717f]">
-            Your account is signed in, but it is not listed in BRANCHMIND_ADMIN_EMAILS.
+            This account doesn&apos;t have admin access.
+          </p>
+          <p className="mt-1 text-xs leading-5 text-[#9a909f]">
+            It is not listed in BRANCHMIND_ADMIN_EMAILS.
           </p>
           <Link
             href="/projects"

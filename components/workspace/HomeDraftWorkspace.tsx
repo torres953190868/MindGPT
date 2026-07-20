@@ -21,7 +21,7 @@ const DRAFT_TIMESTAMP = "2026-01-01T00:00:00.000Z";
 const HOME_TAGLINE_INTERVAL_MS = 4000;
 const HOME_TAGLINE_EXIT_MS = 260;
 const HOME_TAGLINE_ENTER_MS = 420;
-const AUTH_REQUIRED_MESSAGE = "Sign in is required.";
+const AUTH_REQUIRED_MESSAGE = "You need to sign in to do that.";
 
 type HomeTaglinePhase = "idle" | "leaving" | "entering";
 

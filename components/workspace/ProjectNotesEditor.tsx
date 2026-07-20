@@ -25,6 +25,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import { Table, TableCell, TableHeader, TableRow } from "@tiptap/extension-table";
 import {
   Code2,
@@ -438,6 +439,7 @@ export const ProjectNotesEditor = forwardRef<ProjectNotesEditorHandle, ProjectNo
     { value, onChange, maxLength, placeholder, ariaLabel, ariaDescribedBy, testId },
     ref,
   ) {
+    const { copy } = useLanguage();
     const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
     const [mathFormulaDialog, setMathFormulaDialog] =
       useState<MathFormulaDialogState | null>(null);
@@ -833,14 +835,16 @@ export const ProjectNotesEditor = forwardRef<ProjectNotesEditorHandle, ProjectNo
           <div
             role="dialog"
             aria-label={
-              mathFormulaDialog.mode === "edit" ? "Edit math formula" : "Insert math formula"
+              mathFormulaDialog.mode === "edit"
+                ? copy.workspace.mathFormulaEdit
+                : copy.workspace.mathFormulaInsert
             }
             className="project-notes-math-popover"
             data-testid="project-notes-math-popover"
           >
             <form className="project-notes-math-form" onSubmit={handleMathFormulaSubmit}>
               <div className="project-notes-math-header">
-                <span className="project-notes-math-title">Math formula</span>
+                <span className="project-notes-math-title">{copy.workspace.mathFormulaTitle}</span>
               </div>
               <textarea
                 ref={mathFormulaInputRef}
@@ -861,7 +865,7 @@ export const ProjectNotesEditor = forwardRef<ProjectNotesEditorHandle, ProjectNo
                   data-testid="project-notes-math-cancel"
                   onClick={closeMathFormulaDialog}
                 >
-                  Cancel
+                  {copy.common.cancel}
                 </button>
                 <button
                   type="submit"
@@ -869,7 +873,9 @@ export const ProjectNotesEditor = forwardRef<ProjectNotesEditorHandle, ProjectNo
                   data-testid="project-notes-math-submit"
                   disabled={mathFormulaDialog.latex.trim().length === 0}
                 >
-                  {mathFormulaDialog.mode === "edit" ? "Update" : "Insert"}
+                  {mathFormulaDialog.mode === "edit"
+                    ? copy.workspace.mathFormulaSubmitUpdate
+                    : copy.workspace.mathFormulaSubmitInsert}
                 </button>
               </div>
             </form>

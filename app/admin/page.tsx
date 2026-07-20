@@ -67,7 +67,7 @@ export default async function AdminIndexPage() {
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Route size={18} className="text-[#3b7d8b]" />
-              <h2 className="text-base font-black text-[#25222b]">Default Routes</h2>
+              <h2 className="text-base font-black text-[#25222b]">Default routes</h2>
             </div>
             <Link
               href="/admin/models"
@@ -109,7 +109,7 @@ export default async function AdminIndexPage() {
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Bug size={18} className="text-[#9a6b2f]" />
-              <h2 className="text-base font-black text-[#25222b]">Bug Queue</h2>
+              <h2 className="text-base font-black text-[#25222b]">Bug queue</h2>
             </div>
             <Link
               href="/admin/bugs"
@@ -139,7 +139,7 @@ export default async function AdminIndexPage() {
       <section className={cardClassName}>
         <div className="flex items-center gap-2">
           <Server size={18} className="text-[#6e5a94]" />
-          <h2 className="text-base font-black text-[#25222b]">Provider Health</h2>
+          <h2 className="text-base font-black text-[#25222b]">Provider health</h2>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {config.providers.map((provider) => (

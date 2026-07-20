@@ -1075,7 +1075,7 @@ export function AttachmentMenuButton({
                 <Upload size={16} />
               </span>
               <span className="min-w-0 flex-1 truncate text-sm font-black">
-                {language === "zh" ? "上传新文件" : "Upload new file"}
+                {copy.chat.uploadNewFile}
               </span>
             </button>
 
@@ -1103,7 +1103,7 @@ export function AttachmentMenuButton({
                   <BookOpen size={16} />
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm font-black">
-                  {language === "zh" ? "知识库" : "Knowledge base"}
+                  {copy.chat.knowledgeBase}
                 </span>
                 <ChevronRight
                   size={15}
@@ -1127,7 +1127,7 @@ export function AttachmentMenuButton({
                       className="flex items-center gap-2 rounded-[12px] px-3 py-3 text-sm font-bold text-neutral-600"
                     >
                       <Loader2 size={15} className="animate-spin" />
-                      {language === "zh" ? "正在加载 PDF" : "Loading PDFs"}
+                      {copy.chat.loadingPdfs}
                     </p>
                   )}
 
@@ -1141,7 +1141,7 @@ export function AttachmentMenuButton({
                     !controls.knowledgeDocumentError &&
                     controls.indexedKnowledgeDocuments.length === 0 && (
                       <p className="rounded-[12px] px-3 py-3 text-sm font-bold text-neutral-600">
-                        {language === "zh" ? "还没有已索引的 PDF。" : "No indexed PDFs yet."}
+                        {copy.chat.noIndexedPdfs}
                       </p>
                     )}
 
@@ -1263,7 +1263,7 @@ export function ModelSelectorButton({
                   </span>
                   <span className="block truncate text-xs font-bold text-neutral-500">
                     {option.providerName}
-                    {!option.configured ? " - not configured" : ""}
+                    {!option.configured ? copy.chat.notConfigured : ""}
                   </span>
                 </span>
                 {isSelected && <Check size={15} className="shrink-0" />}

@@ -10,19 +10,9 @@ const PLANS = [
     key: "free",
     name: "Free",
     price: "$0",
-    period: "/month",
-    description: "A focused starter tier with clear usage limits.",
+    period: "",
     icon: Zap,
     iconColor: "bg-[#fff4d6] text-[#8a6a20] ring-1 ring-[#ead8a7]",
-    eyebrow: "Starter limits",
-    features: [
-      { label: "5 projects" },
-      { label: "100 nodes" },
-      { label: "3 PDF documents" },
-      { label: "50 AI messages/day" },
-      { label: "Community support" },
-    ],
-    cta: "Free tier",
     ctaDisabled: true,
   },
   {
@@ -30,18 +20,8 @@ const PLANS = [
     name: "Pro",
     price: "$9",
     period: "/month",
-    description: "Remove limits and keep building.",
     icon: Crown,
     iconColor: "bg-[#ebe4f8] text-[#5a3d88] ring-1 ring-[#d8caef]",
-    eyebrow: "Best upgrade",
-    features: [
-      { label: "Unlimited projects", highlight: true },
-      { label: "Unlimited nodes", highlight: true },
-      { label: "50 PDF documents" },
-      { label: "500 AI messages/day" },
-      { label: "Priority support" },
-    ],
-    cta: "Upgrade to Pro",
     ctaDisabled: false,
     popular: true,
   },
@@ -50,18 +30,8 @@ const PLANS = [
     name: "Max",
     price: "$29",
     period: "/month",
-    description: "Unlock every workspace limit.",
     icon: Crown,
     iconColor: "bg-[#deebe4] text-[#315d4f] ring-1 ring-[#c8ded4]",
-    eyebrow: "Maximum room",
-    features: [
-      { label: "Unlimited everything" },
-      { label: "Shared workspaces" },
-      { label: "Unlimited knowledge base" },
-      { label: "Unlimited AI messages" },
-      { label: "Dedicated support" },
-    ],
-    cta: "Coming soon",
     ctaDisabled: true,
   },
 ];
@@ -109,13 +79,7 @@ export default function BillingSettingsPage() {
         ...plan,
         description: copy.billing.freeDescription,
         eyebrow: copy.billing.starterLimits,
-        features: [
-          { label: language === "zh" ? "5 个项目" : "5 projects" },
-          { label: language === "zh" ? "100 个节点" : "100 nodes" },
-          { label: language === "zh" ? "3 份 PDF 文档" : "3 PDF documents" },
-          { label: language === "zh" ? "每日 50 条 AI 消息" : "50 AI messages/day" },
-          { label: copy.billing.communitySupport },
-        ],
+        features: copy.billing.freeFeatures,
         cta: copy.billing.freeTier,
       };
     }
@@ -124,13 +88,7 @@ export default function BillingSettingsPage() {
         ...plan,
         description: copy.billing.proDescription,
         eyebrow: copy.billing.proEyebrow,
-        features: [
-          { label: copy.billing.unlimitedProjects, highlight: true },
-          { label: copy.billing.unlimitedNodes, highlight: true },
-          { label: language === "zh" ? "50 份 PDF 文档" : "50 PDF documents" },
-          { label: language === "zh" ? "每日 500 条 AI 消息" : "500 AI messages/day" },
-          { label: copy.billing.prioritySupport },
-        ],
+        features: copy.billing.proFeatures,
         cta: copy.billing.upgradeToPro,
       };
     }
@@ -138,13 +96,7 @@ export default function BillingSettingsPage() {
       ...plan,
       description: copy.billing.maxDescription,
       eyebrow: copy.billing.maxEyebrow,
-      features: [
-        { label: copy.billing.unlimitedEverything },
-        { label: language === "zh" ? "共享工作区" : "Shared workspaces" },
-        { label: copy.billing.unlimitedKnowledgeBase },
-        { label: copy.billing.unlimitedMessages },
-        { label: copy.billing.dedicatedSupport },
-      ],
+      features: copy.billing.maxFeatures,
       cta: copy.billing.comingSoon,
     };
   });
@@ -179,7 +131,7 @@ export default function BillingSettingsPage() {
             </div>
 
             <h2 className="mt-4 text-2xl font-black capitalize tracking-normal text-[#29252f]">
-              {currentPlan} Plan
+              {copy.billing.currentPlanTitle(currentPlanMeta.name)}
             </h2>
             <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-[#766d78]">
               {isFreePlan
@@ -313,10 +265,10 @@ export default function BillingSettingsPage() {
       </div>
 
       <div className="rounded-lg border border-[#ddd4c7] bg-[#fffdf8] p-5 shadow-[0_18px_42px_rgba(52,45,35,0.055)]">
-        <h2 className="text-base font-black text-[#29252f]">Invoices</h2>
-        <p className="mt-0.5 text-sm font-semibold text-[#766d78]">Your billing history will appear here.</p>
+        <h2 className="text-base font-black text-[#29252f]">{copy.billing.invoices}</h2>
+        <p className="mt-0.5 text-sm font-semibold text-[#766d78]">{copy.billing.invoicesDescription}</p>
         <div className="mt-4 rounded-lg border border-dashed border-[#d9d0c2] bg-[#f6f1e9] py-8 text-center">
-          <p className="text-sm font-bold text-[#8d838d]">No invoices yet.</p>
+          <p className="text-sm font-bold text-[#8d838d]">{copy.billing.noInvoices}</p>
         </div>
       </div>
     </div>

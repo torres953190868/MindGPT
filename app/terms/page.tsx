@@ -23,7 +23,7 @@ const termsSections = [
     ],
   },
   {
-    title: "AI Provider And Outputs",
+    title: "AI Provider and Outputs",
     body: [
       "BranchMind may send your prompts, selected source text, and recent conversation context to the configured AI provider. The current beta integration routes requests to the configured AI provider(s) for chat completions.",
       "AI-generated content may be wrong, incomplete, or unsuitable for your use case. You must review outputs before relying on them, especially for academic, legal, medical, financial, safety, or compliance decisions.",
@@ -37,7 +37,7 @@ const termsSections = [
     ],
   },
   {
-    title: "Deletion And Availability",
+    title: "Deletion and Availability",
     body: [
       "Project deletion is designed to remove the selected project from the beta project store after confirmation. Export a project before deleting it if you need a copy.",
       "The beta is provided as-is without a guarantee of uninterrupted availability, perfect accuracy, or suitability for a specific purpose.",
@@ -96,7 +96,7 @@ export default function TermsPage() {
               <h1 id="terms-title" className="text-3xl font-black text-[#312737] sm:text-4xl">
                 Terms of Use
               </h1>
-              <p className="text-sm font-bold text-[#7c7184]">Last updated: May 2, 2026</p>
+              <p className="text-sm font-bold text-[#7c7184]">Last updated: July 17, 2026</p>
             </div>
           </div>
 

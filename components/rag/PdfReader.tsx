@@ -1481,7 +1481,7 @@ export function PdfReader() {
       >
         <div className="mb-4">
           <h2 className="text-xs font-black uppercase tracking-wider text-neutral-800">
-            {language === "zh" ? "文档" : "Documents"}
+            {copy.reader.documents}
           </h2>
         </div>
 
@@ -1853,7 +1853,7 @@ export function PdfReader() {
             <div className="pointer-events-none absolute inset-0 grid place-items-center bg-surface-muted/70">
               <p className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-3 text-sm font-black text-neutral-700 shadow-md">
                 <Loader2 size={16} className="animate-spin" />
-                {pdfLoading ? copy.reader.loadingPdf : language === "zh" ? "正在渲染页面" : "Rendering page"}
+                {pdfLoading ? copy.reader.loadingPdf : copy.reader.renderingPage}
               </p>
             </div>
           )}
@@ -1886,7 +1886,7 @@ export function PdfReader() {
           className="flex min-h-0 flex-1 flex-col p-3 sm:p-4"
         >
           <h2 className="text-[11px] font-black uppercase tracking-wider text-neutral-800">
-            {language === "zh" ? "目录" : "Table of Contents"}
+            {copy.reader.toc}
           </h2>
           <div
             data-testid="pdf-toc-list"
@@ -1964,7 +1964,7 @@ export function PdfReader() {
               <div className="flex flex-col items-center rounded-lg bg-white px-3 py-6 text-center">
                 <FileText size={24} className="text-neutral-300" />
                 <p className="mt-2 text-sm font-bold text-neutral-600">
-                  {language === "zh" ? "还没有检测到章节。" : "No sections detected yet."}
+                  {copy.reader.noSections}
                 </p>
               </div>
             )}

@@ -62,7 +62,7 @@ function getHighestUsageItem(usage: AccountDto["usage"]) {
     { key: "projects", label: "Projects", ...usage.projects },
     { key: "nodes", label: "Nodes", ...usage.nodes },
     { key: "documents", label: "PDFs", ...usage.documents },
-    { key: "aiMessages", label: "AI msgs", ...usage.aiMessages },
+    { key: "aiMessages", label: "AI messages", ...usage.aiMessages },
   ];
 
   let highest: Item | null = null;
@@ -145,27 +145,6 @@ function getAccountMenuIconClass(isHighlighted: boolean, tone: "default" | "dang
   }`;
 }
 
-const WHATS_NEW_ITEMS = [
-  {
-    version: "v0.2.0",
-    date: "May 2026",
-    title: "New: Account & Billing",
-    description: "Introducing user plans, usage tracking, and Settings. Free plan includes 5 projects, 100 nodes, and 3 PDFs.",
-  },
-  {
-    version: "v0.1.5",
-    date: "May 2026",
-    title: "PDF Reader + RAG",
-    description: "Upload PDFs, index them, and ask grounded questions with citations. Attach PDFs to BranchMind conversations.",
-  },
-  {
-    version: "v0.1.0",
-    date: "April 2026",
-    title: "BranchMind Launch",
-    description: "Visual branching AI conversation workspace. Continue down or branch right to explore ideas.",
-  },
-];
-
 function WhatsNewModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { copy } = useLanguage();
 
@@ -194,7 +173,7 @@ function WhatsNewModal({ open, onClose }: { open: boolean; onClose: () => void }
         </div>
         <div className="max-h-[60vh] overflow-auto p-5">
           <div className="space-y-5">
-            {WHATS_NEW_ITEMS.map((item) => (
+            {copy.accountMenu.whatsNewItems.map((item) => (
               <div key={item.version} className="relative pl-5">
                 <div className="absolute left-0 top-1.5 h-2 w-2 rounded-full bg-brand-400" />
                 <div className="absolute left-[3px] top-4 h-[calc(100%+12px)] w-0.5 bg-neutral-200 last:hidden" />

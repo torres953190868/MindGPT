@@ -46,7 +46,7 @@ export async function getBranchMindAuthContext(
   if (hasSupabaseServerConfig()) {
     const user = await getOptionalSupabaseUser();
     if (!user) {
-      throw new HttpError("Sign in is required.", {
+      throw new HttpError("You need to sign in to do that.", {
         code: "AUTH_REQUIRED",
         expose: true,
         status: 401,
