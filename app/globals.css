@@ -86,10 +86,10 @@
   --theme-success-200: #c4ead6;
   --theme-success-300: #95d3b7;
   --theme-success-400: #4fab82;
-  --theme-success-500: #2f806b;
-  --theme-success-600: #266f5e;
-  --theme-success-700: #1d5b4d;
-  --theme-success-800: #17483f;
+  --theme-success-500: #2f7f50;
+  --theme-success-600: #286c44;
+  --theme-success-700: #215939;
+  --theme-success-800: #1c4a2f;
 
   --theme-danger-50: #fff1ef;
   --theme-danger-100: #ffe8e4;
@@ -113,7 +113,7 @@
 
   --theme-text-primary: #202824;
   --theme-text-secondary: #515f5a;
-  --theme-text-muted: #84948f;
+  --theme-text-muted: #63736e;
   --theme-border-default: #dfe8e4;
   --theme-border-hover: #cbd8d2;
   --theme-surface-bg: #f7faf9;
@@ -166,10 +166,10 @@
   --theme-brand-300: #bcae9a;
   --theme-brand-400: #8f8172;
   --theme-brand-500: #6a6058;
-  --theme-brand-600: #403943;
-  --theme-brand-700: #332d37;
-  --theme-brand-800: #2d2831;
-  --theme-brand-900: #29252f;
+  --theme-brand-600: #453c36;
+  --theme-brand-700: #39322d;
+  --theme-brand-800: #312b26;
+  --theme-brand-900: #2b2622;
 
   --theme-success-50: #f3efe4;
   --theme-success-100: #e9dfcc;
@@ -211,7 +211,7 @@
 
   --theme-text-primary: #29252f;
   --theme-text-secondary: #6f665d;
-  --theme-text-muted: #8a8178;
+  --theme-text-muted: #6e655c;
   --theme-border-default: #d8ccbb;
   --theme-border-hover: #c8baaa;
   --theme-surface-bg: #f1ebe1;
@@ -272,24 +272,24 @@
   --theme-success-400: #48b596;
   --theme-success-500: #2f8b63;
   --theme-success-600: #277854;
-  --theme-success-700: #1f7f64;
-  --theme-success-800: #176a55;
+  --theme-success-700: #20653f;
+  --theme-success-800: #1a5133;
 
   --theme-danger-50: #fff0ef;
   --theme-danger-100: #ffeceb;
   --theme-danger-200: #ffd7d4;
-  --theme-danger-300: #ffd1cf;
-  --theme-danger-400: #f3c6c2;
+  --theme-danger-300: #f9bdb8;
+  --theme-danger-400: #da9995;
   --theme-danger-500: #9a413d;
   --theme-danger-600: #833531;
-  --theme-danger-700: #7a3e3a;
+  --theme-danger-700: #6d2f2c;
 
   --theme-neutral-50: #fbfafc;
   --theme-neutral-100: #f7f5fa;
   --theme-neutral-200: #ebe7f1;
   --theme-neutral-300: #e2ddea;
   --theme-neutral-400: #d9d3e4;
-  --theme-neutral-500: #b9a5db;
+  --theme-neutral-500: #beb7c8;
   --theme-neutral-600: #9b94a5;
   --theme-neutral-700: #82758b;
   --theme-neutral-800: #665a70;
@@ -297,10 +297,10 @@
 
   --theme-text-primary: #332a39;
   --theme-text-secondary: #74687c;
-  --theme-text-muted: #9b94a5;
+  --theme-text-muted: #746d80;
   --theme-border-default: #e5e1ec;
   --theme-border-hover: #d9d3e4;
-  --theme-surface-bg: #fff9fb;
+  --theme-surface-bg: #faf3fb;
   --theme-surface-canvas: #fcfbfd;
   --theme-surface-elevated: #ffffff;
   --theme-surface-muted: #f7f5fa;
@@ -312,23 +312,23 @@
   --theme-shadow-xl: 0 18px 55px rgba(44, 35, 62, 0.16);
   --theme-shadow-2xl: 0 24px 80px rgba(44, 35, 62, 0.22);
 
-  --background: #fff9fb;
-  --foreground: #332b38;
+  --background: #faf3fb;
+  --foreground: #332a39;
   --app-background:
-    radial-gradient(circle at 12% 16%, rgba(255, 194, 209, 0.34), transparent 28%),
-    radial-gradient(circle at 82% 8%, rgba(198, 238, 216, 0.42), transparent 24%),
-    linear-gradient(135deg, #fff9fb 0%, #f7fbff 46%, #fffbe9 100%);
+    radial-gradient(circle at 12% 16%, rgba(216, 183, 240, 0.36), transparent 28%),
+    radial-gradient(circle at 82% 8%, rgba(196, 173, 230, 0.38), transparent 24%),
+    linear-gradient(135deg, #faf3fb 0%, #f5f0fb 48%, #fdf3f6 100%);
   --branchmind-grid-line: rgba(130, 101, 167, 0.05);
   --projects-surface-background: #fbfafc;
   --projects-grid-line: rgba(110, 91, 139, 0.055);
   --settings-shell-background:
-    linear-gradient(145deg, rgba(49, 93, 79, 0.055) 0%, rgba(49, 93, 79, 0) 38%),
-    linear-gradient(180deg, #f3f0ea 0%, #ece8df 100%);
+    linear-gradient(145deg, rgba(124, 95, 177, 0.06) 0%, rgba(124, 95, 177, 0) 38%),
+    linear-gradient(180deg, #fbfafc 0%, #f3eef8 100%);
   --home-canvas-background:
-    radial-gradient(circle at 16% 22%, rgba(255, 194, 209, 0.25), transparent 28%),
-    radial-gradient(circle at 84% 14%, rgba(198, 238, 216, 0.34), transparent 26%),
-    radial-gradient(circle at 52% 82%, rgba(218, 203, 244, 0.26), transparent 30%),
-    linear-gradient(135deg, #fffafb 0%, #f8fcff 48%, #fffced 100%);
+    radial-gradient(circle at 16% 22%, rgba(228, 200, 244, 0.30), transparent 28%),
+    radial-gradient(circle at 84% 14%, rgba(196, 173, 230, 0.30), transparent 26%),
+    radial-gradient(circle at 52% 82%, rgba(244, 205, 224, 0.24), transparent 30%),
+    linear-gradient(135deg, #faf3fb 0%, #f6f1fc 48%, #fdf3f7 100%);
   --home-title-shadow: 0 12px 34px rgba(102, 77, 128, 0.17);
   --editor-bg: rgba(255, 255, 255, 0.82);
   --editor-focus-ring: #eadcf7;
@@ -404,7 +404,7 @@ textarea {
 }
 
 .branchmind-mobile-drawer {
-  filter: drop-shadow(0 18px 45px rgb(32 40 36 / 0.18));
+  filter: drop-shadow(var(--menu-shadow));
 }
 
 .branchmind-mobile-drawer > [data-testid="workspace-sidebar"],
@@ -626,7 +626,7 @@ textarea {
   border-color: var(--theme-brand-900);
   background: var(--theme-brand-900);
   color: var(--theme-surface-elevated);
-  box-shadow: 0 1px 2px rgb(41 37 47 / 0.12);
+  box-shadow: 0 1px 2px rgb(43 38 34 / 0.12);
 }
 
 [data-theme="warm-limestone"] .branchmind-logo-text,
@@ -745,7 +745,7 @@ textarea {
 [data-theme="warm-limestone"] .branch-node-card-surface[data-selected="true"] {
   border-color: var(--theme-brand-900);
   box-shadow:
-    0 0 0 2px rgb(41 37 47 / 0.12),
+    0 0 0 2px rgb(43 38 34 / 0.12),
     var(--theme-shadow-md);
 }
 
@@ -838,7 +838,7 @@ textarea {
 }
 
 [data-theme="warm-limestone"] .node-brief-card,
-[data-theme="warm-limestone"] .node-detail-panel-surface [aria-label="assistant message"] {
+[data-theme="warm-limestone"] .node-detail-panel-surface [data-role="assistant"] {
   border-color: var(--theme-neutral-200);
   background: color-mix(
     in srgb,
@@ -848,7 +848,7 @@ textarea {
   color: var(--theme-text-primary);
 }
 
-[data-theme="warm-limestone"] .node-detail-panel-surface [aria-label="user message"] {
+[data-theme="warm-limestone"] .node-detail-panel-surface [data-role="user"] {
   border-color: var(--warm-limestone-fold-200);
   background: color-mix(
     in srgb,
@@ -1105,8 +1105,8 @@ textarea {
   .branch-node-card-surface[data-mobile-long-press-dragging="true"] {
     cursor: grabbing;
     box-shadow:
-      0 18px 42px rgb(45 33 72 / 0.18),
-      0 0 0 3px rgb(120 104 224 / 0.16);
+      var(--theme-shadow-xl),
+      0 0 0 3px color-mix(in srgb, var(--theme-brand-400) 30%, transparent);
   }
 
   .branch-node-card-surface[data-mobile-long-press-dragging="true"]

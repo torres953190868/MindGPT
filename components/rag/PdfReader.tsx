@@ -219,9 +219,9 @@ function statusLabel(status: DocumentStatus, language: "zh" | "en") {
 }
 
 function documentStatusDotClass(status: DocumentStatus) {
-  if (status === "failed") return "bg-[#d97757]";
-  if (status === "indexed") return "bg-[#788c5d]";
-  return "bg-[#6a9bcc]";
+  if (status === "failed") return "bg-danger-500";
+  if (status === "indexed") return "bg-success-500";
+  return "bg-brand-400";
 }
 
 function pagesLabel(start: number, end: number) {
@@ -1541,7 +1541,7 @@ export function PdfReader() {
                   >
                     <FileText
                       size={16}
-                      className="mt-2 shrink-0 text-[#338962]"
+                      className="mt-2 shrink-0 text-success-600"
                     />
                     <span className="min-w-0 flex-1">
                       <input
@@ -1550,9 +1550,9 @@ export function PdfReader() {
                         onChange={(event) => setRenameValue(event.target.value)}
                         disabled={renameSaving}
                         aria-label={copy.reader.title}
-                        className="h-8 w-full rounded-md border border-[#bba7dd] bg-white px-2 text-xs font-black text-[#272131] outline-none focus:ring-2 focus:ring-[#e4d9f5] disabled:cursor-not-allowed disabled:opacity-60"
+                        className="h-8 w-full rounded-md border border-brand-300 bg-white px-2 text-xs font-black text-text-primary outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-60"
                       />
-                      <span className="mt-1 block text-[11px] font-bold text-[#7a7183]">
+                      <span className="mt-1 block text-[11px] font-bold text-text-muted">
                         {language === "zh" ? `${document.pageCount || "-"} 页` : `${document.pageCount || "-"} pages`}
                       </span>
                     </span>
@@ -1561,7 +1561,7 @@ export function PdfReader() {
                         type="submit"
                         disabled={!renameValue.trim() || renameSaving}
                         aria-label={copy.reader.savePdfName}
-                        className="grid h-7 w-7 place-items-center rounded-md bg-[#2f8b63] text-white transition hover:bg-[#277854] disabled:cursor-not-allowed disabled:opacity-45"
+                        className="grid h-7 w-7 place-items-center rounded-md bg-success-500 text-white transition hover:bg-success-600 disabled:cursor-not-allowed disabled:opacity-45"
                       >
                         {renameSaving ? (
                           <Loader2 size={13} className="animate-spin" />
@@ -1574,7 +1574,7 @@ export function PdfReader() {
                         onClick={cancelRenameDocument}
                         disabled={renameSaving}
                         aria-label={copy.common.cancel}
-                        className="grid h-7 w-7 place-items-center rounded-md border border-[#e2dbea] bg-white text-[#6f627a] transition hover:bg-[#f8f5fc] disabled:cursor-not-allowed disabled:opacity-45"
+                        className="grid h-7 w-7 place-items-center rounded-md border border-border-default bg-white text-text-secondary transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-45"
                       >
                         <X size={13} />
                       </button>
@@ -1609,7 +1609,7 @@ export function PdfReader() {
                           <span
                             className={`h-1.5 w-1.5 rounded-full ${documentStatusDotClass(document.status)}`}
                           />
-                          <span className={document.status === "failed" ? "text-[#9b4a43]" : undefined}>
+                          <span className={document.status === "failed" ? "text-danger-600" : undefined}>
                             {statusLabel(document.status, language)}
                             {document.pageCount > 0
                               ? language === "zh"
@@ -1639,7 +1639,7 @@ export function PdfReader() {
                         aria-label={`Rename ${document.title || document.fileName}`}
                         title={copy.reader.renamePdf}
                         data-testid="rename-pdf-button"
-                        className="grid h-7 w-7 place-items-center rounded-md border border-[#e5dfec] bg-white text-[#5d4d72] transition hover:bg-[#f8f5fc] disabled:cursor-not-allowed disabled:opacity-40"
+                        className="grid h-7 w-7 place-items-center rounded-md border border-border-default bg-white text-text-secondary transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         <Pencil size={13} />
                       </button>
@@ -1650,7 +1650,7 @@ export function PdfReader() {
                         aria-label={`Delete ${document.title || document.fileName}`}
                         title={copy.reader.deletePdf}
                         data-testid="delete-pdf-button"
-                        className="grid h-7 w-7 place-items-center rounded-md border border-[#f1d8d6] bg-white text-[#9b4a43] transition hover:bg-[#fff4f2] disabled:cursor-not-allowed disabled:opacity-40"
+                        className="grid h-7 w-7 place-items-center rounded-md border border-danger-200 bg-white text-danger-600 transition hover:bg-danger-50 disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         {deletingDocumentId === document.id ? (
                           <Loader2 size={13} className="animate-spin" />
@@ -1828,7 +1828,7 @@ export function PdfReader() {
         <div
           ref={pdfViewerRef}
           data-testid="pdf-viewer"
-          className="relative min-h-[380px] flex-1 overflow-auto bg-[#f4f4f7] px-3 py-4 sm:min-h-[520px] sm:px-4 sm:py-5 lg:min-h-0"
+          className="relative min-h-[380px] flex-1 overflow-auto bg-surface-muted px-3 py-4 sm:min-h-[520px] sm:px-4 sm:py-5 lg:min-h-0"
         >
           {!hasActivePdf && (
             <div className="flex min-h-[340px] flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-neutral-300 bg-white/60 text-sm font-bold text-neutral-600 sm:min-h-[520px]">
@@ -1850,7 +1850,7 @@ export function PdfReader() {
           )}
 
           {(pdfLoading || pdfRendering) && hasActivePdf && (
-            <div className="pointer-events-none absolute inset-0 grid place-items-center bg-[#f4f4f7]/70">
+            <div className="pointer-events-none absolute inset-0 grid place-items-center bg-surface-muted/70">
               <p className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-3 text-sm font-black text-neutral-700 shadow-md">
                 <Loader2 size={16} className="animate-spin" />
                 {pdfLoading ? copy.reader.loadingPdf : language === "zh" ? "正在渲染页面" : "Rendering page"}

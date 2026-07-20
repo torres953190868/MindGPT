@@ -947,7 +947,7 @@ export function NodeDetailPanel({
                     aria-expanded={!node.collapsed}
                     aria-controls="mind-map"
                     data-testid="toggle-node-button"
-                    className="node-detail-tertiary-action node-detail-fold-action inline-flex h-11 items-center gap-2 rounded-xl bg-danger-100 px-3 text-sm font-black text-danger-700 transition hover:bg-danger-200 disabled:cursor-not-allowed disabled:opacity-65"
+                    className="node-detail-tertiary-action node-detail-fold-action inline-flex h-11 items-center gap-2 rounded-xl bg-neutral-100 px-3 text-sm font-black text-neutral-600 transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-65"
                   >
                     <Ribbon size={16} />
                     {node.collapsed ? copy.workspace.expandNode : copy.workspace.fold}
@@ -1045,20 +1045,25 @@ export function NodeDetailPanel({
                 data-streaming={isStreamingAssistant ? "true" : undefined}
                 className={`group text-sm leading-6 ${
                   message.role === "user"
-                    ? "text-success-800 sm:ml-6"
-                    : "text-neutral-700 sm:mr-6"
+                    ? "text-text-primary sm:ml-6"
+                    : "text-text-primary sm:mr-6"
                 }`}
               >
                 <article
                   aria-label={`${message.role === "user" ? copy.workspace.user : copy.workspace.assistant} message`}
                   aria-live={isStreamingAssistant ? "polite" : undefined}
+                  data-role={message.role}
                   className={`rounded-xl border p-3 ${
                     message.role === "user"
-                      ? "border-success-100 bg-success-50"
-                      : "border-brand-100 bg-brand-50"
+                      ? "border-brand-200 bg-brand-50"
+                      : "border-neutral-200 bg-surface-muted"
                   }`}
                 >
-                  <p className="mb-1 text-[11px] font-black uppercase tracking-wider opacity-65">
+                  <p
+                    className={`mb-1 text-[11px] font-black uppercase tracking-wider ${
+                      message.role === "user" ? "text-brand-600" : "text-text-muted"
+                    }`}
+                  >
                     {message.role === "user" ? copy.workspace.user : copy.workspace.assistant}
                   </p>
                   {isEditingMessage ? (
@@ -1070,7 +1075,7 @@ export function NodeDetailPanel({
                         aria-label={copy.workspace.editUserMessage}
                         data-testid="message-edit-input"
                         rows={4}
-                        className="w-full resize-none rounded-xl border border-neutral-200 bg-white p-3 text-sm leading-6 text-success-800 outline-none focus:border-success-400 focus:ring-2 focus:ring-success-200 disabled:cursor-not-allowed disabled:opacity-65"
+                        className="w-full resize-none rounded-xl border border-neutral-200 bg-white p-3 text-sm leading-6 text-text-primary outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65"
                       />
                       <div className="flex justify-end gap-2">
                         <MessageActionButton
