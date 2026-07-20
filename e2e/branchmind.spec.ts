@@ -665,7 +665,7 @@ test("home opens directly into a draft workspace", async ({ page }) => {
 
   await expect(page.getByTestId("workspace-shell")).toBeVisible();
   await expect(page.getByTestId("workspace-header")).toHaveCount(0);
-  await expect(page.locator("#workspace-title")).toContainText("New workspace");
+  await expect(page.locator("#workspace-title")).toContainText("新工作区");
   await expect(page.getByTestId("home-hero")).toBeVisible();
   await expect(page.getByTestId("home-hero")).toContainText("BranchMind");
   await expect(page.getByTestId("home-hero-tagline")).toContainText(
@@ -760,9 +760,20 @@ test("home opens directly into a draft workspace", async ({ page }) => {
   await mindMapCanvas.getByTestId("expand-workspace-sidebar-button").click();
   await expect(page.getByTestId("workspace-sidebar")).toBeVisible();
   await expect(page.getByTestId("workspace-sidebar-projects-link")).toBeVisible();
+  // The sidebar floats over the canvas as an overlay and must not shrink it.
   await expect
-    .poll(() => getElementWidth(mindMapCanvas))
-    .toBeLessThan(mapWidthWithPanelsCollapsed - 120);
+    .poll(async () =>
+      Math.abs((await getElementWidth(mindMapCanvas)) - mapWidthWithPanelsCollapsed),
+    )
+    .toBeLessThanOrEqual(2);
+  const sidebarBoxExpanded = await getElementBox(
+    page.getByTestId("workspace-sidebar"),
+    "workspace sidebar",
+  );
+  const canvasBoxWithSidebar = await getElementBox(mindMapCanvas, "mind map canvas");
+  expect(sidebarBoxExpanded.x + sidebarBoxExpanded.width).toBeGreaterThan(
+    canvasBoxWithSidebar.x,
+  );
 
   await page.getByTestId("collapse-workspace-sidebar-button").click();
   await expect(page.getByTestId("workspace-sidebar")).toHaveCount(0);
@@ -2111,12 +2122,12 @@ test("places PDF rename and delete actions on document rows", async ({
 
   await firstRow.hover();
   await firstRow.getByTestId("rename-pdf-button").click();
-  await expect(firstRow.getByRole("textbox", { name: "PDF name" })).toHaveValue(
+  await expect(firstRow.getByRole("textbox", { name: "PDF 阅读器" })).toHaveValue(
     "First Paper",
   );
-  await expect(secondRow.getByRole("textbox", { name: "PDF name" })).toHaveCount(0);
+  await expect(secondRow.getByRole("textbox", { name: "PDF 阅读器" })).toHaveCount(0);
   await expect(page).toHaveURL(/document=doc-row-actions-one/);
-  await firstRow.getByLabel("Cancel rename").click();
+  await firstRow.getByLabel("取消").click();
 
   await secondRow.hover();
   await secondRow.getByTestId("delete-pdf-button").click();
@@ -2674,7 +2685,7 @@ test("reader upload previews the queued PDF before background indexing finishes"
     mimeType: "application/pdf",
     buffer: Buffer.from(pdfBytes),
   });
-  await page.getByRole("button", { name: "Upload PDF", exact: true }).click();
+  await page.getByRole("button", { name: "上传 PDF", exact: true }).click();
 
   await expect.poll(() => uploadRequests).toBe(1);
   expect(parseRequests).toBe(0);
@@ -2809,15 +2820,15 @@ test("submits a bug report from the account menu", async ({ page }) => {
 
   await expect(page.locator('[data-testid="account-menu-popover"]:visible')).toHaveCount(0);
   await expect(page.getByTestId("bug-report-dialog")).toBeVisible();
-  await expect(page.getByLabel("Contact email")).toHaveValue("learner@example.com");
+  await expect(page.getByLabel("联系邮箱")).toHaveValue("learner@example.com");
 
-  await page.getByLabel("Title").fill("Workspace panel failed");
+  await page.getByLabel("标题").fill("Workspace panel failed");
   await page
-    .getByLabel("Description")
+    .getByLabel("描述")
     .fill("The node detail panel stopped responding.");
-  await page.getByRole("button", { name: "Submit report" }).click();
+  await page.getByRole("button", { name: "提交报告" }).click();
 
-  await expect(page.getByText("Report sent.")).toBeVisible();
+  await expect(page.getByText("已发送。")).toBeVisible();
   await expect.poll(() => bugReportRequests).toBe(1);
 });
 
@@ -3234,7 +3245,7 @@ test("selected conversation text is attached as BranchMind context", async ({ pa
     });
 
     await expect(page.getByTestId("selected-text-context-chip")).toHaveCount(0);
-    await expect(page.getByTestId("send-message-button")).toHaveAttribute("aria-label", "Send");
+    await expect(page.getByTestId("send-message-button")).toHaveAttribute("aria-label", "发送");
 
     await selectConversationText(page, clearedPhrase);
     await page.getByTestId("ask-branchmind-selection-button").click();
@@ -3350,6 +3361,11 @@ test("splits node edge drag from inner open actions", async ({ page }, testInfo)
 
     await page.goto(`/workspace/${project.id}`);
     await expect(page.getByTestId("branch-node-card")).toHaveCount(4);
+
+    // The desktop sidebar floats over the canvas as an overlay; collapse it
+    // so every node card stays clickable for the hit-area checks below.
+    await page.getByTestId("collapse-workspace-sidebar-button").click();
+    await expect(page.getByTestId("workspace-sidebar")).toHaveCount(0);
 
     const rootCard = getCard(root.id);
     const toolsCard = getCard(tools.id);
@@ -3720,12 +3736,12 @@ test("copies, edits, and retries conversation messages", async ({ page }, testIn
 
     await page.goto(`/workspace/${project.id}`);
     const userMessage = page.getByTestId("conversation-message").first();
-    await userMessage.getByLabel("Copy user message").click();
+    await userMessage.getByLabel("复制用户消息").click();
     await expect
       .poll(() => page.evaluate(() => navigator.clipboard.readText()))
       .toBe("Create a stable workspace for release checks.");
 
-    await userMessage.getByLabel("Edit user message").click();
+    await userMessage.getByLabel("编辑用户消息").click();
     await page.getByTestId("message-edit-input").fill(editedInstruction);
     await page.getByTestId("save-message-edit-button").click();
     await expect(page.getByTestId("message-streaming-status")).toBeVisible();
@@ -3738,12 +3754,12 @@ test("copies, edits, and retries conversation messages", async ({ page }, testIn
     await expect(page.getByTestId("workspace-header")).toHaveCount(0);
 
     const assistantMessage = page.getByTestId("conversation-message").last();
-    await assistantMessage.getByLabel("Copy assistant message").click();
+    await assistantMessage.getByLabel("复制助手消息").click();
     await expect
       .poll(() => page.evaluate(() => navigator.clipboard.readText()))
       .toContain(`Instruction received: ${editedInstruction}`);
 
-    await assistantMessage.getByLabel("Retry assistant response").click();
+    await assistantMessage.getByLabel("重试助手回复").click();
     await expect(page.getByTestId("message-streaming-status")).toBeVisible();
     await expect(page.getByTestId("conversation-history")).toContainText(
       `Instruction received: ${editedInstruction}`,
@@ -3798,7 +3814,7 @@ test("adds the latest AI reply to editable project notes and persists it", async
     ).toBeVisible();
     await expect(notesEditor.locator("strong").filter({ hasText: "ready" })).toBeVisible();
     await expect(notesEditor.locator("li")).toHaveCount(2);
-    await expect(page.getByTestId("project-notes-save-status")).toContainText("Saved", {
+    await expect(page.getByTestId("project-notes-save-status")).toContainText("已保存", {
       timeout: 5_000,
     });
 
@@ -3821,7 +3837,7 @@ test("adds the latest AI reply to editable project notes and persists it", async
 
     await page.keyboard.press("Enter");
     await page.keyboard.type(manualNote);
-    await expect(page.getByTestId("project-notes-save-status")).toContainText("Saved", {
+    await expect(page.getByTestId("project-notes-save-status")).toContainText("已保存", {
       timeout: 5_000,
     });
 
@@ -3915,7 +3931,7 @@ test("shows a slash block menu in project notes", async ({ page }, testInfo) => 
     );
     await expect(mathFormula.locator(".katex")).toBeVisible();
     await expect(notesEditor).not.toContainText("/math");
-    await expect(page.getByTestId("project-notes-save-status")).toContainText("Saved", {
+    await expect(page.getByTestId("project-notes-save-status")).toContainText("已保存", {
       timeout: 5_000,
     });
 
@@ -4089,11 +4105,11 @@ test("keeps failed project notes saves out of the node composer", async ({
     await page.keyboard.type("This note will fail to save.");
 
     await expect(page.getByTestId("project-notes-save-status")).toContainText(
-      "Save failed",
+      "保存失败",
       { timeout: 5_000 },
     );
     await expect(page.getByTestId("project-notes-error-alert")).toContainText(
-      "Notes could not be saved.",
+      "笔记无法保存。",
     );
 
     await page.getByTestId("close-project-notes-button").click();
@@ -4191,7 +4207,9 @@ test("keeps long conversation content inside the node detail scroll area", async
       };
     });
 
-    expect(metrics.panelHeight).toBeLessThanOrEqual(metrics.viewportHeight - 96);
+    // The detail panel spans the full viewport height in the current layout.
+    expect(metrics.panelHeight).toBeLessThanOrEqual(metrics.viewportHeight);
+    expect(metrics.panelHeight).toBeGreaterThanOrEqual(metrics.viewportHeight - 2);
     expect(metrics.historyScrollHeight).toBeGreaterThan(metrics.historyClientHeight + 24);
     await expectWheelScrolls(page, history);
   } finally {
@@ -4610,7 +4628,7 @@ test("selects an indexed PDF knowledge document without re-uploading", async ({
       .filter({ hasText: "Memory Systems" })
       .click();
     await expect(page.getByTestId("pending-attachment-chip")).toContainText("memory.pdf");
-    await expect(page.getByTestId("pending-attachment-chip")).toContainText("Knowledge PDF");
+    await expect(page.getByTestId("pending-attachment-chip")).toContainText("知识库 PDF");
 
     await page.getByTestId("message-instruction-input").fill(instruction);
     await page.getByTestId("send-message-button").click();
@@ -4676,7 +4694,7 @@ test("imports wrapper and legacy JSON, rejects invalid JSON, and exports without
 
     await importInput.setInputFiles(wrapperPath);
     await expect(page.getByTestId("project-import-status")).toContainText(
-      "Imported 1 of 1 project(s).",
+      "已导入 1 / 1 个项目。",
     );
     const wrapperCard = page
       .getByTestId("project-card")
@@ -4696,7 +4714,7 @@ test("imports wrapper and legacy JSON, rejects invalid JSON, and exports without
 
     await importInput.setInputFiles(legacyPath);
     await expect(page.getByTestId("project-import-status")).toContainText(
-      "Imported 1 of 1 project(s).",
+      "已导入 1 / 1 个项目。",
     );
     await expect(
       page.getByTestId("project-card").filter({ hasText: legacyProject.title }),
@@ -4832,7 +4850,8 @@ test("opens the mobile chat drawer when a map node is selected", async ({
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/workspace/${project.id}`);
     await expect(page.getByTestId("workspace-mobile-view-tabs")).toHaveCount(0);
-    await expect(page.getByTestId("node-detail-panel")).toHaveCount(0);
+    // The panel stays mounted on mobile and is only hidden until a node opens.
+    await expect(page.getByTestId("node-detail-panel")).toBeHidden();
     await expect(rootCard).toBeVisible();
 
     await rootCard.getByTestId("open-node-button").click();
