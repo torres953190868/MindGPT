@@ -58,6 +58,12 @@ const server = spawn(process.execPath, [nextCli, "start", "-H", host, "-p", Stri
     HOSTNAME: host,
     NODE_ENV: "production",
     PORT: String(port),
+    // Force the anonymous local-session mode regardless of the developer's
+    // .env.local, so the smoke is deterministic on any machine.
+    NEXT_PUBLIC_SUPABASE_URL: "",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "",
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "",
+    SUPABASE_SERVICE_ROLE_KEY: "",
   },
   stdio: ["ignore", "pipe", "pipe"],
 });
@@ -74,6 +80,8 @@ server.stderr.on("data", (chunk) => {
   process.stderr.write(text);
 });
 
+const createdProjects = [];
+
 try {
   await Promise.race([waitForServer(), waitForUnexpectedExit()]);
 
@@ -85,6 +93,9 @@ try {
 
   console.log(`Production smoke passed at ${baseUrl}`);
 } finally {
+  for (const { sessionCookie, projectId } of createdProjects) {
+    await deleteSessionProject(sessionCookie, projectId).catch(() => undefined);
+  }
   await stopServer();
 }
 
@@ -184,12 +195,23 @@ async function assertOriginGuards(sessionCookie) {
 }
 
 async function assertAuthGuards() {
-  const projectsResponse = await fetchWithTimeout(`${baseUrl}/api/projects`, 10_000);
-  const setCookie = projectsResponse.headers.get("set-cookie") ?? "";
-  const sessionCookie = extractSessionCookie(setCookie);
-  if (!sessionCookie) {
-    throw new Error("/api/projects did not set an anonymous session cookie.");
+  // Read-only anonymous access must not create a session.
+  const anonymousResponse = await fetchWithTimeout(`${baseUrl}/api/projects`, 10_000);
+  if (!anonymousResponse.ok) {
+    throw new Error(`/api/projects without a session returned ${anonymousResponse.status}.`);
   }
+  const anonymousBody = await anonymousResponse.json();
+  if (!Array.isArray(anonymousBody.projects)) {
+    throw new Error("/api/projects without a session did not return a projects array.");
+  }
+  const anonymousSetCookie = anonymousResponse.headers.get("set-cookie") ?? "";
+  if (anonymousSetCookie.includes(`${sessionCookieName}=`)) {
+    throw new Error("/api/projects set a session cookie for a read-only anonymous request.");
+  }
+
+  // A session is only established by a real write.
+  const { sessionCookie, projectId } = await createSessionProject("Smoke session project");
+  createdProjects.push({ sessionCookie, projectId });
 
   const repeatResponse = await fetchWithTimeout(
     `${baseUrl}/api/projects`,
@@ -199,20 +221,79 @@ async function assertAuthGuards() {
   if (!repeatResponse.ok) {
     throw new Error(`/api/projects with a session returned ${repeatResponse.status}.`);
   }
+  const repeatBody = await repeatResponse.json();
+  if (!repeatBody.projects.some((project) => project.id === projectId)) {
+    throw new Error("/api/projects did not list the project created in this session.");
+  }
 
   const repeatCookie = repeatResponse.headers.get("set-cookie") ?? "";
   if (repeatCookie.includes(`${sessionCookieName}=`)) {
     throw new Error("/api/projects replaced a valid session cookie.");
   }
 
+  // A malformed cookie on a read-only request must not set a replacement.
   const invalidCookieResponse = await fetchWithTimeout(`${baseUrl}/api/projects`, 10_000, {
     headers: { Cookie: `${sessionCookieName}=bad` },
   });
-  if (!extractSessionCookie(invalidCookieResponse.headers.get("set-cookie") ?? "")) {
-    throw new Error("/api/projects did not replace a malformed session cookie.");
+  if (!invalidCookieResponse.ok) {
+    throw new Error(`/api/projects with a malformed cookie returned ${invalidCookieResponse.status}.`);
+  }
+  const invalidSetCookie = invalidCookieResponse.headers.get("set-cookie") ?? "";
+  if (invalidSetCookie.includes(`${sessionCookieName}=`)) {
+    throw new Error("/api/projects set a session cookie for a read-only malformed-cookie request.");
+  }
+
+  // The next write with a malformed cookie rotates to a fresh session.
+  const rotated = await createSessionProject(
+    "Smoke session rotation project",
+    `${sessionCookieName}=bad`,
+  );
+  createdProjects.push(rotated);
+  if (rotated.sessionCookie === `${sessionCookieName}=bad`) {
+    throw new Error("/api/projects kept a malformed session cookie after a write.");
   }
 
   return sessionCookie;
+}
+
+async function createSessionProject(topic, cookie) {
+  const response = await fetchWithTimeout(`${baseUrl}/api/projects`, 10_000, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: baseUrl,
+      ...(cookie ? { Cookie: cookie } : {}),
+    },
+    body: JSON.stringify({ topic }),
+  });
+  const body = await response.text();
+  if (!response.ok) {
+    throw new Error(`POST /api/projects returned ${response.status}: ${body.slice(0, 500)}`);
+  }
+  const data = JSON.parse(body);
+  const projectId = data?.project?.id;
+  if (typeof projectId !== "string" || !projectId) {
+    throw new Error("POST /api/projects did not return project.id.");
+  }
+  const sessionCookie = extractSessionCookie(response.headers.get("set-cookie") ?? "");
+  if (!sessionCookie) {
+    throw new Error("POST /api/projects did not establish a session cookie.");
+  }
+  return { sessionCookie, projectId };
+}
+
+async function deleteSessionProject(sessionCookie, projectId) {
+  const response = await fetchWithTimeout(
+    `${baseUrl}/api/projects/${projectId}`,
+    10_000,
+    withSession(sessionCookie, {
+      method: "DELETE",
+      headers: { Origin: baseUrl },
+    }),
+  );
+  if (!response.ok) {
+    throw new Error(`DELETE /api/projects/${projectId} returned ${response.status}.`);
+  }
 }
 
 async function assertInputGuards(sessionCookie) {
@@ -274,15 +355,29 @@ async function assertWorkspaceGuards(sessionCookie) {
   const missingProjectId = "smoke-missing-project";
   const missingNodeId = "smoke-missing-node";
 
-  await assertJsonStatus(
-    `/api/projects/${missingProjectId}`,
-    404,
+  // Project deletion is intentionally idempotent: deleting a missing project
+  // returns the current list with 200 instead of a 404.
+  const deleteMissingResponse = await fetchWithTimeout(
+    `${baseUrl}/api/projects/${missingProjectId}`,
+    10_000,
     withSession(sessionCookie, {
       method: "DELETE",
       headers: { Origin: baseUrl },
     }),
-    { code: "NOT_FOUND", message: "Resource not found." },
   );
+  if (!deleteMissingResponse.ok) {
+    throw new Error(
+      `DELETE /api/projects/${missingProjectId} returned ${deleteMissingResponse.status}.`,
+    );
+  }
+  const deleteMissingBody = await deleteMissingResponse.json();
+  if (!Array.isArray(deleteMissingBody.projects)) {
+    throw new Error("DELETE /api/projects did not return a projects array.");
+  }
+  if (deleteMissingBody.projects.some((project) => project.id === missingProjectId)) {
+    throw new Error("DELETE /api/projects returned the missing project.");
+  }
+  console.log(`Checked /api/projects/${missingProjectId}: ${deleteMissingResponse.status}`);
 
   await assertJsonStatus(
     `/api/projects/${missingProjectId}/nodes`,
