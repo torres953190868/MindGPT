@@ -12,7 +12,7 @@ const termsSections = [
     title: "Beta Service",
     body: [
       "BranchMind is a beta visual AI workspace for organizing branching conversations into project maps. Features, storage behavior, model behavior, and availability may change during the beta.",
-      "These terms are practical beta-stage placeholder terms for product review and testing. They are not legal advice and should be reviewed by qualified counsel before production launch.",
+      "These are the current beta-stage terms of use for product review and testing. They are not legal advice and should be reviewed by qualified counsel before production launch.",
     ],
   },
   {
@@ -25,7 +25,7 @@ const termsSections = [
   {
     title: "AI Provider And Outputs",
     body: [
-      "BranchMind may send your prompts, selected source text, and recent conversation context to the configured AI provider. The current beta integration uses DeepSeek for chat completions.",
+      "BranchMind may send your prompts, selected source text, and recent conversation context to the configured AI provider. The current beta integration routes requests to the configured AI provider(s) for chat completions.",
       "AI-generated content may be wrong, incomplete, or unsuitable for your use case. You must review outputs before relying on them, especially for academic, legal, medical, financial, safety, or compliance decisions.",
     ],
   },

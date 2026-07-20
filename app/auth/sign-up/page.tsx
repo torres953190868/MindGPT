@@ -3,7 +3,7 @@ import { sanitizeAuthNext } from "@/lib/server/auth-redirect";
 import { AuthPageShell } from "@/components/auth/AuthPageShell";
 
 export const metadata: Metadata = {
-  title: "注册",
+  title: "Create account",
   description: "创建 BranchMind 账户，开启可视化分支式 AI 对话工作区。Create your BranchMind account.",
 };
 

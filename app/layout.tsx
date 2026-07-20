@@ -10,7 +10,7 @@ import "./globals.css";
 const appOrigin = process.env.APP_ORIGIN ?? "https://branchmind.app";
 
 const description =
-  "可视化分支式 AI 对话工作区：在画布上延伸主线、向右开分支，并支持可选中文本的 PDF 阅读与 RAG 检索。A visual branching AI conversation workspace with a selectable-text PDF reader and RAG.";
+  "A visual branching AI conversation workspace with a selectable-text PDF reader and RAG. 可视化分支式 AI 对话工作区：在画布上延伸主线、向右开分支，并支持可选中文本的 PDF 阅读与 RAG 检索。";
 
 export const metadata: Metadata = {
   metadataBase: new URL(appOrigin),

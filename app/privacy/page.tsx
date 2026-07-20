@@ -7,6 +7,12 @@ export const metadata: Metadata = {
   description: "BranchMind beta privacy policy.",
 };
 
+const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim();
+
+const privacyContactParagraph = supportEmail
+  ? `Questions or deletion requests should be directed to ${supportEmail}.`
+  : "Questions or deletion requests should be directed to the BranchMind operator or project maintainer for the current deployment.";
+
 const privacySections = [
   {
     title: "What BranchMind Collects",
@@ -18,7 +24,7 @@ const privacySections = [
   {
     title: "AI Provider Processing",
     body: [
-      "When you create or continue a project, your prompt, selected source text, and recent conversation context may be sent to the configured AI provider. This beta is configured to use DeepSeek through its chat completions API.",
+      "When you create or continue a project, your prompt, selected source text, and recent conversation context may be sent to the configured AI provider. Requests are routed to the configured AI provider(s) through their chat completions APIs.",
       "AI outputs can be inaccurate or incomplete. Do not include secrets, credentials, regulated records, or information you are not allowed to submit to third-party AI services.",
     ],
   },
@@ -49,7 +55,7 @@ const privacySections = [
     title: "Beta Notice",
     body: [
       "This page is a practical beta-stage privacy notice for product testing and store review. It is not legal advice and should be reviewed by qualified counsel before production launch in regulated or commercial environments.",
-      "Questions or deletion requests should be directed to the BranchMind operator or project maintainer for the current deployment.",
+      privacyContactParagraph,
     ],
   },
 ];
