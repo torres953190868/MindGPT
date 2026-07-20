@@ -1214,7 +1214,7 @@ export function NodeDetailPanel({
             aria-describedby={displayError ? errorId : isComposerBusy ? statusId : undefined}
             data-testid="message-composer"
             onSubmit={handleSubmit}
-            className="flex h-full min-h-0 flex-1 flex-col justify-end overflow-hidden pb-3"
+            className="flex h-full min-h-0 flex-1 flex-col justify-end overflow-hidden"
           >
           <div className="flex shrink-0 flex-col gap-3">
           {!isInitialSubmit && !isBlankNode && (
