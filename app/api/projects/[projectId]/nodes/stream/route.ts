@@ -118,6 +118,7 @@ export async function POST(request: NextRequest, context: NodesStreamRouteContex
             documentContexts,
             modelSelection: body.modelSelection,
             userPlan,
+            skill: body.skill,
           })) {
             if (event.type === "delta") {
               controller.enqueue(encodeSse("delta", {

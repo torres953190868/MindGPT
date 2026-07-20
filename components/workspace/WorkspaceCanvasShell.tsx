@@ -23,6 +23,7 @@ import { getNodeConversationMessages } from "@/lib/graph";
 import type {
   ChatAttachment,
   ChatModelSelection,
+  ChatSkill,
   NodePosition,
   Project,
 } from "@/lib/types";
@@ -61,6 +62,7 @@ type CreateNodeHandler = (
   sourceText?: string,
   attachments?: ChatAttachment[],
   modelSelection?: ChatModelSelection,
+  skill?: ChatSkill,
 ) => Promise<string | null>;
 
 type PopulateNodeHandler = (
@@ -68,6 +70,7 @@ type PopulateNodeHandler = (
   instruction: string,
   attachments?: ChatAttachment[],
   modelSelection?: ChatModelSelection,
+  skill?: ChatSkill,
 ) => Promise<boolean>;
 
 type EditUserMessageHandler = (
@@ -75,12 +78,14 @@ type EditUserMessageHandler = (
   userMessageId: string,
   instruction: string,
   modelSelection?: ChatModelSelection,
+  skill?: ChatSkill,
 ) => Promise<boolean>;
 
 type RetryAssistantMessageHandler = (
   nodeId: string,
   assistantMessageId: string,
   modelSelection?: ChatModelSelection,
+  skill?: ChatSkill,
 ) => Promise<boolean>;
 
 type UpdateNodeTitleHandler = (nodeId: string, title: string) => Promise<boolean>;
@@ -98,6 +103,7 @@ type NodeDetailOptions = {
     instruction: string,
     attachments?: ChatAttachment[],
     modelSelection?: ChatModelSelection,
+    skill?: ChatSkill,
   ) => Promise<string | null>;
   showNotesAction?: boolean;
   showCollapseButton?: boolean;

@@ -33,6 +33,7 @@ import {
   Trash2,
 } from "lucide-react";
 import {
+  ActiveSkillChip,
   AttachmentMenuButton,
   getAttachmentDetailLabel,
   isKnowledgeAttachment,
@@ -50,6 +51,7 @@ import type {
   ChatAttachment,
   ChatMessage,
   ChatModelSelection,
+  ChatSkill,
   MindNode,
 } from "@/lib/types";
 import { MarkdownMessage } from "./MarkdownMessage";
@@ -100,23 +102,27 @@ type NodeDetailPanelProps = {
     sourceText?: string,
     attachments?: ChatAttachment[],
     modelSelection?: ChatModelSelection,
+    skill?: ChatSkill,
   ) => Promise<string | null>;
   onPopulateNode: (
     nodeId: string,
     instruction: string,
     attachments?: ChatAttachment[],
     modelSelection?: ChatModelSelection,
+    skill?: ChatSkill,
   ) => Promise<boolean>;
   onEditUserMessage: (
     nodeId: string,
     userMessageId: string,
     instruction: string,
     modelSelection?: ChatModelSelection,
+    skill?: ChatSkill,
   ) => Promise<boolean>;
   onRetryAssistantMessage: (
     nodeId: string,
     assistantMessageId: string,
     modelSelection?: ChatModelSelection,
+    skill?: ChatSkill,
   ) => Promise<boolean>;
   onUpdateNodeTitle: (nodeId: string, title: string) => Promise<boolean>;
   onToggleNode: (nodeId: string) => void;
@@ -134,6 +140,7 @@ type NodeDetailPanelProps = {
     instruction: string,
     attachments?: ChatAttachment[],
     modelSelection?: ChatModelSelection,
+    skill?: ChatSkill,
   ) => Promise<string | null>;
   showNotesAction?: boolean;
   showCollapseButton?: boolean;
@@ -517,11 +524,14 @@ export function NodeDetailPanel({
     const preparedAttachments = await composerControls.prepareAttachmentsForSend();
     if (!preparedAttachments) return;
 
+    const skill = composerControls.prepareSkillForSend();
+
     if (isInitialSubmit) {
       const projectId = await onStartProject?.(
         trimmed,
         preparedAttachments,
         composerControls.selectedModel,
+        skill,
       );
       if (projectId) {
         setInput("");
@@ -537,6 +547,7 @@ export function NodeDetailPanel({
         trimmed,
         preparedAttachments,
         composerControls.selectedModel,
+        skill,
       );
       if (populated) {
         setInput("");
@@ -554,6 +565,7 @@ export function NodeDetailPanel({
       sourceText,
       preparedAttachments,
       composerControls.selectedModel,
+      skill,
     );
     if (createdNodeId) {
       setInput("");
@@ -604,11 +616,13 @@ export function NodeDetailPanel({
     const trimmed = editingValue.trim();
     if (!trimmed) return;
 
+    const skill = composerControls.prepareSkillForSend();
     const started = await onEditUserMessage(
       node.id,
       editingMessageId,
       trimmed,
       composerControls.selectedModel,
+      skill,
     );
     if (started) {
       setEditingMessageId(null);
@@ -662,7 +676,8 @@ export function NodeDetailPanel({
 
   function handleRetryMessage(message: ChatMessage) {
     if (!node || isCreating) return;
-    void onRetryAssistantMessage(node.id, message.id, composerControls.selectedModel);
+    const skill = composerControls.prepareSkillForSend();
+    void onRetryAssistantMessage(node.id, message.id, composerControls.selectedModel, skill);
   }
 
   function getPanelMaxResizeHeight() {
@@ -1249,6 +1264,13 @@ export function NodeDetailPanel({
             disabled={isComposerBusy}
             onRemove={composerControls.removePendingAttachment}
           />
+          {composerControls.activeSkill && (
+            <ActiveSkillChip
+              skill={composerControls.activeSkill}
+              disabled={isComposerBusy}
+              onRemove={composerControls.removeActiveSkill}
+            />
+          )}
           <div className="node-detail-composer-box relative min-h-[132px] shrink-0 rounded-[20px] border border-neutral-200/80 bg-white shadow-sm transition focus-within:border-brand-300 focus-within:shadow-md focus-within:shadow-brand-100/20 focus-within:ring-4 focus-within:ring-brand-100/30">
             {hasSelectedTextContext && (
               <div className="px-3 pt-3">

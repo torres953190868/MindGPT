@@ -89,6 +89,7 @@ export async function POST(request: NextRequest, context: NodesRouteContext) {
       documentContexts,
       modelSelection: createBody.modelSelection,
       userPlan,
+      skill: createBody.skill,
     });
     const result = await createChildNodeForOwner(
       principal.id,

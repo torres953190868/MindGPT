@@ -6,6 +6,7 @@ import type {
   ChatAttachment,
   ChatMessage,
   ChatModelSelection,
+  ChatSkill,
   MindNode,
   Project,
 } from "@/lib/types";
@@ -21,6 +22,7 @@ export type PendingProjectSyncRecord = {
   nodeId: string;
   assistantMessageId: string;
   modelSelection?: ChatModelSelection;
+  skill?: ChatSkill;
   status: PendingProjectSyncStatus;
   error: string | null;
   updatedAt: string;
@@ -107,6 +109,7 @@ export function createPendingProjectSyncRecord(
   topic: string,
   attachments: ChatAttachment[] = [],
   modelSelection?: ChatModelSelection,
+  skill?: ChatSkill,
 ): PendingProjectSyncRecord {
   const timestamp = now();
   const projectId = createId("project");
@@ -141,6 +144,7 @@ export function createPendingProjectSyncRecord(
     nodeId,
     assistantMessageId: assistantMessage.id,
     modelSelection,
+    skill,
     status: "syncing",
     error: null,
     updatedAt: timestamp,

@@ -5,6 +5,7 @@ import {
   chatAttachmentSchema,
   chatCitationSchema,
   chatModelSelectionSchema,
+  chatSkillSchema,
 } from "@/lib/server/node-request";
 
 export { PROJECT_NOTES_MAX_LENGTH };
@@ -18,6 +19,7 @@ export const createProjectSchema = z.object({
   topic: z.string().trim().min(1).max(600),
   attachments: z.array(chatAttachmentSchema).max(MAX_CHAT_ATTACHMENTS).optional().default([]),
   modelSelection: chatModelSelectionSchema.optional(),
+  skill: chatSkillSchema.optional(),
 });
 
 const isoDateStringSchema = z.string().refine(

@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { MAX_CHAT_ATTACHMENTS } from "@/lib/chat-attachments";
+import {
+  MAX_CHAT_SKILL_DESCRIPTION_LENGTH,
+  MAX_CHAT_SKILL_INSTRUCTIONS_LENGTH,
+  MAX_CHAT_SKILL_NAME_LENGTH,
+} from "@/lib/chat-skills";
 
 const documentStatusSchema = z.enum([
   "queued",
@@ -42,6 +47,14 @@ export const chatModelSelectionSchema = z.object({
   model: z.string().trim().min(1).max(120),
 });
 
+export const chatSkillSchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  name: z.string().trim().min(1).max(MAX_CHAT_SKILL_NAME_LENGTH),
+  description: z.string().trim().max(MAX_CHAT_SKILL_DESCRIPTION_LENGTH),
+  instructions: z.string().trim().min(1).max(MAX_CHAT_SKILL_INSTRUCTIONS_LENGTH),
+  version: z.string().trim().min(1).max(80),
+});
+
 export const createNodeSchema = z.object({
   parentId: z.string().trim().min(1),
   mode: z.enum(["continue", "branch"]),
@@ -49,6 +62,7 @@ export const createNodeSchema = z.object({
   sourceText: z.string().trim().max(4_000).optional(),
   attachments: z.array(chatAttachmentSchema).max(MAX_CHAT_ATTACHMENTS).optional().default([]),
   modelSelection: chatModelSelectionSchema.optional(),
+  skill: chatSkillSchema.optional(),
 });
 
 export const createBlankNodeSchema = z.object({
@@ -67,6 +81,7 @@ export const populateBlankNodeSchema = z.object({
   instruction: z.string().trim().min(1).max(1_500),
   attachments: z.array(chatAttachmentSchema).max(MAX_CHAT_ATTACHMENTS).optional().default([]),
   modelSelection: chatModelSelectionSchema.optional(),
+  skill: chatSkillSchema.optional(),
 });
 
 export const regenerateNodeSchema = z
@@ -75,6 +90,7 @@ export const regenerateNodeSchema = z
     userMessageId: z.string().trim().min(1).optional(),
     assistantMessageId: z.string().trim().min(1).optional(),
     modelSelection: chatModelSelectionSchema.optional(),
+    skill: chatSkillSchema.optional(),
   })
   .refine(
     (body) => Boolean(body.instruction || body.userMessageId || body.assistantMessageId),

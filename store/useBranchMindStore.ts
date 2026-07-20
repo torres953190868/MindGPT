@@ -23,6 +23,7 @@ import type {
   BranchType,
   ChatAttachment,
   ChatModelSelection,
+  ChatSkill,
   MindNode,
   NodePosition,
   Project,
@@ -50,6 +51,7 @@ type PendingInitialProjectStream = {
   nodeId: string;
   assistantMessageId: string;
   modelSelection?: ChatModelSelection;
+  skill?: ChatSkill;
 };
 
 type PendingNodePositionSyncRecord = {
@@ -82,6 +84,7 @@ type BranchMindState = {
     topic: string,
     attachments?: ChatAttachment[],
     modelSelection?: ChatModelSelection,
+    skill?: ChatSkill,
   ) => Promise<string | null>;
   startPendingInitialProjectStream: (projectId: string) => void;
   retryPendingProjectSync: (projectId: string) => void;
@@ -95,6 +98,7 @@ type BranchMindState = {
     sourceText?: string,
     attachments?: ChatAttachment[],
     modelSelection?: ChatModelSelection,
+    skill?: ChatSkill,
   ) => Promise<string | null>;
   createBlankChildNode: (
     parentId: string,
@@ -105,17 +109,20 @@ type BranchMindState = {
     instruction: string,
     attachments?: ChatAttachment[],
     modelSelection?: ChatModelSelection,
+    skill?: ChatSkill,
   ) => Promise<boolean>;
   editUserMessage: (
     nodeId: string,
     userMessageId: string,
     instruction: string,
     modelSelection?: ChatModelSelection,
+    skill?: ChatSkill,
   ) => Promise<boolean>;
   retryAssistantMessage: (
     nodeId: string,
     assistantMessageId: string,
     modelSelection?: ChatModelSelection,
+    skill?: ChatSkill,
   ) => Promise<boolean>;
   updateProjectTitle: (projectId: string, title: string) => Promise<boolean>;
   updateProjectNotes: (projectId: string, notes: string) => Promise<boolean>;
@@ -610,6 +617,7 @@ function getProjectPendingStream(
     nodeId: syncRecord.nodeId,
     assistantMessageId: syncRecord.assistantMessageId,
     modelSelection: syncRecord.modelSelection,
+    skill: syncRecord.skill,
   };
 }
 
@@ -712,12 +720,14 @@ async function regenerateNodeInPlace(
     userMessageId,
     assistantMessageId,
     modelSelection,
+    skill,
   }: {
     nodeId: string;
     instruction?: string;
     userMessageId?: string;
     assistantMessageId?: string;
     modelSelection?: ChatModelSelection;
+    skill?: ChatSkill;
   },
 ) {
   const state = get();
@@ -783,6 +793,7 @@ async function regenerateNodeInPlace(
             userMessageId,
             assistantMessageId: draft.assistantMessageId,
             modelSelection,
+            ...(skill ? { skill } : {}),
           }),
         },
       );
@@ -873,11 +884,13 @@ async function populateBlankNodeInPlace(
     instruction,
     attachments = [],
     modelSelection,
+    skill,
   }: {
     nodeId: string;
     instruction: string;
     attachments?: ChatAttachment[];
     modelSelection?: ChatModelSelection;
+    skill?: ChatSkill;
   },
 ) {
   const trimmed = instruction.trim();
@@ -947,6 +960,7 @@ async function populateBlankNodeInPlace(
             instruction: trimmed,
             attachments,
             modelSelection,
+            ...(skill ? { skill } : {}),
           }),
         },
       );
@@ -1129,7 +1143,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
 
   clearAiError: () => set({ aiError: null }),
 
-  createProject: async (topic, attachments = [], modelSelection) => {
+  createProject: async (topic, attachments = [], modelSelection, skill) => {
     const trimmed = topic.trim();
     if (!trimmed || get().creatingProject) return null;
 
@@ -1139,6 +1153,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
       trimmed,
       attachments,
       modelSelection,
+      skill,
     );
 
     if (persistPendingSyncRecord(pendingRecord)) {
@@ -1168,6 +1183,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
           topic: trimmed,
           ...(attachments.length > 0 ? { attachments } : {}),
           ...(modelSelection ? { modelSelection } : {}),
+          ...(skill ? { skill } : {}),
         }),
       });
       const data = await readJson<CreateProjectResponse>(response);
@@ -1184,6 +1200,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
               nodeId: data.initialStream.nodeId,
               assistantMessageId: data.initialStream.assistantMessageId,
               modelSelection,
+              skill,
             }
           : null,
       });
@@ -1219,6 +1236,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
       nodeId: pending.nodeId,
       assistantMessageId: pending.assistantMessageId,
       modelSelection: pending.modelSelection,
+      skill: pending.skill,
     }).then((started) => {
       if (started) return;
 
@@ -1317,6 +1335,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
     sourceText,
     attachments = [],
     modelSelection,
+    skill,
   ) => {
     const state = get();
     const project = state.projects.find((item) => item.id === state.activeProjectId);
@@ -1379,6 +1398,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
             sourceText,
             attachments,
             modelSelection,
+            ...(skill ? { skill } : {}),
           }),
         });
 
@@ -1497,16 +1517,17 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
     }
   },
 
-  populateBlankNode: async (nodeId, instruction, attachments, modelSelection) => {
+  populateBlankNode: async (nodeId, instruction, attachments, modelSelection, skill) => {
     return populateBlankNodeInPlace(set, get, {
       nodeId,
       instruction,
       attachments,
       modelSelection,
+      skill,
     });
   },
 
-  editUserMessage: async (nodeId, userMessageId, instruction, modelSelection) => {
+  editUserMessage: async (nodeId, userMessageId, instruction, modelSelection, skill) => {
     const trimmed = instruction.trim();
     if (!trimmed) return false;
 
@@ -1515,14 +1536,16 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
       instruction: trimmed,
       userMessageId,
       modelSelection,
+      skill,
     });
   },
 
-  retryAssistantMessage: async (nodeId, assistantMessageId, modelSelection) => {
+  retryAssistantMessage: async (nodeId, assistantMessageId, modelSelection, skill) => {
     return regenerateNodeInPlace(set, get, {
       nodeId,
       assistantMessageId,
       modelSelection,
+      skill,
     });
   },
 

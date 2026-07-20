@@ -18,14 +18,23 @@ import {
   LockKeyhole,
   Paperclip,
   Plus,
+  Sparkles,
   Upload,
   X,
 } from "lucide-react";
 import { useLanguage } from "@/components/language/LanguageProvider";
 import { ApiRequestError, readJsonApi } from "@/lib/client/api";
 import { MAX_CHAT_ATTACHMENTS } from "@/lib/chat-attachments";
+import {
+  addStoredChatSkill,
+  isDefaultChatSkill,
+  readAvailableChatSkills,
+  removeStoredChatSkill,
+  validateChatSkillForSend,
+  type ParsedChatSkill,
+} from "@/lib/chat-skills";
 import { createId } from "@/lib/ids";
-import type { ChatAttachment, ChatModelSelection } from "@/lib/types";
+import type { ChatAttachment, ChatModelSelection, ChatSkill } from "@/lib/types";
 
 type ChatModelOption = ChatModelSelection & {
   providerName: string;
@@ -614,7 +623,13 @@ export function useChatComposerControls({
   const [knowledgeDocuments, setKnowledgeDocuments] = useState<KnowledgeDocument[]>([]);
   const [isLoadingKnowledgeDocuments, setIsLoadingKnowledgeDocuments] = useState(false);
   const [knowledgeDocumentError, setKnowledgeDocumentError] = useState<string | null>(null);
+  const [availableSkills, setAvailableSkills] = useState<ChatSkill[]>([]);
+  const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
+  const [isSkillMenuOpen, setIsSkillMenuOpen] = useState(false);
+  const [skillImportError, setSkillImportError] = useState<string | null>(null);
+  const [isImportingSkill, setIsImportingSkill] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const skillDirectoryInputRef = useRef<HTMLInputElement>(null);
   const pendingAttachmentsRef = useRef<PendingChatAttachment[]>([]);
   const inFlightIngestionRef = useRef(new Map<string, Promise<PendingChatAttachment>>());
   const ingestionRunIdsRef = useRef(new Map<string, number>());
@@ -622,9 +637,11 @@ export function useChatComposerControls({
   const isMountedRef = useRef(true);
   const modelMenuRef = useRef<HTMLDivElement>(null);
   const attachmentMenuRef = useRef<HTMLDivElement>(null);
+  const skillMenuRef = useRef<HTMLDivElement>(null);
   const selectedModelOption = modelOptions.find((option) =>
     matchesModelSelection(option, selectedModel),
   );
+  const activeSkill = availableSkills.find((skill) => skill.id === activeSkillId) ?? null;
   const selectedModelLabel = isAutoSelected
     ? copy.chat.autoModel
     : formatModelLabel(selectedModelOption?.model ?? selectedModel.model);
@@ -646,6 +663,11 @@ export function useChatComposerControls({
       inFlightIngestion.clear();
       ingestionRunIds.clear();
     };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setAvailableSkills(readAvailableChatSkills());
   }, []);
 
   useEffect(() => {
@@ -775,12 +797,14 @@ export function useChatComposerControls({
       if (!menu || menu.contains(event.target as Node)) return;
       setIsAttachmentMenuOpen(false);
       setIsKnowledgeMenuOpen(false);
+      setIsSkillMenuOpen(false);
     }
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setIsAttachmentMenuOpen(false);
         setIsKnowledgeMenuOpen(false);
+        setIsSkillMenuOpen(false);
       }
     }
 
@@ -792,6 +816,28 @@ export function useChatComposerControls({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [isAttachmentMenuOpen]);
+
+  useEffect(() => {
+    if (!isSkillMenuOpen) return undefined;
+
+    function handlePointerDown(event: globalThis.PointerEvent) {
+      const menu = skillMenuRef.current;
+      if (!menu || menu.contains(event.target as Node)) return;
+      setIsSkillMenuOpen(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setIsSkillMenuOpen(false);
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isSkillMenuOpen]);
 
   function setAttachmentIngestionProgress(next: PendingChatAttachment) {
     setPendingAttachments((current) => replacePendingAttachment(current, next));
@@ -938,7 +984,10 @@ export function useChatComposerControls({
 
   function toggleAttachmentMenu() {
     if (controlsBusy || pendingAttachments.length >= maxAttachments) return;
-    if (isAttachmentMenuOpen) setIsKnowledgeMenuOpen(false);
+    if (isAttachmentMenuOpen) {
+      setIsKnowledgeMenuOpen(false);
+      setIsSkillMenuOpen(false);
+    }
     setIsAttachmentMenuOpen((isOpen) => !isOpen);
     setIsModelMenuOpen(false);
   }
@@ -946,7 +995,73 @@ export function useChatComposerControls({
   function openFilePicker() {
     setIsAttachmentMenuOpen(false);
     setIsKnowledgeMenuOpen(false);
+    setIsSkillMenuOpen(false);
     fileInputRef.current?.click();
+  }
+
+  function openSkillDirectoryPicker() {
+    setIsAttachmentMenuOpen(false);
+    setIsKnowledgeMenuOpen(false);
+    setIsSkillMenuOpen(false);
+    skillDirectoryInputRef.current?.click();
+  }
+
+  async function handleSkillDirectoryChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setSkillImportError(null);
+    setIsImportingSkill(true);
+
+    try {
+      const { readSkillFromFileList } = await import("@/lib/chat-skills");
+      const result: ParsedChatSkill = await readSkillFromFileList(files);
+
+      if (!result.success) {
+        setSkillImportError(
+          result.error === "missing-skill-md" || result.error === "invalid-selection"
+            ? copy.chat.skillInvalidFile
+            : copy.chat.skillImportError,
+        );
+        return;
+      }
+
+      addStoredChatSkill(result.skill);
+      setAvailableSkills(readAvailableChatSkills());
+      setActiveSkillId(result.skill.id);
+      setIsSkillMenuOpen(false);
+    } catch {
+      setSkillImportError(copy.chat.skillImportError);
+    } finally {
+      setIsImportingSkill(false);
+      event.target.value = "";
+    }
+  }
+
+  function selectSkill(skillId: string) {
+    if (controlsBusy) return;
+    setActiveSkillId(skillId);
+    setIsSkillMenuOpen(false);
+    setIsAttachmentMenuOpen(false);
+    setIsKnowledgeMenuOpen(false);
+  }
+
+  function removeActiveSkill() {
+    if (controlsBusy) return;
+    setActiveSkillId(null);
+  }
+
+  function removeImportedSkill(skillId: string) {
+    if (isDefaultChatSkill(skillId)) return;
+    removeStoredChatSkill(skillId);
+    setAvailableSkills(readAvailableChatSkills());
+    if (activeSkillId === skillId) {
+      setActiveSkillId(null);
+    }
+  }
+
+  function prepareSkillForSend(): ChatSkill | undefined {
+    return validateChatSkillForSend(activeSkill) ?? undefined;
   }
 
   function selectModel(option: ChatModelOption) {
@@ -961,6 +1076,7 @@ export function useChatComposerControls({
     setIsModelMenuOpen(false);
     setIsAttachmentMenuOpen(false);
     setIsKnowledgeMenuOpen(false);
+    setIsSkillMenuOpen(false);
   }
 
   function selectAutoModel() {
@@ -971,6 +1087,7 @@ export function useChatComposerControls({
     setIsModelMenuOpen(false);
     setIsAttachmentMenuOpen(false);
     setIsKnowledgeMenuOpen(false);
+    setIsSkillMenuOpen(false);
   }
 
   function selectKnowledgeDocument(document: KnowledgeDocument) {
@@ -1064,42 +1181,91 @@ export function useChatComposerControls({
     setIsModelMenuOpen((isOpen) => !isOpen);
     setIsAttachmentMenuOpen(false);
     setIsKnowledgeMenuOpen(false);
+    setIsSkillMenuOpen(false);
   }
 
   return {
+    activeSkill,
+    activeSkillId,
     attachmentError,
     attachmentMenuRef,
     controlsBusy,
     fileInputRef,
     handleAttachmentChange,
+    handleSkillDirectoryChange,
+    availableSkills,
     indexedKnowledgeDocuments,
     isAttachmentMenuOpen,
+    isAutoSelected,
+    isImportingSkill,
     isKnowledgeMenuOpen,
     isLoadingKnowledgeDocuments,
     isModelMenuOpen,
     isPreparingAttachments,
+    isSkillMenuOpen,
     knowledgeDocumentError,
     maxAttachments,
     modelMenuRef,
     modelOptions,
     openFilePicker,
+    openSkillDirectoryPicker,
     pendingAttachments,
     prepareAttachmentsForSend,
+    prepareSkillForSend,
+    removeActiveSkill,
+    removeImportedSkill,
     removePendingAttachment,
     resetAttachments,
+    selectAutoModel,
     selectKnowledgeDocument,
     selectModel,
+    selectSkill,
     selectedModel,
     selectedModelLabel,
-    isAutoSelected,
-    selectAutoModel,
     setIsKnowledgeMenuOpen,
+    setIsSkillMenuOpen,
+    skillDirectoryInputRef,
+    skillImportError,
+    skillMenuRef,
     toggleAttachmentMenu,
     toggleModelMenu,
   };
 }
 
 type ChatComposerControlsState = ReturnType<typeof useChatComposerControls>;
+
+export function ActiveSkillChip({
+  skill,
+  disabled,
+  onRemove,
+}: {
+  skill: ChatSkill;
+  disabled: boolean;
+  onRemove: () => void;
+}) {
+  const { copy } = useLanguage();
+
+  return (
+    <div
+      aria-label={`${copy.chat.skillActive}: ${skill.name}`}
+      data-testid="active-skill-chip"
+      className="inline-flex max-w-full items-center gap-2 rounded-full border border-brand-200 bg-brand-50/70 px-3 py-1.5 text-xs font-bold text-brand-800"
+    >
+      <Sparkles size={14} className="shrink-0" />
+      <span className="min-w-0 truncate">{skill.name}</span>
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={disabled}
+        aria-label={copy.chat.skillRemove}
+        data-testid="remove-active-skill-button"
+        className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <X size={13} />
+      </button>
+    </div>
+  );
+}
 
 export function PendingAttachmentChips({
   attachments,
@@ -1200,6 +1366,18 @@ export function AttachmentMenuButton({
         }
         aria-label={copy.chat.chooseFiles}
         data-testid="message-attachment-input"
+        className="sr-only"
+      />
+      <input
+        ref={controls.skillDirectoryInputRef}
+        type="file"
+        // @ts-expect-error webkitdirectory is a non-standard attribute needed for directory selection.
+        webkitdirectory="true"
+        directory=""
+        onChange={controls.handleSkillDirectoryChange}
+        disabled={controls.controlsBusy || controls.isImportingSkill}
+        aria-label={copy.chat.skillImport}
+        data-testid="skill-directory-input"
         className="sr-only"
       />
       <div ref={controls.attachmentMenuRef} className="relative shrink-0">
@@ -1350,6 +1528,122 @@ export function AttachmentMenuButton({
                         </button>
                       );
                     })}
+                </div>
+              )}
+            </div>
+
+            <div
+              className="relative"
+              onMouseEnter={() => controls.setIsSkillMenuOpen(true)}
+              onFocus={() => controls.setIsSkillMenuOpen(true)}
+              onBlur={(event) => {
+                const nextFocus = event.relatedTarget;
+                if (!nextFocus || !event.currentTarget.contains(nextFocus as Node)) {
+                  controls.setIsSkillMenuOpen(false);
+                }
+              }}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                aria-haspopup="menu"
+                aria-expanded={controls.isSkillMenuOpen}
+                onClick={() => controls.setIsSkillMenuOpen(true)}
+                data-testid="skill-menu-button"
+                className="flex w-full items-center gap-3 rounded-[14px] px-3 py-2 text-left text-neutral-700 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-300"
+              >
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
+                  <Sparkles size={16} />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm font-black">
+                  {copy.chat.skill}
+                </span>
+                <ChevronRight
+                  size={15}
+                  className={`shrink-0 text-neutral-500 transition ${
+                    controls.isSkillMenuOpen ? "rotate-90" : ""
+                  }`}
+                />
+              </button>
+
+              {controls.isSkillMenuOpen && (
+                <div
+                  ref={controls.skillMenuRef}
+                  role="menu"
+                  aria-label={copy.chat.skill}
+                  data-testid="skill-document-menu"
+                  onWheel={stopFloatingMenuWheelPropagation}
+                  className="nowheel mt-1 max-h-64 overflow-auto overscroll-contain rounded-[16px] border border-neutral-200 bg-brand-50/55 p-1"
+                >
+                  {controls.availableSkills.length === 0 && (
+                    <p className="rounded-[12px] px-3 py-3 text-sm font-bold text-neutral-600">
+                      {copy.chat.skillEmpty}
+                    </p>
+                  )}
+
+                  {controls.availableSkills.map((skill) => {
+                    const isSelected = controls.activeSkillId === skill.id;
+                    const isDefault = isDefaultChatSkill(skill.id);
+
+                    return (
+                      <button
+                        key={skill.id}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => controls.selectSkill(skill.id)}
+                        data-testid="skill-option"
+                        className={`flex w-full min-w-0 items-center gap-3 rounded-[12px] px-3 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-brand-300 ${
+                          isSelected
+                            ? "bg-white text-brand-800"
+                            : "text-neutral-700 hover:bg-white"
+                        }`}
+                      >
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
+                          <Sparkles size={16} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-2">
+                            <span className="block truncate text-sm font-black">
+                              {skill.name}
+                            </span>
+                            {isDefault && (
+                              <span className="shrink-0 rounded-full border border-brand-200 bg-brand-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-700">
+                                {copy.chat.skillDefault}
+                              </span>
+                            )}
+                          </span>
+                          {skill.description && (
+                            <span className="block truncate text-xs font-bold text-neutral-500">
+                              {skill.description}
+                            </span>
+                          )}
+                        </span>
+                        {isSelected && <Check size={16} className="shrink-0 text-brand-700" />}
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={controls.openSkillDirectoryPicker}
+                    disabled={controls.isImportingSkill}
+                    data-testid="import-skill-button"
+                    className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2 text-left text-neutral-700 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
+                      <Upload size={16} />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-black">
+                      {copy.chat.skillImport}
+                    </span>
+                  </button>
+
+                  {controls.skillImportError && (
+                    <p className="rounded-[12px] bg-danger-100 px-3 py-3 text-sm font-bold text-danger-600">
+                      {controls.skillImportError}
+                    </p>
+                  )}
                 </div>
               )}
             </div>

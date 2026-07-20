@@ -229,6 +229,86 @@ describe("requestDeepSeekReply", () => {
     ]);
   });
 
+  it("includes an active skill as a separate user message before the instruction", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  title: "Skill title",
+                  summary: "Skill summary.",
+                  content: "Skill content.",
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestDeepSeekReply({
+      instruction: "Explain trees",
+      skill: {
+        id: "skill_trees",
+        name: "Tree Tutor",
+        description: "Teaches like a patient tutor",
+        instructions: "Use analogies from nature.",
+        version: "v1",
+      },
+    });
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(requestBody.messages).toHaveLength(3);
+    expect(requestBody.messages[0].role).toBe("system");
+    expect(requestBody.messages[1].role).toBe("user");
+    expect(requestBody.messages[1].content).toContain("Active skill customization:");
+    expect(requestBody.messages[1].content).toContain("Tree Tutor");
+    expect(requestBody.messages[1].content).toContain("Teaches like a patient tutor");
+    expect(requestBody.messages[1].content).toContain("Use analogies from nature.");
+    expect(requestBody.messages[2].role).toBe("user");
+    expect(requestBody.messages[2].content).toContain("User instruction: Explain trees");
+  });
+
+  it("does not add a skill block when no skill is active", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  title: "No skill",
+                  summary: "No skill summary.",
+                  content: "No skill content.",
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestDeepSeekReply({ instruction: "Explain trees" });
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(requestBody.messages).toHaveLength(2);
+    expect(requestBody.messages[0].role).toBe("system");
+    expect(requestBody.messages[1].role).toBe("user");
+    expect(requestBody.messages[1].content).not.toContain("Active skill customization");
+  });
+
   it("uses a per-request provider and model selection", async () => {
     vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
     vi.stubEnv("OPENCODE_GO_ALLOWED_MODELS", "qwen3.6-plus");

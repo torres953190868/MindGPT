@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useLanguage } from "@/components/language/LanguageProvider";
 import { ProjectLauncher } from "@/components/ProjectLauncher";
-import type { ChatAttachment, ChatModelSelection } from "@/lib/types";
+import type { ChatAttachment, ChatModelSelection, ChatSkill } from "@/lib/types";
 import { useBranchMindStore } from "@/store/useBranchMindStore";
 import { WorkspaceCanvasShell } from "./WorkspaceCanvasShell";
 
@@ -96,6 +96,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
       sourceText?: string,
       attachments?: ChatAttachment[],
       modelSelection?: ChatModelSelection,
+      skill?: ChatSkill,
     ) => {
       return createChildNode(
         nodeId,
@@ -104,6 +105,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
         sourceText,
         attachments,
         modelSelection,
+        skill,
       );
     },
     [createChildNode],

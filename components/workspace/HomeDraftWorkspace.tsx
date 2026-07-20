@@ -8,6 +8,7 @@ import { ROOT_POSITION } from "@/lib/graph";
 import type {
   ChatAttachment,
   ChatModelSelection,
+  ChatSkill,
   NodePosition,
   Project,
 } from "@/lib/types";
@@ -135,9 +136,10 @@ export function HomeDraftWorkspace() {
       instruction: string,
       attachments: ChatAttachment[] = [],
       modelSelection?: ChatModelSelection,
+      skill?: ChatSkill,
     ) => {
       clearAiError();
-      const projectId = await createProject(instruction, attachments, modelSelection);
+      const projectId = await createProject(instruction, attachments, modelSelection, skill);
       if (projectId) router.replace(`/workspace/${projectId}`);
       return projectId;
     },

@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2, Sparkles } from "lucide-react";
 import {
+  ActiveSkillChip,
   AttachmentMenuButton,
   ModelSelectorButton,
   PendingAttachmentChips,
@@ -11,7 +12,7 @@ import {
 } from "@/components/chat/ChatComposerControls";
 import { useLanguage } from "@/components/language/LanguageProvider";
 import { useBranchMindStore } from "@/store/useBranchMindStore";
-import type { ChatAttachment, ChatModelSelection } from "@/lib/types";
+import type { ChatAttachment, ChatModelSelection, ChatSkill } from "@/lib/types";
 
 type ProjectLauncherProps = {
   compact?: boolean;
@@ -44,9 +45,10 @@ function useProjectLauncherState() {
     trimmedTopic: string,
     attachments?: ChatAttachment[],
     modelSelection?: ChatModelSelection,
+    skill?: ChatSkill,
   ) {
     clearAiError();
-    const projectId = await createProject(trimmedTopic, attachments, modelSelection);
+    const projectId = await createProject(trimmedTopic, attachments, modelSelection, skill);
     if (projectId) {
       const path = `/workspace/${projectId}`;
       router.push(path);
@@ -92,10 +94,12 @@ function ComposerProjectLauncher() {
     clearAiError();
     const preparedAttachments = await composerControls.prepareAttachmentsForSend();
     if (!preparedAttachments) return;
+    const skill = composerControls.prepareSkillForSend();
     const projectId = await submitProject(
       trimmed,
       preparedAttachments,
       composerControls.selectedModel,
+      skill,
     );
     if (projectId) {
       setTopic("");
@@ -128,6 +132,15 @@ function ComposerProjectLauncher() {
             disabled={isSubmitting}
             onRemove={composerControls.removePendingAttachment}
           />
+          {composerControls.activeSkill && (
+            <div className="mt-2">
+              <ActiveSkillChip
+                skill={composerControls.activeSkill}
+                disabled={isSubmitting}
+                onRemove={composerControls.removeActiveSkill}
+              />
+            </div>
+          )}
         </div>
 
         <div className="relative mt-3 rounded-[20px] border border-neutral-200 bg-surface-soft shadow-sm transition focus-within:border-brand-300 focus-within:bg-white focus-within:shadow-lg focus-within:shadow-brand-100/30 focus-within:ring-4 focus-within:ring-brand-100/50">

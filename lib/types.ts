@@ -55,6 +55,14 @@ export type ChatModelSelection = {
   model: string;
 };
 
+export type ChatSkill = {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  version: string;
+};
+
 export type LlmRouteTask = "node_generation" | "branch_chat" | "pdf_qa";
 
 export type LlmProviderConfig = {

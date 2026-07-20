@@ -3,13 +3,14 @@
 import { type FormEvent, useState } from "react";
 import { Loader2, Send, Sparkles } from "lucide-react";
 import {
+  ActiveSkillChip,
   AttachmentMenuButton,
   ModelSelectorButton,
   PendingAttachmentChips,
   useChatComposerControls,
 } from "@/components/chat/ChatComposerControls";
 import { useLanguage } from "@/components/language/LanguageProvider";
-import type { ChatAttachment, ChatModelSelection } from "@/lib/types";
+import type { ChatAttachment, ChatModelSelection, ChatSkill } from "@/lib/types";
 
 type HomeStartComposerProps = {
   isBusy: boolean;
@@ -25,6 +26,7 @@ type HomeStartComposerProps = {
     instruction: string,
     attachments?: ChatAttachment[],
     modelSelection?: ChatModelSelection,
+    skill?: ChatSkill,
   ) => Promise<string | null>;
 };
 
@@ -71,10 +73,12 @@ export function HomeStartComposer({
     const preparedAttachments = await composerControls.prepareAttachmentsForSend();
     if (!preparedAttachments) return;
 
+    const skill = composerControls.prepareSkillForSend();
     const projectId = await onSubmit(
       trimmed,
       preparedAttachments,
       composerControls.selectedModel,
+      skill,
     );
 
     if (projectId) {
@@ -110,6 +114,14 @@ export function HomeStartComposer({
         disabled={isComposerBusy}
         onRemove={composerControls.removePendingAttachment}
       />
+
+      {composerControls.activeSkill && (
+        <ActiveSkillChip
+          skill={composerControls.activeSkill}
+          disabled={isComposerBusy}
+          onRemove={composerControls.removeActiveSkill}
+        />
+      )}
 
       <textarea
         value={input}

@@ -11,6 +11,7 @@ import {
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { GitBranch, Loader2, Send, Sparkles, Ribbon } from "lucide-react";
 import {
+  ActiveSkillChip,
   AttachmentMenuButton,
   ModelSelectorButton,
   PendingAttachmentChips,
@@ -21,7 +22,7 @@ import {
   getHighlightedActionClass,
   useHighlightedAction,
 } from "@/components/ui/highlighted-action";
-import type { ChatAttachment, ChatModelSelection, MindNode } from "@/lib/types";
+import type { ChatAttachment, ChatModelSelection, ChatSkill, MindNode } from "@/lib/types";
 
 export type InlineNodeComposerData = {
   nodeId: string;
@@ -38,6 +39,7 @@ export type InlineNodeComposerData = {
     instruction: string,
     attachments?: ChatAttachment[],
     modelSelection?: ChatModelSelection,
+    skill?: ChatSkill,
   ) => Promise<string | null>;
 };
 
@@ -416,10 +418,12 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
     const preparedAttachments = await composerControls.prepareAttachmentsForSend();
     if (!preparedAttachments) return;
 
+    const skill = composerControls.prepareSkillForSend();
     const projectId = await composer.onSubmit(
       trimmed,
       preparedAttachments,
       composerControls.selectedModel,
+      skill,
     );
 
     if (projectId) {
@@ -467,6 +471,13 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
           disabled={isComposerBusy}
           onRemove={composerControls.removePendingAttachment}
         />
+        {composerControls.activeSkill && (
+          <ActiveSkillChip
+            skill={composerControls.activeSkill}
+            disabled={isComposerBusy}
+            onRemove={composerControls.removeActiveSkill}
+          />
+        )}
         <textarea
           value={input}
           onChange={(event) => setInput(event.target.value)}
@@ -549,6 +560,13 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
         disabled={isComposerBusy}
         onRemove={composerControls.removePendingAttachment}
       />
+      {composerControls.activeSkill && (
+        <ActiveSkillChip
+          skill={composerControls.activeSkill}
+          disabled={isComposerBusy}
+          onRemove={composerControls.removeActiveSkill}
+        />
+      )}
       <div className="relative rounded-[22px] border border-neutral-200/80 bg-surface-soft shadow-sm transition focus-within:border-brand-300 focus-within:bg-white focus-within:shadow-md focus-within:shadow-brand-100/25 focus-within:ring-4 focus-within:ring-brand-100/35">
         <textarea
           value={input}
