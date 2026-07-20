@@ -494,6 +494,28 @@ textarea {
   scrollbar-color: var(--theme-neutral-300) transparent;
 }
 
+.chat-model-menu-scrollable::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-model-menu-scrollable::-webkit-scrollbar-track {
+  background: var(--theme-surface-elevated);
+}
+
+.chat-model-menu-scrollable::-webkit-scrollbar-thumb {
+  background-color: var(--theme-neutral-300);
+  border-radius: 3px;
+}
+
+.chat-model-menu-scrollable::-webkit-scrollbar-thumb:hover {
+  background-color: var(--theme-neutral-400);
+}
+
+.chat-model-menu-scrollable {
+  scrollbar-width: thin;
+  scrollbar-color: var(--theme-neutral-300) var(--theme-surface-elevated);
+}
+
 .branchmind-projects-surface {
   background-color: var(--projects-surface-background);
   background-image:

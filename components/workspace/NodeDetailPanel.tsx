@@ -1310,8 +1310,8 @@ export function NodeDetailPanel({
               }`}
             />
             <div className="absolute bottom-3 right-14 flex max-w-[calc(100%-4.75rem)] items-center justify-end gap-2">
-              <AttachmentMenuButton controls={composerControls} />
-              <ModelSelectorButton controls={composerControls} />
+              <AttachmentMenuButton controls={composerControls} alignment="end" />
+              <ModelSelectorButton controls={composerControls} alignment="end" />
             </div>
             <div className="absolute bottom-3 right-3">
               <button

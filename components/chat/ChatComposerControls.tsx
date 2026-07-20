@@ -198,9 +198,16 @@ const MODEL_DISPLAY_PRIORITY: Record<string, number> = {
 };
 
 type FloatingMenuPlacement = "above" | "below";
+type FloatingMenuAlignment = "start" | "end";
 
-function getMenuPlacementClass(placement: FloatingMenuPlacement) {
-  return placement === "below" ? "absolute left-0 top-full z-50 mt-2" : "absolute bottom-full left-0 z-50 mb-2";
+function getMenuPlacementClass(
+  placement: FloatingMenuPlacement,
+  alignment: FloatingMenuAlignment,
+) {
+  const horizontalPosition = alignment === "end" ? "right-0" : "left-0";
+  return placement === "below"
+    ? `absolute ${horizontalPosition} top-full z-50 mt-2`
+    : `absolute bottom-full ${horizontalPosition} z-50 mb-2`;
 }
 
 function ModelLogo({
@@ -1347,9 +1354,11 @@ export function PendingAttachmentChips({
 export function AttachmentMenuButton({
   controls,
   placement = "above",
+  alignment = "start",
 }: {
   controls: ChatComposerControlsState;
   placement?: FloatingMenuPlacement;
+  alignment?: FloatingMenuAlignment;
 }) {
   const { copy, language } = useLanguage();
 
@@ -1403,7 +1412,7 @@ export function AttachmentMenuButton({
             aria-label={copy.chat.addAttachment}
             data-testid="attachment-menu"
             onMouseLeave={() => controls.setIsKnowledgeMenuOpen(false)}
-            className={`${getMenuPlacementClass(placement)} w-80 max-w-[calc(100vw-2rem)] rounded-[20px] border border-white/80 bg-white/95 p-2 shadow-2xl shadow-brand-100/55 backdrop-blur`}
+            className={`${getMenuPlacementClass(placement, alignment)} chat-model-menu-scrollable nowheel max-h-[min(11rem,calc(100svh-8rem))] w-[min(14rem,calc(100vw-1rem))] overflow-auto overscroll-contain rounded-[14px] border border-neutral-200 bg-white/95 p-1 shadow-xl shadow-neutral-900/10 backdrop-blur`}
           >
             <button
               type="button"
@@ -1657,9 +1666,11 @@ export function AttachmentMenuButton({
 export function ModelSelectorButton({
   controls,
   placement = "above",
+  alignment = "start",
 }: {
   controls: ChatComposerControlsState;
   placement?: FloatingMenuPlacement;
+  alignment?: FloatingMenuAlignment;
 }) {
   const { copy } = useLanguage();
 
@@ -1694,7 +1705,7 @@ export function ModelSelectorButton({
           aria-label={copy.chat.chatModels}
           data-testid="chat-model-menu"
           onWheel={stopFloatingMenuWheelPropagation}
-          className={`${getMenuPlacementClass(placement)} nowheel max-h-[min(32rem,calc(100svh-5rem))] w-[min(22rem,calc(100vw-1rem))] overflow-auto overscroll-contain rounded-[18px] border border-neutral-200 bg-white/95 p-2 shadow-xl shadow-neutral-900/10 backdrop-blur`}
+          className={`${getMenuPlacementClass(placement, alignment)} chat-model-menu-scrollable nowheel max-h-[min(11rem,calc(100svh-8rem))] w-[min(14rem,calc(100vw-1rem))] overflow-auto overscroll-contain rounded-[14px] border border-neutral-200 bg-white/95 p-1 shadow-xl shadow-neutral-900/10 backdrop-blur`}
         >
           <button
             type="button"
@@ -1703,17 +1714,17 @@ export function ModelSelectorButton({
             disabled={controls.controlsBusy}
             onClick={controls.selectAutoModel}
             data-testid="chat-model-auto-option"
-            className={`mb-1 flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left transition focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-45 ${
+            className={`mb-0.5 flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-45 ${
               controls.isAutoSelected
                 ? "bg-neutral-100 text-neutral-900"
                 : "text-neutral-700 hover:bg-brand-50"
             }`}
           >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-neutral-200 bg-white text-neutral-800">
-              <InfinityIcon size={21} strokeWidth={2.2} />
+            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-neutral-200 bg-white text-neutral-800">
+              <InfinityIcon size={16} strokeWidth={2.2} />
             </span>
-            <span className="min-w-0 flex-1 truncate text-base font-semibold">{copy.chat.autoModel}</span>
-            {controls.isAutoSelected && <Check size={18} className="shrink-0 text-neutral-900" />}
+            <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{copy.chat.autoModel}</span>
+            {controls.isAutoSelected && <Check size={16} className="shrink-0 text-neutral-900" />}
           </button>
           {controls.modelOptions.map((option) => {
             const isSelected = matchesModelSelection(option, controls.selectedModel);
@@ -1729,7 +1740,7 @@ export function ModelSelectorButton({
                 disabled={controls.controlsBusy}
                 onClick={() => controls.selectModel(option)}
                 data-testid="chat-model-option"
-                className={`flex w-full min-w-0 items-center gap-3 rounded-[14px] px-3 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-45 ${
+                className={`flex w-full min-w-0 items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-45 ${
                   isLocked
                     ? "cursor-not-allowed text-neutral-600"
                     : !controls.isAutoSelected && isSelected
@@ -1738,12 +1749,12 @@ export function ModelSelectorButton({
                 }`}
               >
                 <ModelLogo model={option.model} size="md" />
-                <span className="min-w-0 flex-1 truncate text-base font-semibold">
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">
                     {formatModelLabel(option.model)}
                 </span>
                 {isLocked ? (
                   <LockKeyhole
-                    size={18}
+                    size={16}
                     className="shrink-0 text-neutral-300"
                     aria-label={
                       !option.configured
@@ -1753,7 +1764,7 @@ export function ModelSelectorButton({
                   />
                 ) : (
                   !controls.isAutoSelected &&
-                  isSelected && <Check size={18} className="shrink-0 text-neutral-900" />
+                  isSelected && <Check size={16} className="shrink-0 text-neutral-900" />
                 )}
               </button>
             );
