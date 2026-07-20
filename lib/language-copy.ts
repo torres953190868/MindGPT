@@ -185,6 +185,7 @@ const zhCopy = {
   chat: {
     addAttachment: "添加附件",
     addFilesKnowledge: "添加文件或知识库",
+    autoModel: "自动",
     chatModels: "聊天模型",
     chooseChatModel: "选择聊天模型",
     chooseFiles: "选择文件",
@@ -198,6 +199,8 @@ const zhCopy = {
     loadingPdfs: "正在加载 PDF",
     noIndexedPdfs: "还没有已索引的 PDF。",
     notConfigured: " · 未配置",
+    modelApiNotConfigured: "API 尚未配置",
+    modelLocked: "需要升级",
     pendingAttachments: "待发送附件",
     pdfIndexingFailed: "PDF 索引失败。",
     pdfIndexingRunning: "PDF 仍在索引，请稍后再发送。",
@@ -683,6 +686,7 @@ export const LANGUAGE_COPY = {
     chat: {
       addAttachment: "Add attachment",
       addFilesKnowledge: "Add files or knowledge base PDFs",
+      autoModel: "Automatic",
       chatModels: "Chat models",
       chooseChatModel: "Choose chat model",
       chooseFiles: "Choose files",
@@ -696,6 +700,8 @@ export const LANGUAGE_COPY = {
       loadingPdfs: "Loading PDFs",
       noIndexedPdfs: "No indexed PDFs yet.",
       notConfigured: " · Not configured",
+      modelApiNotConfigured: "API not configured",
+      modelLocked: "Upgrade required",
       pendingAttachments: "Pending attachments",
       pdfIndexingFailed: "PDF indexing failed.",
       pdfIndexingRunning: "PDF indexing is still running. Please try again in a moment.",

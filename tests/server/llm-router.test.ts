@@ -155,6 +155,26 @@ function createFreePlanConfig(): LlmConfigBundle {
         notes: null,
         sortOrder: 20,
       },
+      {
+        providerId: "opencode-go",
+        model: "kimi-k2.6",
+        displayName: "Kimi K2.6",
+        enabled: true,
+        supportsStreaming: true,
+        supportsJson: true,
+        notes: null,
+        sortOrder: 30,
+      },
+      {
+        providerId: "opencode-go",
+        model: "mimo-v2.5-pro",
+        displayName: "MiMo V2.5 Pro",
+        enabled: true,
+        supportsStreaming: true,
+        supportsJson: true,
+        notes: null,
+        sortOrder: 40,
+      },
     ],
     routes: [
       {
@@ -215,19 +235,32 @@ describe("LLM router", () => {
     ).toThrow("Selected AI model is not allowed.");
   });
 
-  it("omits providers without API keys from the public catalog", () => {
+  it("keeps providers without API keys visible as unconfigured", () => {
     vi.stubEnv("AI_MOCK_MODE", "false");
     vi.stubEnv("PRIMARY_KEY", "primary-key");
     vi.stubEnv("FALLBACK_KEY", "");
 
     const catalog = getLlmChatModelCatalogFromConfig(createConfig());
 
-    expect(catalog.providers).toHaveLength(1);
-    expect(catalog.providers[0].id).toBe("primary");
-    expect(catalog.providers[0].models).toEqual(["fast"]);
+    expect(catalog.providers).toEqual([
+      {
+        id: "primary",
+        displayName: "Primary",
+        configured: true,
+        models: ["fast"],
+        lockedModels: [],
+      },
+      {
+        id: "fallback",
+        displayName: "Fallback",
+        configured: false,
+        models: ["steady"],
+        lockedModels: [],
+      },
+    ]);
   });
 
-  it("limits free plan catalogs to official DeepSeek V4 models", () => {
+  it("exposes free models and locks the rest in the public catalog", () => {
     vi.stubEnv("DEEPSEEK_API_KEY", "deepseek-key");
     vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
 
@@ -242,7 +275,15 @@ describe("LLM router", () => {
         id: "deepseek",
         displayName: "DeepSeek",
         configured: true,
-        models: ["deepseek-v4-flash", "deepseek-v4-pro"],
+        models: ["deepseek-v4-flash"],
+        lockedModels: ["deepseek-v4-pro"],
+      },
+      {
+        id: "opencode-go",
+        displayName: "OpenCode Go",
+        configured: true,
+        models: ["kimi-k2.6", "mimo-v2.5-pro"],
+        lockedModels: ["deepseek-v4-pro", "qwen3.6-plus"],
       },
     ]);
   });
@@ -260,6 +301,26 @@ describe("LLM router", () => {
       code: "PLAN_MODEL_NOT_ALLOWED",
       status: 403,
     }));
+  });
+
+  it("allows Kimi and MiMo selections for free plan users", () => {
+    expect(
+      resolveLlmCandidatesFromConfig(
+        createFreePlanConfig(),
+        "branch_chat",
+        { providerId: "opencode-go", model: "kimi-k2.6" },
+        { requireJson: true, accountPlan: "free" },
+      )[0].model.model,
+    ).toBe("kimi-k2.6");
+
+    expect(
+      resolveLlmCandidatesFromConfig(
+        createFreePlanConfig(),
+        "branch_chat",
+        { providerId: "opencode-go", model: "mimo-v2.5-pro" },
+        { requireJson: true, accountPlan: "free" },
+      )[0].model.model,
+    ).toBe("mimo-v2.5-pro");
   });
 
   it("removes non-free fallbacks while keeping the official DeepSeek default", () => {
@@ -414,6 +475,14 @@ describe("LLM router", () => {
         displayName: "DeepSeek",
         configured: true,
         models: ["deepseek-v4-flash"],
+        lockedModels: ["deepseek-v4-pro"],
+      },
+      {
+        id: "opencode-go",
+        displayName: "OpenCode Go",
+        configured: true,
+        models: [],
+        lockedModels: ["deepseek-v4-pro", "qwen3.6-plus", "kimi-k2.6", "mimo-v2.5-pro"],
       },
     ]);
   });

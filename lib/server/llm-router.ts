@@ -56,6 +56,7 @@ export type ChatModelCatalog = {
     displayName: string;
     configured: boolean;
     models: string[];
+    lockedModels: string[];
   }>;
 };
 
@@ -605,8 +606,21 @@ export function getLlmChatModelCatalogFromConfig(
           )
           .sort((left, right) => left.sortOrder - right.sortOrder || left.model.localeCompare(right.model))
           .map((model) => model.model),
+        lockedModels: bundle.models
+          .filter(
+            (model) =>
+              model.providerId === provider.providerId &&
+              model.enabled &&
+              model.supportsJson &&
+              !isModelAllowed(model.providerId, model.model),
+          )
+          .sort((left, right) => left.sortOrder - right.sortOrder || left.model.localeCompare(right.model))
+          .map((model) => model.model),
       }))
-      .filter((provider) => provider.configured && provider.models.length > 0),
+      .filter(
+        (provider) =>
+          (provider.models.length > 0 || provider.lockedModels.length > 0),
+      ),
   };
 }
 

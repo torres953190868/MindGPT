@@ -45,10 +45,11 @@ export const PLAN_LIMITS_DISABLED = {
 } as const;
 
 const ACCOUNT_PLANS = new Set<AccountPlan>(["free", "pro", "max"]);
-const FREE_PLAN_DEEPSEEK_MODELS = new Set([
-  "deepseek-v4-flash",
-  "deepseek-v4-pro",
-]);
+const FREE_PLAN_MODEL_ACCESS = [
+  { providerId: "deepseek", model: "deepseek-v4-flash" },
+  { providerId: "opencode-go", model: "kimi-k2.6" },
+  { providerId: "opencode-go", model: "mimo-v2.5-pro" },
+] as const;
 
 export type PlanModelAccess = {
   plan: AccountPlan;
@@ -90,17 +91,18 @@ export function isModelAllowedForAccountPlan(
 ) {
   if (!isAccountPlanModelRestricted(plan)) return true;
 
-  return (
-    providerId.trim().toLowerCase() === "deepseek" &&
-    FREE_PLAN_DEEPSEEK_MODELS.has(model.trim())
+  return FREE_PLAN_MODEL_ACCESS.some(
+    (access) =>
+      access.providerId === providerId.trim().toLowerCase() &&
+      access.model === model.trim(),
   );
 }
 
 function getStaticFreePlanModelAccess(): PlanModelAccess[] {
-  return Array.from(FREE_PLAN_DEEPSEEK_MODELS).map((model) => ({
+  return FREE_PLAN_MODEL_ACCESS.map((access) => ({
     plan: "free",
-    providerId: "deepseek",
-    model,
+    providerId: access.providerId,
+    model: access.model,
   }));
 }
 

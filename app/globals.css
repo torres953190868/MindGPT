@@ -951,7 +951,7 @@ textarea {
 }
 
 [data-theme="warm-limestone"] .branchmind-primary-action {
-  border-radius: 8px;
+  border-radius: 9999px;
   background: var(--theme-brand-900);
   box-shadow: var(--theme-shadow-sm);
 }

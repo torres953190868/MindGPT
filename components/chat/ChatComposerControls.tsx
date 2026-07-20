@@ -10,11 +10,12 @@ import {
 } from "react";
 import {
   BookOpen,
-  BrainCircuit,
   ChevronDown,
   ChevronRight,
   Check,
+  Infinity as InfinityIcon,
   Loader2,
+  LockKeyhole,
   Paperclip,
   Plus,
   Upload,
@@ -29,6 +30,7 @@ import type { ChatAttachment, ChatModelSelection } from "@/lib/types";
 type ChatModelOption = ChatModelSelection & {
   providerName: string;
   configured: boolean;
+  locked?: boolean;
 };
 
 type ChatModelCatalogResponse = {
@@ -38,6 +40,7 @@ type ChatModelCatalogResponse = {
     displayName: string;
     configured: boolean;
     models: string[];
+    lockedModels?: string[];
   }>;
 };
 
@@ -117,6 +120,26 @@ const FALLBACK_MODEL_OPTIONS: ChatModelOption[] = [
   },
 ];
 
+const CATALOG_PLACEHOLDER_MODEL_OPTIONS: ChatModelOption[] = [
+  { providerId: "anthropic", providerName: "Anthropic", model: "claude-fable-5", configured: false, locked: true },
+  { providerId: "anthropic", providerName: "Anthropic", model: "claude-opus-4.6", configured: false, locked: true },
+  { providerId: "anthropic", providerName: "Anthropic", model: "claude-sonnet-5", configured: false, locked: true },
+  { providerId: "openai", providerName: "OpenAI", model: "gpt-5.6-sol", configured: false, locked: true },
+  { providerId: "openai", providerName: "OpenAI", model: "gpt-5.6-terra", configured: false, locked: true },
+  { providerId: "openai", providerName: "OpenAI", model: "gpt-5.6-luna", configured: false, locked: true },
+  { providerId: "moonshot", providerName: "Kimi", model: "kimi-k3", configured: false, locked: true },
+  { providerId: "zhipu", providerName: "Z.ai", model: "glm-5.2", configured: false, locked: true },
+];
+
+const AUTO_MODEL_SELECTION: ChatModelSelection = {
+  providerId: "deepseek",
+  model: "deepseek-v4-flash",
+};
+const AUTO_STORAGE_SELECTION: ChatModelSelection = {
+  providerId: "auto",
+  model: "auto",
+};
+
 const MODEL_LABEL_PARTS: Record<string, string> = {
   claude: "Claude",
   deepseek: "DeepSeek",
@@ -137,15 +160,90 @@ const MODEL_LABEL_OVERRIDES: Record<string, string> = {
   "deepseek-v4-flash": "DeepSeek V4 Flash",
   "deepseek-v4-pro": "DeepSeek V4 Pro",
   "glm-5.1": "GLM 5.1",
+  "glm-5.2": "GLM 5.2",
+  "gpt-5.6-luna": "GPT-5.6 Luna",
+  "gpt-5.6-sol": "GPT-5.6 Sol",
+  "gpt-5.6-terra": "GPT-5.6 Terra",
   "kimi-k2.6": "Kimi K2.6",
-  "mimo-v2.5-pro": "Mimo V2.5 Pro",
+  "kimi-k3": "Kimi K3",
+  "mimo-v2.5-pro": "MiMo V2.5 Pro",
   "qwen3.6-plus": "Qwen 3.6 Plus",
+};
+
+const MODEL_DISPLAY_PRIORITY: Record<string, number> = {
+  "claude-fable-5": 10,
+  "claude-opus-4.6": 20,
+  "claude-sonnet-5": 30,
+  "gpt-5.6-sol": 40,
+  "gpt-5.6-terra": 50,
+  "gpt-5.6-luna": 60,
+  "kimi-k3": 70,
+  "glm-5.2": 80,
+  "deepseek-v4-pro": 90,
+  "kimi-k2.6": 100,
+  "mimo-v2.5-pro": 110,
+  "deepseek-v4-flash": 120,
+  "glm-5.1": 130,
+  "qwen3.6-plus": 140,
+  "gemini-3.5-flash": 150,
 };
 
 type FloatingMenuPlacement = "above" | "below";
 
 function getMenuPlacementClass(placement: FloatingMenuPlacement) {
   return placement === "below" ? "absolute left-0 top-full z-50 mt-2" : "absolute bottom-full left-0 z-50 mb-2";
+}
+
+function ModelLogo({
+  model,
+  size = "md",
+}: {
+  model: string;
+  size?: "sm" | "md";
+}) {
+  const normalizedModel = model.toLowerCase();
+  const boxClass = size === "sm" ? "h-5 w-5" : "h-8 w-8";
+  const textClass = size === "sm" ? "text-[10px]" : "text-xs";
+  const logo = normalizedModel.includes("kimi")
+    ? { path: "/model-logos/kimi.svg", background: "#050505", scale: "68%" }
+    : normalizedModel.includes("mimo")
+      ? { path: "/model-logos/mimo.svg", background: "#ffffff", scale: "88%" }
+      : normalizedModel.includes("deepseek")
+        ? { path: "/model-logos/deepseek.svg", background: "#ffffff", scale: "72%" }
+        : normalizedModel.includes("glm")
+          ? { path: "/model-logos/glm.svg", background: "#ffffff", scale: "72%" }
+          : normalizedModel.includes("qwen")
+            ? { path: "/model-logos/qwen.svg", background: "#ffffff", scale: "72%" }
+            : normalizedModel.includes("gemini")
+              ? { path: "/model-logos/gemini.svg", background: "#ffffff", scale: "68%" }
+              : normalizedModel.includes("gpt") || normalizedModel.includes("openai")
+                ? { path: "/model-logos/openai.svg", background: "#ffffff", scale: "68%" }
+                : normalizedModel.includes("claude")
+                  ? { path: "/model-logos/claude.svg", background: "#ffffff", scale: "68%" }
+                  : null;
+
+  if (logo) {
+    return (
+      <span
+        aria-hidden="true"
+        className={`${boxClass} shrink-0 rounded-full border border-neutral-200 bg-center bg-no-repeat`}
+        style={{
+          backgroundColor: logo.background,
+          backgroundImage: `url("${logo.path}")`,
+          backgroundSize: logo.scale,
+        }}
+      />
+    );
+  }
+
+  return (
+    <span
+      aria-hidden="true"
+      className={`grid ${boxClass} shrink-0 place-items-center rounded-full border border-neutral-200 bg-white font-black text-neutral-700 ${textClass}`}
+    >
+      {model.slice(0, 1).toUpperCase()}
+    </span>
+  );
 }
 
 function stopFloatingMenuWheelPropagation(event: ReactWheelEvent<HTMLDivElement>) {
@@ -403,6 +501,13 @@ function readStoredModelSelection() {
   }
 }
 
+function isAutoModelSelection(selection: ChatModelSelection | null) {
+  return (
+    selection?.providerId === AUTO_STORAGE_SELECTION.providerId &&
+    selection.model === AUTO_STORAGE_SELECTION.model
+  );
+}
+
 function writeStoredModelSelection(selection: ChatModelSelection) {
   if (typeof window === "undefined") return;
 
@@ -422,23 +527,54 @@ function writeStoredModelSelection(selection: ChatModelSelection) {
 function normalizeModelCatalog(data: ChatModelCatalogResponse | null) {
   if (!data?.providers?.length) return null;
 
-  const options = data.providers.flatMap((provider) =>
-    provider.models.map((model) => ({
-      providerId: provider.id,
-      providerName: provider.displayName,
-      model,
-      configured: provider.configured,
-    })),
-  );
+  const rawOptions: ChatModelOption[] = [
+    ...data.providers.flatMap((provider) => [
+      ...provider.models.map((model) => ({
+        providerId: provider.id,
+        providerName: provider.displayName,
+        model,
+        configured: provider.configured,
+      })),
+      ...(provider.lockedModels ?? []).map((model) => ({
+        providerId: provider.id,
+        providerName: provider.displayName,
+        model,
+        configured: provider.configured,
+        locked: true,
+      })),
+    ]),
+    ...CATALOG_PLACEHOLDER_MODEL_OPTIONS,
+  ];
+
+  const optionScore = (option: ChatModelOption) =>
+    (option.locked ? 0 : 4) +
+    (option.configured ? 2 : 0) +
+    (option.providerId === "deepseek" ? 1 : 0);
+  const optionsByModel = new Map<string, ChatModelOption>();
+  rawOptions.forEach((option) => {
+    const key = option.model.toLowerCase();
+    const current = optionsByModel.get(key);
+    if (!current || optionScore(option) > optionScore(current)) {
+      optionsByModel.set(key, option);
+    }
+  });
+  const options = Array.from(optionsByModel.values());
+
+  options.sort((left, right) => {
+    const leftPriority = MODEL_DISPLAY_PRIORITY[left.model.toLowerCase()] ?? 1_000;
+    const rightPriority = MODEL_DISPLAY_PRIORITY[right.model.toLowerCase()] ?? 1_000;
+    return leftPriority - rightPriority || left.model.localeCompare(right.model);
+  });
 
   if (options.length === 0) return null;
 
   const responseDefault = data.defaultSelection;
+  const availableOptions = options.filter((option) => !option.locked && option.configured);
   const defaultSelection =
     responseDefault &&
-    options.some((option) => matchesModelSelection(option, responseDefault))
+    availableOptions.some((option) => matchesModelSelection(option, responseDefault))
       ? responseDefault
-      : options[0];
+      : availableOptions[0] ?? options[0];
 
   return {
     options,
@@ -469,8 +605,9 @@ export function useChatComposerControls({
   const [modelOptions, setModelOptions] =
     useState<ChatModelOption[]>(FALLBACK_MODEL_OPTIONS);
   const [selectedModel, setSelectedModel] = useState<ChatModelSelection>(
-    FALLBACK_MODEL_SELECTION,
+    AUTO_MODEL_SELECTION,
   );
+  const [isAutoSelected, setIsAutoSelected] = useState(true);
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
   const [isAttachmentMenuOpen, setIsAttachmentMenuOpen] = useState(false);
   const [isKnowledgeMenuOpen, setIsKnowledgeMenuOpen] = useState(false);
@@ -488,9 +625,9 @@ export function useChatComposerControls({
   const selectedModelOption = modelOptions.find((option) =>
     matchesModelSelection(option, selectedModel),
   );
-  const selectedModelLabel = formatModelLabel(
-    selectedModelOption?.model ?? selectedModel.model,
-  );
+  const selectedModelLabel = isAutoSelected
+    ? copy.chat.autoModel
+    : formatModelLabel(selectedModelOption?.model ?? selectedModel.model);
   const controlsBusy = isBusy || isPreparingAttachments;
   const indexedKnowledgeDocuments = knowledgeDocuments.filter(
     (document) => document.status === "indexed",
@@ -514,7 +651,14 @@ export function useChatComposerControls({
   useEffect(() => {
     let cancelled = false;
     const storedSelection = readStoredModelSelection();
-    if (storedSelection) setSelectedModel(storedSelection);
+    const storedAutoSelection = isAutoModelSelection(storedSelection);
+    if (storedAutoSelection || !storedSelection) {
+      setIsAutoSelected(true);
+      setSelectedModel(AUTO_MODEL_SELECTION);
+    } else {
+      setIsAutoSelected(false);
+      setSelectedModel(storedSelection);
+    }
 
     async function loadModelOptions() {
       try {
@@ -533,7 +677,14 @@ export function useChatComposerControls({
         setSelectedModel((current) => {
           const storedSelectionIsValid =
             storedSelection &&
-            catalog.options.some((option) => matchesModelSelection(option, storedSelection));
+            !storedAutoSelection &&
+            catalog.options.some(
+              (option) =>
+                !option.locked &&
+                option.configured &&
+                matchesModelSelection(option, storedSelection),
+            );
+          if (storedAutoSelection || !storedSelection) return AUTO_MODEL_SELECTION;
           if (storedSelectionIsValid) return storedSelection;
 
           const currentSelectionIsValid = catalog.options.some((option) =>
@@ -546,8 +697,9 @@ export function useChatComposerControls({
             return current;
           }
 
-          writeStoredModelSelection(catalog.defaultSelection);
-          return catalog.defaultSelection;
+          setIsAutoSelected(true);
+          writeStoredModelSelection(AUTO_STORAGE_SELECTION);
+          return AUTO_MODEL_SELECTION;
         });
       } catch {
         // Keep the local default; the server still validates the selected model on send.
@@ -798,13 +950,24 @@ export function useChatComposerControls({
   }
 
   function selectModel(option: ChatModelOption) {
-    if (!option.configured || controlsBusy) return;
+    if (!option.configured || option.locked || controlsBusy) return;
     const selection = {
       providerId: option.providerId,
       model: option.model,
     };
+    setIsAutoSelected(false);
     setSelectedModel(selection);
     writeStoredModelSelection(selection);
+    setIsModelMenuOpen(false);
+    setIsAttachmentMenuOpen(false);
+    setIsKnowledgeMenuOpen(false);
+  }
+
+  function selectAutoModel() {
+    if (controlsBusy) return;
+    setIsAutoSelected(true);
+    setSelectedModel(AUTO_MODEL_SELECTION);
+    writeStoredModelSelection(AUTO_STORAGE_SELECTION);
     setIsModelMenuOpen(false);
     setIsAttachmentMenuOpen(false);
     setIsKnowledgeMenuOpen(false);
@@ -928,6 +1091,8 @@ export function useChatComposerControls({
     selectModel,
     selectedModel,
     selectedModelLabel,
+    isAutoSelected,
+    selectAutoModel,
     setIsKnowledgeMenuOpen,
     toggleAttachmentMenu,
     toggleModelMenu,
@@ -1216,7 +1381,11 @@ export function ModelSelectorButton({
         data-testid="chat-model-selector-button"
         className="inline-flex h-9 w-full min-w-0 max-w-[150px] items-center justify-center gap-1.5 rounded-[14px] border border-brand-200 bg-white/82 px-2.5 text-xs font-black text-neutral-800 shadow-sm transition hover:border-brand-400 hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        <BrainCircuit size={14} className="shrink-0 text-brand-600" />
+        {controls.isAutoSelected ? (
+          <InfinityIcon size={18} strokeWidth={2.4} className="shrink-0 text-neutral-800" />
+        ) : (
+          <ModelLogo model={controls.selectedModel.model} size="sm" />
+        )}
         <span className="min-w-0 truncate">{controls.selectedModelLabel}</span>
         <ChevronDown
           size={13}
@@ -1231,42 +1400,67 @@ export function ModelSelectorButton({
           aria-label={copy.chat.chatModels}
           data-testid="chat-model-menu"
           onWheel={stopFloatingMenuWheelPropagation}
-          className={`${getMenuPlacementClass(placement)} nowheel max-h-72 w-72 overflow-auto overscroll-contain rounded-[20px] border border-white/80 bg-white/95 p-2 shadow-2xl shadow-brand-100/55 backdrop-blur`}
+          className={`${getMenuPlacementClass(placement)} nowheel max-h-[min(32rem,calc(100svh-5rem))] w-[min(22rem,calc(100vw-1rem))] overflow-auto overscroll-contain rounded-[18px] border border-neutral-200 bg-white/95 p-2 shadow-xl shadow-neutral-900/10 backdrop-blur`}
         >
+          <button
+            type="button"
+            role="option"
+            aria-selected={controls.isAutoSelected}
+            disabled={controls.controlsBusy}
+            onClick={controls.selectAutoModel}
+            data-testid="chat-model-auto-option"
+            className={`mb-1 flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left transition focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-45 ${
+              controls.isAutoSelected
+                ? "bg-neutral-100 text-neutral-900"
+                : "text-neutral-700 hover:bg-brand-50"
+            }`}
+          >
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-neutral-200 bg-white text-neutral-800">
+              <InfinityIcon size={21} strokeWidth={2.2} />
+            </span>
+            <span className="min-w-0 flex-1 truncate text-base font-semibold">{copy.chat.autoModel}</span>
+            {controls.isAutoSelected && <Check size={18} className="shrink-0 text-neutral-900" />}
+          </button>
           {controls.modelOptions.map((option) => {
             const isSelected = matchesModelSelection(option, controls.selectedModel);
+            const isLocked = option.locked || !option.configured;
 
             return (
               <button
                 key={`${option.providerId}:${option.model}`}
                 type="button"
                 role="option"
-                aria-selected={isSelected}
-                disabled={!option.configured || controls.controlsBusy}
+                aria-selected={!controls.isAutoSelected && isSelected}
+                aria-disabled={isLocked || controls.controlsBusy}
+                disabled={controls.controlsBusy}
                 onClick={() => controls.selectModel(option)}
                 data-testid="chat-model-option"
                 className={`flex w-full min-w-0 items-center gap-3 rounded-[14px] px-3 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-45 ${
-                  isSelected
+                  isLocked
+                    ? "cursor-not-allowed text-neutral-600"
+                    : !controls.isAutoSelected && isSelected
                     ? "bg-brand-50 text-brand-800"
                     : "text-neutral-700 hover:bg-brand-50"
                 }`}
               >
-                <span
-                  aria-hidden="true"
-                  className="grid h-7 w-7 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-xs font-black text-brand-600"
-                >
-                  {option.providerName.slice(0, 1)}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-black">
+                <ModelLogo model={option.model} size="md" />
+                <span className="min-w-0 flex-1 truncate text-base font-semibold">
                     {formatModelLabel(option.model)}
-                  </span>
-                  <span className="block truncate text-xs font-bold text-neutral-500">
-                    {option.providerName}
-                    {!option.configured ? copy.chat.notConfigured : ""}
-                  </span>
                 </span>
-                {isSelected && <Check size={15} className="shrink-0" />}
+                {isLocked ? (
+                  <LockKeyhole
+                    size={18}
+                    className="shrink-0 text-neutral-300"
+                    aria-label={
+                      !option.configured
+                        ? copy.chat.modelApiNotConfigured
+                        : copy.chat.modelLocked
+                    }
+                  />
+                ) : (
+                  !controls.isAutoSelected &&
+                  isSelected && <Check size={18} className="shrink-0 text-neutral-900" />
+                )}
               </button>
             );
           })}

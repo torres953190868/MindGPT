@@ -20,14 +20,15 @@ describe("getPlanModelAccess", () => {
     expect(getSupabaseAdminClientMock).not.toHaveBeenCalled();
   });
 
-  it("returns the static DeepSeek fallback in local/dev mode", async () => {
+  it("returns the static free-plan model set in local/dev mode", async () => {
     hasSupabaseServerConfigMock.mockReturnValue(false);
 
     const access = await getPlanModelAccess("free");
 
     expect(access).toEqual([
       { plan: "free", providerId: "deepseek", model: "deepseek-v4-flash" },
-      { plan: "free", providerId: "deepseek", model: "deepseek-v4-pro" },
+      { plan: "free", providerId: "opencode-go", model: "kimi-k2.6" },
+      { plan: "free", providerId: "opencode-go", model: "mimo-v2.5-pro" },
     ]);
     expect(getSupabaseAdminClientMock).not.toHaveBeenCalled();
   });
@@ -68,7 +69,7 @@ describe("getPlanModelAccess", () => {
     ]);
   });
 
-  it("falls back to static DeepSeek models when the DB query fails", async () => {
+  it("falls back to the static free-plan model set when the DB query fails", async () => {
     hasSupabaseServerConfigMock.mockReturnValue(true);
     const consoleErrorSpy = vi
       .spyOn(console, "error")
@@ -90,7 +91,8 @@ describe("getPlanModelAccess", () => {
 
     expect(access).toEqual([
       { plan: "free", providerId: "deepseek", model: "deepseek-v4-flash" },
-      { plan: "free", providerId: "deepseek", model: "deepseek-v4-pro" },
+      { plan: "free", providerId: "opencode-go", model: "kimi-k2.6" },
+      { plan: "free", providerId: "opencode-go", model: "mimo-v2.5-pro" },
     ]);
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       "BranchMind plan model access lookup failed",
@@ -103,7 +105,7 @@ describe("getPlanModelAccess", () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it("falls back to static DeepSeek models when the DB table has no rows", async () => {
+  it("falls back to the static free-plan model set when the DB table has no rows", async () => {
     hasSupabaseServerConfigMock.mockReturnValue(true);
     getSupabaseAdminClientMock.mockReturnValue({
       from: vi.fn(() => ({
@@ -117,7 +119,8 @@ describe("getPlanModelAccess", () => {
 
     expect(access).toEqual([
       { plan: "free", providerId: "deepseek", model: "deepseek-v4-flash" },
-      { plan: "free", providerId: "deepseek", model: "deepseek-v4-pro" },
+      { plan: "free", providerId: "opencode-go", model: "kimi-k2.6" },
+      { plan: "free", providerId: "opencode-go", model: "mimo-v2.5-pro" },
     ]);
   });
 });
