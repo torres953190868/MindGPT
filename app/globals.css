@@ -450,6 +450,50 @@ textarea {
     minmax(0, 1fr);
 }
 
+.message-instruction-input-scrollable::-webkit-scrollbar {
+  width: 6px;
+}
+
+.message-instruction-input-scrollable::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.message-instruction-input-scrollable::-webkit-scrollbar-thumb {
+  background-color: var(--theme-neutral-300);
+  border-radius: 3px;
+}
+
+.message-instruction-input-scrollable::-webkit-scrollbar-thumb:hover {
+  background-color: var(--theme-text-muted);
+}
+
+.message-instruction-input-scrollable {
+  scrollbar-width: thin;
+  scrollbar-color: var(--theme-neutral-300) transparent;
+}
+
+.conversation-history-scrollable::-webkit-scrollbar {
+  width: 6px;
+}
+
+.conversation-history-scrollable::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.conversation-history-scrollable::-webkit-scrollbar-thumb {
+  background-color: var(--theme-neutral-300);
+  border-radius: 3px;
+}
+
+.conversation-history-scrollable::-webkit-scrollbar-thumb:hover {
+  background-color: var(--theme-text-muted);
+}
+
+.conversation-history-scrollable {
+  scrollbar-width: thin;
+  scrollbar-color: var(--theme-neutral-300) transparent;
+}
+
 .branchmind-projects-surface {
   background-color: var(--projects-surface-background);
   background-image:

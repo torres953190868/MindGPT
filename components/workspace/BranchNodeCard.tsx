@@ -30,6 +30,8 @@ export type InlineNodeComposerData = {
   error: string | null;
   placeholder: string;
   submitLabel: string;
+  autoFocus?: boolean;
+  isAwaitingPersistence?: boolean;
   variant?: "default" | "home";
   suggestions?: string[];
   suggestionsAnimationPhase?: "idle" | "leaving" | "entering";
@@ -338,8 +340,8 @@ export function BranchNodeCard({ data }: NodeProps) {
               onSelect(mindNode.id);
               onCreate(mindNode.id, "branch");
             }}
-            aria-label={copy.workspace.branchRight}
-            title={copy.workspace.branchRight}
+            aria-label={copy.workspace.newBranchRight}
+            title={copy.workspace.newBranchRight}
             className={`branch-node-quick-action branch-node-quick-action-branch nodrag nopan grid h-9 w-9 place-items-center rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 ${getHighlightedActionClass(
               isBranchQuickActionHighlighted,
               "bg-brand-100 text-brand-700",
@@ -393,6 +395,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
   });
   const displayError = composerControls.attachmentError ?? (submitted ? composer.error : null);
   const isComposerBusy = composerControls.controlsBusy;
+  const isSubmitPending = composer.isAwaitingPersistence ?? false;
   const errorId = `inline-node-composer-${composer.nodeId}-error`;
   const isHomeComposer = composer.variant === "home";
   const suggestionsAnimationPhase = composer.suggestionsAnimationPhase ?? "idle";
@@ -400,7 +403,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
 
   async function submitComposer() {
     const trimmed = input.trim();
-    if (!trimmed || isComposerBusy) return;
+    if (!trimmed || isComposerBusy || isSubmitPending) return;
 
     if (composer.onBeforeSubmit) {
       setIsCheckingSubmit(true);
@@ -453,7 +456,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
     return (
       <form
         aria-label={copy.workspace.messageComposer}
-        aria-busy={isComposerBusy}
+        aria-busy={isComposerBusy || isSubmitPending}
         aria-describedby={displayError ? errorId : undefined}
         data-testid="message-composer"
         onSubmit={handleSubmit}
@@ -482,6 +485,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleInstructionKeyDown}
+          autoFocus={composer.autoFocus}
           disabled={isComposerBusy}
           aria-label={copy.workspace.messageInstruction}
           aria-describedby={displayError ? errorId : undefined}
@@ -518,12 +522,12 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
           )}
           <button
             type="submit"
-            disabled={isComposerBusy || !input.trim()}
+            disabled={isComposerBusy || isSubmitPending || !input.trim()}
             aria-label={copy.workspace.send}
             data-testid="send-message-button"
             className="branchmind-primary-action home-inline-send-button inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-600 p-0 text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {composerControls.isPreparingAttachments || composer.isBusy || isCheckingSubmit ? (
+            {composerControls.isPreparingAttachments || composer.isBusy || isCheckingSubmit || isSubmitPending ? (
               <Loader2 size={15} className="animate-spin" />
             ) : (
               <Send size={15} />
@@ -547,7 +551,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
   return (
     <form
       aria-label={copy.workspace.messageComposer}
-      aria-busy={isComposerBusy}
+      aria-busy={isComposerBusy || isSubmitPending}
       aria-describedby={displayError ? errorId : undefined}
       data-testid="message-composer"
       onSubmit={handleSubmit}
@@ -571,6 +575,8 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
         <textarea
           value={input}
           onChange={(event) => setInput(event.target.value)}
+          onKeyDown={handleInstructionKeyDown}
+          autoFocus={composer.autoFocus}
           disabled={isComposerBusy}
           aria-label={copy.workspace.messageInstruction}
           aria-describedby={displayError ? errorId : undefined}
@@ -586,12 +592,12 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
         <div className="absolute bottom-3 right-3">
           <button
             type="submit"
-            disabled={isComposerBusy || !input.trim()}
+            disabled={isComposerBusy || isSubmitPending || !input.trim()}
             aria-label={copy.workspace.send}
             data-testid="send-message-button"
             className="branchmind-primary-action inline-flex h-9 w-9 items-center justify-center rounded-full bg-brand-600 p-0 text-white shadow-sm transition hover:bg-brand-700 focus:outline-none focus:ring-4 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {composerControls.isPreparingAttachments || composer.isBusy || isCheckingSubmit ? (
+            {composerControls.isPreparingAttachments || composer.isBusy || isCheckingSubmit || isSubmitPending ? (
               <Loader2 size={14} className="animate-spin" />
             ) : (
               <Send size={14} />

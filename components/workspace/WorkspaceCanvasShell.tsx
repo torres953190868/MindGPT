@@ -119,7 +119,7 @@ type WorkspaceCanvasShellProps = {
   streamingNodeId: string | null;
   streamingMessageId: string | null;
   onSelectNode: (nodeId: string) => void;
-  onQuickCreateNode: (nodeId: string, mode: "continue" | "branch") => void;
+  onQuickCreateNode: (nodeId: string, mode: "continue" | "branch") => void | Promise<void>;
   onCreateNode: CreateNodeHandler;
   onPopulateNode: PopulateNodeHandler;
   onEditUserMessage: EditUserMessageHandler;

@@ -56,7 +56,7 @@ type MindMapProps = {
   project: Project;
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
-  onCreateNode: (nodeId: string, mode: "continue" | "branch") => void;
+  onCreateNode: (nodeId: string, mode: "continue" | "branch") => void | Promise<void>;
   onToggleNode: (nodeId: string) => void;
   onMoveNode: (nodeId: string, position: { x: number; y: number }) => void;
   creatingNodeId: string | null;

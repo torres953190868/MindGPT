@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLanguage } from "@/components/language/LanguageProvider";
 import { ProjectLauncher } from "@/components/ProjectLauncher";
 import type { ChatAttachment, ChatModelSelection, ChatSkill } from "@/lib/types";
 import { useBranchMindStore } from "@/store/useBranchMindStore";
 import { WorkspaceCanvasShell } from "./WorkspaceCanvasShell";
+import type { InlineNodeComposerData } from "./BranchNodeCard";
 
 type WorkspaceShellProps = {
   projectId: string;
@@ -45,6 +46,10 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
   const updateNodePosition = useBranchMindStore((state) => state.updateNodePosition);
   const toggleNodeCollapsed = useBranchMindStore((state) => state.toggleNodeCollapsed);
   const deleteNode = useBranchMindStore((state) => state.deleteNode);
+  const [quickBranchNodeId, setQuickBranchNodeId] = useState<string | null>(null);
+  const [quickBranchPersistingNodeId, setQuickBranchPersistingNodeId] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     hydrate();
@@ -66,6 +71,12 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
     startPendingInitialProjectStream(projectId);
   }, [hydrated, project, projectId, startPendingInitialProjectStream]);
 
+  useEffect(() => {
+    if (quickBranchNodeId && !project?.nodes[quickBranchNodeId]) {
+      setQuickBranchNodeId(null);
+    }
+  }, [project, quickBranchNodeId]);
+
   const isProjectSyncBlocking =
     pendingProjectSync !== null && pendingProjectSync.status !== "synced";
   const pendingSyncNodeId = isProjectSyncBlocking ? pendingProjectSync.nodeId : null;
@@ -76,14 +87,23 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
     (isProjectSyncBlocking ? pendingProjectSync.assistantMessageId : null);
 
   const handleQuickCreate = useCallback(
-    (nodeId: string, mode: "continue" | "branch") => {
+    async (nodeId: string, mode: "continue" | "branch") => {
       if (mode === "branch") {
-        void createBlankChildNode(nodeId, mode);
+        const creation = createBlankChildNode(nodeId, mode);
+        if (!creation) return;
+
+        setQuickBranchNodeId(creation.nodeId);
+        setQuickBranchPersistingNodeId(creation.nodeId);
+        void creation.persisted.then(() => {
+          setQuickBranchPersistingNodeId((current) =>
+            current === creation.nodeId ? null : current,
+          );
+        });
         return;
       }
 
       const instruction = copy.workspace.initialInstruction;
-      void createChildNode(nodeId, mode, instruction);
+      await createChildNode(nodeId, mode, instruction);
     },
     [copy.workspace.initialInstruction, createBlankChildNode, createChildNode],
   );
@@ -110,6 +130,44 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
     },
     [createChildNode],
   );
+
+  const inlineNodeComposer = useMemo<InlineNodeComposerData | undefined>(() => {
+    if (!quickBranchNodeId) return undefined;
+
+    return {
+      nodeId: quickBranchNodeId,
+      isBusy:
+        effectiveCreatingNodeId === quickBranchNodeId ||
+        effectiveStreamingNodeId === quickBranchNodeId,
+      error: aiError,
+      placeholder: copy.workspace.askNextQuestion,
+      submitLabel: copy.workspace.send,
+      autoFocus: true,
+      isAwaitingPersistence: quickBranchPersistingNodeId === quickBranchNodeId,
+      onSubmit: async (instruction, attachments, modelSelection, skill) => {
+        const populated = await populateBlankNode(
+          quickBranchNodeId,
+          instruction,
+          attachments,
+          modelSelection,
+          skill,
+        );
+        if (!populated) return null;
+
+        setQuickBranchNodeId(null);
+        return quickBranchNodeId;
+      },
+    };
+  }, [
+    aiError,
+    copy.workspace.askNextQuestion,
+    copy.workspace.send,
+    effectiveCreatingNodeId,
+    effectiveStreamingNodeId,
+    populateBlankNode,
+    quickBranchNodeId,
+    quickBranchPersistingNodeId,
+  ]);
 
   if (!hydrated) {
     return (
@@ -162,6 +220,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
       streamingMessageId={effectiveStreamingMessageId}
       onSelectNode={selectNode}
       onQuickCreateNode={handleQuickCreate}
+      inlineNodeComposer={inlineNodeComposer}
       onCreateNode={handleCreateFromPanel}
       onPopulateNode={populateBlankNode}
       onEditUserMessage={editUserMessage}

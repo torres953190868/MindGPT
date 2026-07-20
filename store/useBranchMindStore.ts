@@ -11,6 +11,7 @@ import {
   createTextDeltaBatch,
   readNodeStreamingEvents,
   removeDraftChildNode,
+  removeNodeProject,
 } from "@/lib/client/node-streaming";
 import {
   createPendingProjectSyncRecord,
@@ -61,6 +62,11 @@ type PendingNodePositionSyncRecord = {
   updatedAt: string;
 };
 
+type BlankChildNodeCreation = {
+  nodeId: string;
+  persisted: Promise<string | null>;
+};
+
 type StoredPendingNodePositionSyncs = {
   version: 1;
   records: PendingNodePositionSyncRecord[];
@@ -103,7 +109,7 @@ type BranchMindState = {
   createBlankChildNode: (
     parentId: string,
     mode: Exclude<BranchType, "root">,
-  ) => Promise<string | null>;
+  ) => BlankChildNodeCreation | null;
   populateBlankNode: (
     nodeId: string,
     instruction: string,
@@ -1457,7 +1463,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
     return draft.node.id;
   },
 
-  createBlankChildNode: async (parentId, mode) => {
+  createBlankChildNode: (parentId, mode) => {
     const state = get();
     const project = state.projects.find((item) => item.id === state.activeProjectId);
     const parent = project?.nodes[parentId];
@@ -1482,39 +1488,43 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
       aiError: null,
     });
 
-    try {
-      const response = await fetch(`/api/projects/${project.id}/nodes`, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          parentId,
-          mode,
-          blank: true,
-          nodeId: draft.node.id,
-        }),
-      });
-      const data = await readJson<UpdateNodeResponse>(response);
-      const selectedNodeId = data.node?.id ?? draft.node.id;
+    const persisted = (async () => {
+      try {
+        const response = await fetch(`/api/projects/${project.id}/nodes`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            parentId,
+            mode,
+            blank: true,
+            nodeId: draft.node.id,
+          }),
+        });
+        const data = await readJson<UpdateNodeResponse>(response);
+        const selectedNodeId = data.node?.id ?? draft.node.id;
 
-      set({
-        projects: replaceProject(get().projects, data.project),
-        selectedNodeId,
-        creatingNodeId: null,
-        streamingMessageId: null,
-      });
-      return selectedNodeId;
-    } catch (error) {
-      set((current) => ({
-        projects: replaceProject(current.projects, project),
-        selectedNodeId:
-          current.selectedNodeId === draft.node.id ? parentId : current.selectedNodeId,
-        creatingNodeId: null,
-        streamingMessageId: null,
-        aiError: getErrorMessage(error),
-      }));
-      return null;
-    }
+        set({
+          projects: replaceProject(get().projects, data.project),
+          selectedNodeId,
+          creatingNodeId: null,
+          streamingMessageId: null,
+        });
+        return selectedNodeId;
+      } catch (error) {
+        set((current) => ({
+          projects: replaceProject(current.projects, project),
+          selectedNodeId:
+            current.selectedNodeId === draft.node.id ? parentId : current.selectedNodeId,
+          creatingNodeId: null,
+          streamingMessageId: null,
+          aiError: getErrorMessage(error),
+        }));
+        return null;
+      }
+    })();
+
+    return { nodeId: draft.node.id, persisted };
   },
 
   populateBlankNode: async (nodeId, instruction, attachments, modelSelection, skill) => {
@@ -1762,8 +1772,24 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
   deleteNode: async (nodeId) => {
     const state = get();
     const projectId = state.activeProjectId;
-    if (!projectId) return;
+    const project = state.projects.find((item) => item.id === projectId);
+    if (!projectId || !project) return;
     if (isProjectWaitingForSync(state, projectId)) return;
+
+    const optimisticDelete = removeNodeProject(project, nodeId);
+    if (!optimisticDelete) return;
+
+    const selectedNodeId =
+      state.selectedNodeId && !optimisticDelete.project.nodes[state.selectedNodeId]
+        ? optimisticDelete.parentId
+        : state.selectedNodeId;
+
+    set({
+      projects: replaceProject(state.projects, optimisticDelete.project),
+      selectedNodeId,
+      creatingNodeId: nodeId,
+      aiError: null,
+    });
 
     try {
       const response = await fetch(`/api/projects/${projectId}/nodes/${nodeId}`, {
@@ -1774,9 +1800,15 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
       set({
         projects: replaceProject(get().projects, data.project),
         selectedNodeId: data.selectedNodeId ?? null,
+        creatingNodeId: null,
       });
     } catch (error) {
-      set({ aiError: getErrorMessage(error) });
+      set({
+        projects: replaceProject(get().projects, project),
+        selectedNodeId: state.selectedNodeId,
+        creatingNodeId: null,
+        aiError: getErrorMessage(error),
+      });
     }
   },
 }));

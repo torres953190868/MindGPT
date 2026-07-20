@@ -1017,6 +1017,7 @@ export function NodeDetailPanel({
           role="separator"
           aria-label={copy.workspace.resizeConversationHeader}
           aria-orientation="horizontal"
+          data-testid="resize-conversation-header-handle"
           onPointerDown={handleHeaderResizePointerDown}
           onMouseDown={handleHeaderResizeMouseDown}
           className="absolute -bottom-2 left-0 z-10 h-4 w-full cursor-row-resize transition hover:bg-brand-50/40 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
@@ -1032,7 +1033,7 @@ export function NodeDetailPanel({
         onKeyUp={captureSelectionAction}
         onMouseUp={captureSelectionAction}
         onTouchEnd={captureSelectionAction}
-        className="relative min-h-0 flex-1 space-y-3 overflow-auto overscroll-contain py-4 pr-1"
+        className="conversation-history-scrollable relative min-h-0 flex-1 space-y-3 overflow-auto overscroll-contain py-4 pr-1"
       >
         {displayMessages.length === 0 && node ? (
           <NodeBriefCard node={node} />
@@ -1202,6 +1203,7 @@ export function NodeDetailPanel({
             role="separator"
             aria-label={copy.workspace.resizeConversationComposer}
             aria-orientation="horizontal"
+            data-testid="resize-conversation-composer-handle"
             onPointerDown={handleComposerResizePointerDown}
             onMouseDown={handleComposerResizeMouseDown}
             className="absolute -top-2 left-0 z-10 h-4 w-full cursor-row-resize transition hover:bg-brand-50/40 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
@@ -1212,9 +1214,9 @@ export function NodeDetailPanel({
             aria-describedby={displayError ? errorId : isComposerBusy ? statusId : undefined}
             data-testid="message-composer"
             onSubmit={handleSubmit}
-            className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto pt-3"
+            className="flex h-full min-h-0 flex-1 flex-col justify-end overflow-hidden pb-3"
           >
-          <div className="mt-auto flex shrink-0 flex-col gap-3">
+          <div className="flex shrink-0 flex-col gap-3">
           {!isInitialSubmit && !isBlankNode && (
             <div
               role="group"
@@ -1271,7 +1273,7 @@ export function NodeDetailPanel({
               onRemove={composerControls.removeActiveSkill}
             />
           )}
-          <div className="node-detail-composer-box relative min-h-[132px] shrink-0 rounded-[20px] border border-neutral-200/80 bg-white shadow-sm transition focus-within:border-brand-300 focus-within:shadow-md focus-within:shadow-brand-100/20 focus-within:ring-4 focus-within:ring-brand-100/30">
+          <div className="node-detail-composer-box relative h-[132px] shrink-0 rounded-[20px] border border-neutral-200/80 bg-white shadow-sm transition focus-within:border-brand-300 focus-within:shadow-md focus-within:shadow-brand-100/20 focus-within:ring-4 focus-within:ring-brand-100/30">
             {hasSelectedTextContext && (
               <div className="px-3 pt-3">
                 <div
@@ -1303,7 +1305,7 @@ export function NodeDetailPanel({
               data-testid="message-instruction-input"
               placeholder={resolvedComposerPlaceholder}
               rows={3}
-              className={`h-full min-h-[132px] w-full resize-none bg-transparent px-3 pb-16 text-sm leading-6 text-neutral-900 outline-none placeholder:text-neutral-400 transition disabled:cursor-not-allowed disabled:opacity-65 sm:px-4 ${
+              className={`message-instruction-input-scrollable h-full min-h-0 w-full overflow-y-auto resize-none bg-transparent px-3 pb-16 text-sm leading-6 text-neutral-900 outline-none placeholder:text-neutral-400 transition disabled:cursor-not-allowed disabled:opacity-65 sm:px-4 ${
                 hasSelectedTextContext ? "pt-3" : "pt-4"
               }`}
             />

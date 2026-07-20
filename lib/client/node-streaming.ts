@@ -295,6 +295,45 @@ export function removeDraftChildNode(project: Project, nodeId: string) {
   };
 }
 
+export function removeNodeProject(project: Project, nodeId: string) {
+  const node = project.nodes[nodeId];
+  if (!node || node.parentId === null) return null;
+
+  const idsToDelete = new Set<string>();
+  const nodesToVisit = [nodeId];
+
+  while (nodesToVisit.length > 0) {
+    const currentNodeId = nodesToVisit.pop();
+    if (!currentNodeId || idsToDelete.has(currentNodeId)) continue;
+
+    idsToDelete.add(currentNodeId);
+    project.nodes[currentNodeId]?.children.forEach((childId) => {
+      nodesToVisit.push(childId);
+    });
+  }
+
+  const nodes = { ...project.nodes };
+  idsToDelete.forEach((id) => delete nodes[id]);
+
+  const parent = nodes[node.parentId];
+  if (parent) {
+    nodes[node.parentId] = {
+      ...parent,
+      children: parent.children.filter((childId) => childId !== nodeId),
+      updatedAt: now(),
+    };
+  }
+
+  return {
+    parentId: node.parentId,
+    project: {
+      ...project,
+      nodes,
+      updatedAt: now(),
+    },
+  };
+}
+
 function getErrorString(payload: Record<string, unknown>, key: string) {
   const value = payload[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
