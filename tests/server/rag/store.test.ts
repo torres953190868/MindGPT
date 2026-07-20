@@ -382,4 +382,27 @@ describe("rag store", () => {
       .filter(Array.isArray);
     expect(batchedInserts.map((rows) => rows.length)).toEqual([25, 25, 11]);
   });
+
+  it("rejects the file backend in production unless explicitly allowed", async () => {
+    const { getRagRepository } = await import("@/lib/server/rag/store");
+
+    try {
+      process.env.BRANCHMIND_RAG_BACKEND = "file";
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("BRANCHMIND_ALLOW_FILE_STORE_IN_PRODUCTION", "");
+
+      expect(() => getRagRepository()).toThrow(
+        "File RAG storage is not allowed in production.",
+      );
+
+      vi.stubEnv("BRANCHMIND_ALLOW_FILE_STORE_IN_PRODUCTION", "true");
+      expect(getRagRepository().constructor.name).toBe("FileRagRepository");
+
+      vi.stubEnv("NODE_ENV", "test");
+      vi.stubEnv("BRANCHMIND_ALLOW_FILE_STORE_IN_PRODUCTION", "");
+      expect(getRagRepository().constructor.name).toBe("FileRagRepository");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });

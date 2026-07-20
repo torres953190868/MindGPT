@@ -1,4 +1,10 @@
+import type { Metadata } from "next";
 import { ProjectCardList } from "@/components/ProjectCardList";
+
+export const metadata: Metadata = {
+  title: "项目",
+  description: "浏览和管理你的 BranchMind 对话项目。Browse and manage your BranchMind projects.",
+};
 
 export default function ProjectsPage() {
   return (

@@ -3,7 +3,7 @@ import { ArrowLeft, FileText, FolderKanban, ScrollText } from "lucide-react";
 import { ResponsiveHeader } from "@/components/ResponsiveHeader";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | BranchMind",
+  title: "Privacy Policy",
   description: "BranchMind beta privacy policy.",
 };
 
@@ -34,6 +34,15 @@ const privacySections = [
     body: [
       "The beta includes per-project JSON export so you can keep a local copy of your project data.",
       "Project deletion removes the selected project from the BranchMind project store. Deletion is intended to be permanent for the beta workspace, although operational backups or logs, if any, may take additional time to expire.",
+    ],
+  },
+  {
+    title: "Cookies",
+    body: [
+      "BranchMind uses a small set of first-party cookies to keep the workspace working. No third-party tracking cookies are set.",
+      "branchmind_session keeps you signed in and links the app to your account or local workspace session. It is HttpOnly and expires after 1 year.",
+      "branchmind-language remembers your interface language preference. It expires after 1 year.",
+      "branchmind-theme remembers your interface theme preference. It expires after 1 year.",
     ],
   },
   {
@@ -96,7 +105,7 @@ export default function PrivacyPage() {
               <h1 id="privacy-title" className="text-3xl font-black text-[#312737] sm:text-4xl">
                 Privacy Policy
               </h1>
-              <p className="text-sm font-bold text-[#7c7184]">Last updated: May 2, 2026</p>
+              <p className="text-sm font-bold text-[#7c7184]">Last updated: July 17, 2026</p>
             </div>
           </div>
 

@@ -152,6 +152,7 @@ export function logApiError(
     code,
     name: getObject(error)?.name,
     message: getErrorLogMessage(error),
+    stack: error instanceof Error ? error.stack : undefined,
   });
 }
 

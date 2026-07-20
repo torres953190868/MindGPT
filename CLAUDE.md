@@ -54,6 +54,7 @@ Auth, origin, and project storage:
 - `NEXT_PUBLIC_SUPABASE_URL` - Required in production for Supabase-backed auth/storage.
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` or `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` - Required for Supabase client helpers.
 - `SUPABASE_SERVICE_ROLE_KEY` - Required for server-side Supabase repositories.
+- `RATE_LIMIT_TABLE` - Optional Supabase rate-limit table name override, defaults to `rate_limits`.
 - `BRANCHMIND_PROJECTS_BACKEND` - Optional, `auto` by default. Values: `auto`, `file`, `supabase`.
 - `BRANCHMIND_ALLOW_FILE_STORE_IN_PRODUCTION` - Only for production smoke tests that intentionally use file storage.
 
@@ -66,6 +67,7 @@ PDF Reader + RAG:
 - `EMBEDDING_MODEL` - Defaults to `text-embedding-v4` for DashScope.
 - `EMBEDDING_DIMENSIONS` - Defaults to `1024`; Supabase vector storage expects 1024 dimensions.
 - `DASHSCOPE_API_KEY` - Required when using DashScope embeddings.
+- `DASHSCOPE_EMBEDDING_URL` - Optional DashScope embeddings endpoint override, defaults to the Alibaba Cloud OpenAI-compatible URL.
 - `GEMINI_API_KEY` - Required when using Gemini embeddings.
 - `GEMINI_EMBEDDING_MODEL` / `GEMINI_EMBEDDING_DIMENSIONS` - Optional Gemini-specific overrides.
 - `EMBEDDING_RETRY_ATTEMPTS`, `EMBEDDING_RETRY_DELAY_MS`, `EMBEDDING_RETRY_MAX_DELAY_MS` - Optional retry tuning.
@@ -202,7 +204,7 @@ Indexed PDFs can also be attached from the BranchMind composer. Attached documen
 - `components/admin/AdminModelsClient.tsx` - Admin UI for LLM providers, models, and route defaults/fallbacks.
 - `components/admin/AdminBugReportsClient.tsx` - Admin bug report triage UI.
 
-Account APIs include `/api/account`, `/api/account/usage`, `/api/auth/update-password`, and the existing sign-in/sign-up/logout/session routes. Bug reports are submitted through `/api/bug-reports`; admin review uses `/api/admin/bug-reports`.
+Account APIs include `/api/account` (including DELETE for account deletion), `/api/account/usage`, `/api/auth/update-password`, and the existing sign-in/sign-up/logout/session routes. `/api/health` is a lightweight health check for uptime probes. Bug reports are submitted through `/api/bug-reports`; admin review uses `/api/admin/bug-reports`.
 
 ### Graph Layout (lib/graph.ts)
 
@@ -228,6 +230,7 @@ PDF/RAG migrations:
 - `20260514010000_pdf_rag_foundation.sql`
 - `20260516010000_pdf_rag_diagnostics.sql`
 - `20260524000000_pdf_rag_queued_status.sql`
+- `20260711000000_pdf_rag_document_content_hash.sql`
 
 Run all migrations before using Supabase-backed storage in production. The later migrations add user plans/usage tables, admin LLM routing tables, bug report storage and the `branchmind-bug-attachments` bucket, queued PDF statuses, message citations, and Gemini LLM seed data.
 

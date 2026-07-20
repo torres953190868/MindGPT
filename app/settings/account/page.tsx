@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { CheckCircle2, KeyRound, Loader2, ShieldCheck, UserCircle } from "lucide-react";
 import type { AccountDto } from "@/app/api/account/route";
 import { useLanguage } from "@/components/language/LanguageProvider";
+import { DeleteAccountCard } from "@/components/settings/DeleteAccountCard";
 import { useAuthStore } from "@/store/useAuthStore";
 
 function getInitial(accountName: string | null | undefined) {
@@ -299,6 +300,8 @@ export default function AccountSettingsPage() {
           </div>
         )}
       </SettingsCard>
+
+      <DeleteAccountCard accountName={accountName} canDelete={canEditAccount} />
     </div>
   );
 }

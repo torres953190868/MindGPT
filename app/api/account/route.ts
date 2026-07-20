@@ -11,11 +11,20 @@ import {
   PLAN_LIMITS_DISABLED,
   getSupabaseAccountPlanInfo,
 } from "@/lib/server/account-plan";
+import { BUG_REPORT_ATTACHMENT_BUCKET } from "@/lib/server/bug-reports";
 import { checkRateLimitAsync } from "@/lib/server/rate-limit";
+import { createRequestId } from "@/lib/server/request";
 import { assertValidRequestOrigin } from "@/lib/server/security";
-import { getExistingSessionId, getOrCreateSession } from "@/lib/server/session";
-import { hasSupabaseServerConfig } from "@/lib/supabase/server";
-import { getSupabaseAdminClient } from "@/lib/supabase/server";
+import {
+  SESSION_COOKIE_NAME,
+  getExistingSessionId,
+  getOrCreateSession,
+} from "@/lib/server/session";
+import {
+  createSupabaseCookieClient,
+  hasSupabaseServerConfig,
+  getSupabaseAdminClient,
+} from "@/lib/supabase/server";
 import * as projectStore from "@/lib/server/projects-store";
 import { getRagRepository } from "@/lib/server/rag/store";
 import { parseJsonBody } from "@/lib/server/validation";
@@ -26,6 +35,9 @@ const READ_ONLY_LOCAL_SESSION = { id: "", isNew: false };
 
 const PATCH_ACCOUNT_LIMIT = 120;
 const PATCH_ACCOUNT_WINDOW_MS = 60_000;
+
+const DELETE_ACCOUNT_LIMIT = 5;
+const DELETE_ACCOUNT_WINDOW_MS = 10 * 60_000;
 
 const updateAccountSchema = z.object({
   displayName: z.string().trim().min(1).max(100).nullable().optional(),
@@ -267,5 +279,191 @@ export async function PATCH(request: NextRequest) {
     return jsonWithSession(data, session);
   } catch (error) {
     return safeErrorWithSession(error, fallbackSession);
+  }
+}
+
+function logAccountDeletionFailure(requestId: string, step: string, error: unknown) {
+  console.error("BranchMind account deletion step failed", {
+    requestId,
+    step,
+    message: error instanceof Error ? error.message : String(error),
+  });
+}
+
+function accountDeletionFailed(step: string, requestId: string, error: unknown): never {
+  logAccountDeletionFailure(requestId, step, error);
+  throw new HttpError("Failed to delete account.", {
+    code: "ACCOUNT_DELETE_FAILED",
+    status: 500,
+  });
+}
+
+// Removes every row and file owned by the user, then deletes the auth user.
+// FK cascade notes (see supabase/migrations):
+// - branchmind_nodes / branchmind_messages cascade from branchmind_projects.
+// - document_pages / document_sections / document_chunks cascade from documents.
+// - branchmind_user_plans / branchmind_user_usage cascade from auth.users.
+// - branchmind_bug_reports would only SET NULL reporter_user_id, so its rows
+//   (and screenshot files) are deleted explicitly instead.
+async function deleteSupabaseAccountData(userId: string, requestId: string) {
+  const supabase = getSupabaseAdminClient();
+
+  try {
+    const { error } = await supabase
+      .from("branchmind_projects")
+      .delete()
+      .eq("owner_session_id", userId);
+    if (error) throw error;
+  } catch (error) {
+    accountDeletionFailed("projects", requestId, error);
+  }
+
+  try {
+    const ragRepo = getRagRepository();
+    const documents = await ragRepo.listDocuments(userId);
+    for (const document of documents) {
+      // deleteDocument also removes the stored PDF (Supabase Storage or disk).
+      await ragRepo.deleteDocument(document);
+    }
+  } catch (error) {
+    accountDeletionFailed("documents", requestId, error);
+  }
+
+  let screenshotPaths: string[] = [];
+  try {
+    const { data: reportRows, error: reportsError } = await supabase
+      .from("branchmind_bug_reports")
+      .select("screenshot_path")
+      .eq("reporter_user_id", userId);
+    if (reportsError) throw reportsError;
+    screenshotPaths = (reportRows ?? [])
+      .map((row) => row.screenshot_path)
+      .filter((value): value is string => typeof value === "string" && value.length > 0);
+
+    const { error } = await supabase
+      .from("branchmind_bug_reports")
+      .delete()
+      .eq("reporter_user_id", userId);
+    if (error) throw error;
+  } catch (error) {
+    accountDeletionFailed("bug-reports", requestId, error);
+  }
+
+  if (screenshotPaths.length > 0) {
+    const { error } = await supabase.storage
+      .from(BUG_REPORT_ATTACHMENT_BUCKET)
+      .remove(screenshotPaths);
+    // Orphaned screenshot files are harmless; keep deleting the account.
+    if (error) logAccountDeletionFailure(requestId, "bug-report-screenshots", error);
+  }
+
+  // Ephemeral rate-limit rows expire on their own, so cleanup is best-effort.
+  const { error: rateLimitError } = await supabase
+    .from("rate_limits")
+    .delete()
+    .eq("session_id", userId);
+  if (rateLimitError) logAccountDeletionFailure(requestId, "rate-limits", rateLimitError);
+
+  try {
+    const { error } = await supabase.auth.admin.deleteUser(userId);
+    if (error) throw error;
+  } catch (error) {
+    accountDeletionFailed("auth-user", requestId, error);
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const fallbackSession = getOrCreateSession(request);
+  const requestId = createRequestId();
+
+  try {
+    assertValidRequestOrigin(request, {
+      allowMissingOrigin: process.env.NODE_ENV !== "production",
+    });
+
+    if (hasSupabaseServerConfig()) {
+      const user = await getOptionalSupabaseUser();
+      if (!user) {
+        throw new HttpError("Sign in is required.", { code: "AUTH_REQUIRED", expose: true, status: 401 });
+      }
+
+      const rateLimit = await checkRateLimitAsync(request, {
+        action: "delete-account",
+        sessionId: user.id,
+        limit: DELETE_ACCOUNT_LIMIT,
+        windowMs: DELETE_ACCOUNT_WINDOW_MS,
+      });
+      if (!rateLimit.allowed) {
+        return jsonWithSession(
+          { error: "Too many requests." },
+          fallbackSession,
+          {
+            status: 429,
+            headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+          },
+        );
+      }
+
+      await deleteSupabaseAccountData(user.id, requestId);
+
+      // The account is gone; drop the auth cookies. Sign-out failure must not
+      // turn a successful deletion into an error response.
+      try {
+        const supabase = await createSupabaseCookieClient();
+        await supabase.auth.signOut();
+      } catch (error) {
+        logAccountDeletionFailure(requestId, "sign-out", error);
+      }
+
+      return jsonWithSession({ ok: true }, fallbackSession);
+    }
+
+    // Local file mode: there is no account, so wipe everything owned by this
+    // browser session and expire the session cookie.
+    const sessionId = getExistingSessionId(request);
+    if (!sessionId) {
+      throw new HttpError("Sign in is required.", { code: "AUTH_REQUIRED", expose: true, status: 401 });
+    }
+
+    const rateLimit = await checkRateLimitAsync(request, {
+      action: "delete-account",
+      sessionId,
+      limit: DELETE_ACCOUNT_LIMIT,
+      windowMs: DELETE_ACCOUNT_WINDOW_MS,
+    });
+    if (!rateLimit.allowed) {
+      return jsonWithSession(
+        { error: "Too many requests." },
+        fallbackSession,
+        {
+          status: 429,
+          headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+        },
+      );
+    }
+
+    await projectStore.updateProjects((projects) =>
+      projects.filter((project) => !projectStore.projectBelongsToSession(project, sessionId)),
+    );
+
+    const ragRepo = getRagRepository();
+    const documents = await ragRepo.listDocuments(sessionId);
+    for (const document of documents) {
+      await ragRepo.deleteDocument(document);
+    }
+
+    const response = jsonWithSession({ ok: true }, { id: sessionId, isNew: false });
+    response.cookies.set({
+      name: SESSION_COOKIE_NAME,
+      value: "",
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 0,
+    });
+    return response;
+  } catch (error) {
+    return safeErrorWithSession(error, fallbackSession, { requestId });
   }
 }

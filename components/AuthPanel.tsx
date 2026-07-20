@@ -635,18 +635,48 @@ export function AuthPanel({
       data-testid="user-sign-in"
       className={`relative ${isSidebar ? "flex w-full" : "inline-flex justify-end"} text-sm ${className}`}
     >
-      <Link
-        href={signInHref}
-        data-testid="account-sign-in-button"
-        className={
-          isSidebar
-            ? "inline-flex h-11 w-full items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 font-black text-brand-800 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-100"
-            : "inline-flex min-h-11 items-center gap-2 rounded-[18px] bg-brand-50 px-4 py-2.5 font-black text-brand-800 shadow-sm transition hover:bg-brand-100 focus:outline-none focus:ring-4 focus:ring-brand-100"
-        }
-      >
-        <LogIn size={17} />
-        {copy.common.signIn}
-      </Link>
+      <div className={`flex items-center gap-2 ${isSidebar ? "w-full" : ""}`}>
+        <button
+          type="button"
+          onClick={() => setShowBugReport(true)}
+          aria-label={copy.accountMenu.reportBug}
+          title={copy.accountMenu.reportBug}
+          data-testid="report-bug-anonymous-button"
+          className={
+            isSidebar
+              ? "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-neutral-200 bg-white text-neutral-600 shadow-sm transition hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-brand-100"
+              : "inline-flex min-h-11 w-11 shrink-0 items-center justify-center rounded-[18px] bg-white/75 text-neutral-600 shadow-sm transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100"
+          }
+        >
+          <Bug size={16} />
+        </button>
+        <a
+          href="mailto:support@branchmind.app"
+          aria-label={copy.accountMenu.helpSupport}
+          title={copy.accountMenu.helpSupport}
+          data-testid="help-support-anonymous-link"
+          className={
+            isSidebar
+              ? "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-neutral-200 bg-white text-neutral-600 shadow-sm transition hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-brand-100"
+              : "inline-flex min-h-11 w-11 shrink-0 items-center justify-center rounded-[18px] bg-white/75 text-neutral-600 shadow-sm transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100"
+          }
+        >
+          <HelpCircle size={16} />
+        </a>
+        <Link
+          href={signInHref}
+          data-testid="account-sign-in-button"
+          className={
+            isSidebar
+              ? "inline-flex h-11 w-full items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 font-black text-brand-800 shadow-sm transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-100"
+              : "inline-flex min-h-11 items-center gap-2 rounded-[18px] bg-brand-50 px-4 py-2.5 font-black text-brand-800 shadow-sm transition hover:bg-brand-100 focus:outline-none focus:ring-4 focus:ring-brand-100"
+          }
+        >
+          <LogIn size={17} />
+          {copy.common.signIn}
+        </Link>
+      </div>
+      <BugReportDialog open={showBugReport} onOpenChange={setShowBugReport} />
     </section>
   );
 }

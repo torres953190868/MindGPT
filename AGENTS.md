@@ -177,10 +177,11 @@ All persistence goes through API routes under `app/api/`:
 - `/api/projects/import` — import legacy/local projects.
 - `/api/chat` and `/api/chat/models` — chat completions and model catalog.
 - `/api/auth/*` — sign-in, sign-up, logout, session, password, Google OAuth.
-- `/api/account*` — account and usage.
+- `/api/account*` — account and usage; `/api/account` supports DELETE for account deletion.
 - `/api/admin/*` — admin summary, LLM config, bug reports.
 - `/api/bug-reports` — public bug report submission.
 - `/api/documents/*` and `/api/queues/rag-document-processing` — PDF/RAG lifecycle.
+- `/api/health` — health check for uptime probes.
 
 ### Server Abstractions
 
@@ -299,6 +300,7 @@ npm run e2e
 - **Session cookie:** `branchmind_session` is `httpOnly`, `sameSite: "lax"`, and `secure` in production.
 - **Admin access:** `/admin*` pages and API routes require either a Supabase Auth email in `BRANCHMIND_ADMIN_EMAILS` or `BRANCHMIND_ENABLE_LOCAL_ADMIN=true` in non-production environments.
 - **File storage:** File-backed project/RAG storage is blocked in production unless `BRANCHMIND_ALLOW_FILE_STORE_IN_PRODUCTION=true` is set (intended only for smoke tests).
+- **Security headers:** CSP, HSTS, `X-Content-Type-Options: nosniff`, Referrer-Policy, X-Frame-Options, and Permissions-Policy are configured in the `headers()` function in `next.config.ts`.
 - **Secrets:** Do not commit API keys or `SUPABASE_SERVICE_ROLE_KEY`. These are read from `.env.local` only.
 - **Request IDs:** Every API response carries an `x-request-id`. Errors log server-side for 5xx responses.
 - **PDF uploads:** Size limited by `MAX_PDF_SIZE_MB`. Only selectable-text PDFs are supported; scanned PDFs are rejected with a clear message.
@@ -329,6 +331,7 @@ Supabase migrations are in `supabase/migrations/` and must be applied before usi
 - `20260514010000_pdf_rag_foundation.sql`
 - `20260516010000_pdf_rag_diagnostics.sql`
 - `20260524000000_pdf_rag_queued_status.sql`
+- `20260711000000_pdf_rag_document_content_hash.sql`
 
 Tables include `branchmind_projects`, `branchmind_nodes`, `branchmind_messages`, user/usage/plan tables, admin LLM routing tables, bug reports, plus RAG tables (`documents`, `document_pages`, `document_sections`, `document_chunks`) with `pgvector` `vector(1024)` storage.
 

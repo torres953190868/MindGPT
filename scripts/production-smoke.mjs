@@ -80,6 +80,7 @@ try {
   for (const check of checks) {
     await assertRoute(check);
   }
+  await assertSecurityHeaders();
   await assertApiGuards();
 
   console.log(`Production smoke passed at ${baseUrl}`);
@@ -118,6 +119,24 @@ async function assertRoute({ path: routePath, type }) {
   }
 
   console.log(`Checked ${routePath}: ${response.status}`);
+}
+
+async function assertSecurityHeaders() {
+  const response = await fetchWithTimeout(`${baseUrl}/`, 10_000);
+  const requiredHeaders = [
+    "content-security-policy",
+    "x-content-type-options",
+    "referrer-policy",
+    "x-frame-options",
+  ];
+
+  for (const header of requiredHeaders) {
+    if (!response.headers.get(header)) {
+      throw new Error(`/ is missing the ${header} security header.`);
+    }
+  }
+
+  console.log("Checked / security headers");
 }
 
 async function assertApiGuards() {

@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { checkRateLimit } from "@/lib/server/rate-limit";
+import { checkRateLimit, checkRateLimitAsync } from "@/lib/server/rate-limit";
 
 function request(headers: Record<string, string> = {}) {
   return {
@@ -19,6 +19,7 @@ describe("rate-limit helper", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
   it("blocks requests after the configured limit until the window resets", () => {
@@ -80,5 +81,32 @@ describe("rate-limit helper", () => {
         sessionId: "session-b",
       }),
     ).toMatchObject({ allowed: true });
+  });
+
+  it("warns once when Supabase is unavailable and limits fall back to the map", async () => {
+    vi.stubEnv("SUPABASE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
+    vi.stubEnv("SUPABASE_ANON_KEY", "");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const options = {
+      action: "unit-rate-limit-fallback",
+      sessionId: "session-a",
+      limit: 1,
+      windowMs: 60_000,
+    };
+
+    const first = await checkRateLimitAsync(request(), options);
+    const second = await checkRateLimitAsync(request(), options);
+
+    expect(first).toMatchObject({ allowed: true, storage: "map" });
+    expect(second).toMatchObject({ allowed: false, storage: "map" });
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("in-memory"),
+      expect.objectContaining({ reason: "supabase-client-unavailable" }),
+    );
   });
 });

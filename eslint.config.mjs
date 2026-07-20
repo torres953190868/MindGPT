@@ -23,6 +23,7 @@ const eslintConfig = [
       "screenshots/**",
       "data/branchmind-projects.json",
       "next-env.d.ts",
+      "public/useElementInspector.js",
     ],
   },
   ...compat.extends("next/core-web-vitals", "next/typescript"),

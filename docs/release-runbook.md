@@ -14,6 +14,14 @@
 
 Use `AI_MOCK_MODE=true` only for local smoke, CI, and E2E. Production must use Supabase-backed storage; file storage is only allowed for CI smoke with `BRANCHMIND_ALLOW_FILE_STORE_IN_PRODUCTION=true`.
 
+## Production Environment Must Confirm
+
+- Forbidden in production: `AI_MOCK_MODE=true`, `BRANCHMIND_ENABLE_LOCAL_ADMIN=true`, and `BRANCHMIND_ALLOW_FILE_STORE_IN_PRODUCTION=true` must not be set.
+- All migrations in `supabase/migrations` must be applied, including `20260711000000_pdf_rag_document_content_hash.sql`.
+- Required configuration: `SUPABASE_SERVICE_ROLE_KEY`, `BRANCHMIND_ADMIN_EMAILS`, and `APP_ORIGIN` (or `ALLOWED_ORIGINS`).
+- Vercel Queues v2beta must be enabled for the project, and production must explicitly set `BRANCHMIND_RAG_QUEUE_MODE=queue`.
+- TODO: monitoring and alerting (Sentry, or Vercel Log Drains plus alert rules) is not built into the codebase and must be set up manually before launch.
+
 ## Release Checklist
 
 1. Run Supabase migrations from `supabase/migrations`.

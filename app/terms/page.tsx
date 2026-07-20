@@ -3,7 +3,7 @@ import { ArrowLeft, FileCheck, FolderKanban, ShieldCheck } from "lucide-react";
 import { ResponsiveHeader } from "@/components/ResponsiveHeader";
 
 export const metadata: Metadata = {
-  title: "Terms | BranchMind",
+  title: "Terms of Use",
   description: "BranchMind beta terms of use.",
 };
 

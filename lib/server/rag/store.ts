@@ -1139,7 +1139,17 @@ function getConfiguredBackend(): RagBackend | "auto" {
 export function getRagRepository(): RagRepository {
   const backend = getConfiguredBackend();
 
-  if (backend === "file") return fileRepository;
+  if (backend === "file") {
+    if (
+      process.env.NODE_ENV === "production" &&
+      process.env.BRANCHMIND_ALLOW_FILE_STORE_IN_PRODUCTION !== "true"
+    ) {
+      throw new Error("File RAG storage is not allowed in production.");
+    }
+
+    return fileRepository;
+  }
+
   if (backend === "supabase") {
     requireSupabaseServerConfig();
     return supabaseRepository;

@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import { sanitizeAuthNext } from "@/lib/server/auth-redirect";
 import { AuthPageShell } from "@/components/auth/AuthPageShell";
+
+export const metadata: Metadata = {
+  title: "注册",
+  description: "创建 BranchMind 账户，开启可视化分支式 AI 对话工作区。Create your BranchMind account.",
+};
 
 type SignUpPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
