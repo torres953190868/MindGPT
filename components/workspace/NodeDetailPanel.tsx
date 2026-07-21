@@ -56,6 +56,7 @@ import type {
   MindNode,
 } from "@/lib/types";
 import { MarkdownMessage } from "./MarkdownMessage";
+import { ThinkingElapsedTimer } from "./ThinkingElapsedTimer";
 import {
   getResizeInputMode,
   type ResizeStartEvent,
@@ -1159,6 +1160,8 @@ export function NodeDetailPanel({
                       className="mt-2 text-xs font-black uppercase tracking-[0.14em] text-neutral-600"
                     >
                       {copy.workspace.generatingAnswer}
+                      {" · "}
+                      <ThinkingElapsedTimer />
                     </p>
                   )}
                 </article>

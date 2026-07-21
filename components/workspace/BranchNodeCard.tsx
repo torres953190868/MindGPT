@@ -18,6 +18,7 @@ import {
   useChatComposerControls,
 } from "@/components/chat/ChatComposerControls";
 import { useLanguage } from "@/components/language/LanguageProvider";
+import { ThinkingElapsedTimer } from "./ThinkingElapsedTimer";
 import {
   getHighlightedActionClass,
   useHighlightedAction,
@@ -534,6 +535,18 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
             )}
           </button>
         </div>
+        {(isComposerBusy || isSubmitPending) && (
+          <p
+            role="status"
+            data-testid="home-thinking-status"
+            className="flex items-center gap-2 px-1 text-xs font-bold text-neutral-500"
+          >
+            <Loader2 size={13} className="animate-spin" />
+            {copy.workspace.generatingAnswer}
+            {" · "}
+            <ThinkingElapsedTimer />
+          </p>
+        )}
         {displayError && (
           <p
             id={errorId}

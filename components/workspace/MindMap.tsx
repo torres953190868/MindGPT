@@ -119,11 +119,11 @@ export function MindMap({
     useState<string | null>(null);
   const [reactFlowInstance, setReactFlowInstance] =
     useState<ReactFlowInstance<Node<BranchNodeData>, Edge> | null>(null);
-  const dragDisabled = Boolean(creatingNodeId || streamingNodeId);
+  const draggingNodeIdRef = useRef<string | null>(null);
   const isHomeInlineComposer = inlineNodeComposer?.variant === "home";
   const homeComposerNodeId = isHomeInlineComposer ? inlineNodeComposer?.nodeId : null;
   const mobileLongPressDragEnabled =
-    isMobileViewport && !dragDisabled && !isHomeInlineComposer;
+    isMobileViewport && !isHomeInlineComposer;
 
   const resetMobileNodeLongPressState = useCallback((suppressClick = false) => {
     const gesture = mobileNodeLongPressGestureRef.current;
@@ -315,7 +315,21 @@ export function MindMap({
   }, []);
 
   useEffect(() => {
-    setNodes(graphNodes);
+    const draggingNodeId =
+      draggingNodeIdRef.current ?? activeMobileNodeDragIdRef.current;
+    if (!draggingNodeId) {
+      setNodes(graphNodes);
+      return;
+    }
+
+    // Keep the in-progress drag position while streaming updates rebuild the nodes.
+    setNodes((current) => {
+      const draggedNode = current.find((node) => node.id === draggingNodeId);
+      if (!draggedNode) return graphNodes;
+      return graphNodes.map((node) =>
+        node.id === draggingNodeId ? { ...node, position: draggedNode.position } : node,
+      );
+    });
   }, [graphNodes]);
 
   useEffect(() => {
@@ -458,7 +472,6 @@ export function MindMap({
   useEffect(() => {
     resetMobileNodeLongPressState(false);
   }, [
-    dragDisabled,
     isHomeInlineComposer,
     project.id,
     resetMobileNodeLongPressState,
@@ -649,6 +662,7 @@ export function MindMap({
 
   const handleNodeDragStart: OnNodeDrag<Node<BranchNodeData>> = useCallback(
     (_, node) => {
+      draggingNodeIdRef.current = node.id;
       if (!isMobileViewport) return;
 
       activeMobileNodeDragIdRef.current = node.id;
@@ -659,14 +673,14 @@ export function MindMap({
 
   const handleNodeDragStop: OnNodeDrag<Node<BranchNodeData>> = useCallback(
     (_, node) => {
-      if (dragDisabled) return;
+      draggingNodeIdRef.current = null;
       if (isMobileViewport) {
         resetMobileNodeLongPressState(true);
       }
 
       void onMoveNode(node.id, node.position);
     },
-    [dragDisabled, isMobileViewport, onMoveNode, resetMobileNodeLongPressState],
+    [isMobileViewport, onMoveNode, resetMobileNodeLongPressState],
   );
 
   const handleViewportChange = useCallback(
@@ -933,7 +947,7 @@ export function MindMap({
         nodes={nodes}
         edges={graphEdges}
         nodeTypes={nodeTypes}
-        nodesDraggable={!dragDisabled && !isMobileViewport}
+        nodesDraggable={!isMobileViewport}
         onInit={setReactFlowInstance}
         onNodeClick={handleNodeClick}
         onViewportChange={handleViewportChange}

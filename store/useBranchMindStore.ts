@@ -1800,11 +1800,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
     const state = get();
     const projectId = state.activeProjectId;
     if (!projectId) return;
-    if (
-      state.creatingNodeId ||
-      state.streamingNodeId ||
-      isProjectWaitingForSync(state, projectId)
-    ) {
+    if (isProjectWaitingForSync(state, projectId)) {
       return;
     }
     const project = state.projects.find((item) => item.id === projectId);
