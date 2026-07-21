@@ -1891,6 +1891,9 @@ test("home launcher selects an indexed knowledge PDF without re-uploading", asyn
   await page.getByTestId("add-message-attachment-button").click();
   await expect(page.getByTestId("attachment-menu")).toBeVisible();
   await page.getByTestId("knowledge-menu-button").hover();
+  await expect(page.getByTestId("knowledge-document-menu")).toHaveCount(0);
+  await page.getByTestId("knowledge-menu-button").click();
+  await expect(page.getByTestId("knowledge-document-menu")).toBeVisible();
   await expect(page.getByTestId("knowledge-document-option")).toHaveCount(1);
   await expect(page.getByTestId("knowledge-document-menu")).not.toContainText(
     "home-pending.pdf",
@@ -4610,6 +4613,17 @@ test("selects an indexed PDF knowledge document without re-uploading", async ({
       modelButtonBox?.x ?? Number.NEGATIVE_INFINITY,
     );
 
+    await page.getByTestId("add-message-attachment-button").hover();
+    await expect(page.getByTestId("add-message-attachment-button")).toHaveAttribute(
+      "data-highlighted",
+      "true",
+    );
+    await page.getByTestId("chat-model-selector-button").hover();
+    await expect(page.getByTestId("chat-model-selector-button")).toHaveAttribute(
+      "data-highlighted",
+      "true",
+    );
+
     await page.getByTestId("add-message-attachment-button").click();
     await expect(page.getByTestId("attachment-menu")).toBeVisible();
     await expect(page.getByTestId("upload-new-file-button")).toBeVisible();
@@ -4617,7 +4631,16 @@ test("selects an indexed PDF knowledge document without re-uploading", async ({
     await expect(page.getByTestId("knowledge-document-menu")).toHaveCount(0);
     await expect(page.getByTestId("attachment-menu")).not.toContainText("memory.pdf");
 
+    await page.getByTestId("skill-menu-button").hover();
+    await expect(page.getByTestId("skill-document-menu")).toHaveCount(0);
+    await page.getByTestId("skill-menu-button").click();
+    await expect(page.getByTestId("skill-document-menu")).toBeVisible();
+    await page.getByTestId("skill-menu-button").click();
+    await expect(page.getByTestId("skill-document-menu")).toHaveCount(0);
+
     await page.getByTestId("knowledge-menu-button").hover();
+    await expect(page.getByTestId("knowledge-document-menu")).toHaveCount(0);
+    await page.getByTestId("knowledge-menu-button").click();
     await expect(page.getByTestId("knowledge-document-menu")).toBeVisible();
     await expect(page.getByTestId("knowledge-document-option")).toHaveCount(1);
     await expect(page.getByTestId("knowledge-document-menu")).not.toContainText(

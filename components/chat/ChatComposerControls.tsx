@@ -5,9 +5,11 @@ import {
   type WheelEvent as ReactWheelEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   BookOpen,
   ChevronDown,
@@ -23,6 +25,10 @@ import {
   X,
 } from "lucide-react";
 import { useLanguage } from "@/components/language/LanguageProvider";
+import {
+  getHighlightedActionClass,
+  useHighlightedAction,
+} from "@/components/ui/highlighted-action";
 import { ApiRequestError, readJsonApi } from "@/lib/client/api";
 import { MAX_CHAT_ATTACHMENTS } from "@/lib/chat-attachments";
 import {
@@ -196,6 +202,11 @@ const MODEL_DISPLAY_PRIORITY: Record<string, number> = {
   "qwen3.6-plus": 140,
   "gemini-3.5-flash": 150,
 };
+
+const FLOATING_SUBMENU_GAP_PX = 8;
+const FLOATING_SUBMENU_MARGIN_PX = 8;
+const FLOATING_SUBMENU_MAX_WIDTH_PX = 224;
+const FLOATING_SUBMENU_MAX_HEIGHT_PX = 256;
 
 type FloatingMenuPlacement = "above" | "below";
 type FloatingMenuAlignment = "start" | "end";
@@ -644,7 +655,6 @@ export function useChatComposerControls({
   const isMountedRef = useRef(true);
   const modelMenuRef = useRef<HTMLDivElement>(null);
   const attachmentMenuRef = useRef<HTMLDivElement>(null);
-  const skillMenuRef = useRef<HTMLDivElement>(null);
   const selectedModelOption = modelOptions.find((option) =>
     matchesModelSelection(option, selectedModel),
   );
@@ -828,7 +838,7 @@ export function useChatComposerControls({
     if (!isSkillMenuOpen) return undefined;
 
     function handlePointerDown(event: globalThis.PointerEvent) {
-      const menu = skillMenuRef.current;
+      const menu = attachmentMenuRef.current;
       if (!menu || menu.contains(event.target as Node)) return;
       setIsSkillMenuOpen(false);
     }
@@ -1233,7 +1243,6 @@ export function useChatComposerControls({
     setIsSkillMenuOpen,
     skillDirectoryInputRef,
     skillImportError,
-    skillMenuRef,
     toggleAttachmentMenu,
     toggleModelMenu,
   };
@@ -1361,6 +1370,56 @@ export function AttachmentMenuButton({
   alignment?: FloatingMenuAlignment;
 }) {
   const { copy, language } = useLanguage();
+  const attachmentHighlight = useHighlightedAction<"attachment">();
+  const knowledgeMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const skillMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const [submenuPosition, setSubmenuPosition] = useState({ top: -320, left: 0 });
+
+  useLayoutEffect(() => {
+    const button = controls.isKnowledgeMenuOpen
+      ? knowledgeMenuButtonRef.current
+      : controls.isSkillMenuOpen
+        ? skillMenuButtonRef.current
+        : null;
+    if (!button) return undefined;
+
+    const updatePosition = () => {
+      const rect = button.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const submenuWidth = Math.min(
+        FLOATING_SUBMENU_MAX_WIDTH_PX,
+        Math.max(0, viewportWidth - FLOATING_SUBMENU_MARGIN_PX * 2),
+      );
+      const canPlaceOnLeft =
+        rect.left >=
+        submenuWidth + FLOATING_SUBMENU_GAP_PX + FLOATING_SUBMENU_MARGIN_PX;
+      const left = canPlaceOnLeft
+        ? rect.left - submenuWidth - FLOATING_SUBMENU_GAP_PX
+        : Math.min(
+            rect.right + FLOATING_SUBMENU_GAP_PX,
+            viewportWidth - submenuWidth - FLOATING_SUBMENU_MARGIN_PX,
+          );
+      const top = Math.max(
+        FLOATING_SUBMENU_MARGIN_PX,
+        Math.min(
+          rect.top,
+          viewportHeight - FLOATING_SUBMENU_MAX_HEIGHT_PX - FLOATING_SUBMENU_MARGIN_PX,
+        ),
+      );
+
+      setSubmenuPosition({ top, left: Math.max(FLOATING_SUBMENU_MARGIN_PX, left) });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [controls.isKnowledgeMenuOpen, controls.isSkillMenuOpen]);
 
   return (
     <>
@@ -1393,6 +1452,9 @@ export function AttachmentMenuButton({
         <button
           type="button"
           onClick={controls.toggleAttachmentMenu}
+          {...attachmentHighlight.getPointerHoverHandlers("attachment", {
+            clearOnMouseLeave: true,
+          })}
           disabled={
             controls.controlsBusy ||
             controls.pendingAttachments.length >= controls.maxAttachments
@@ -1402,7 +1464,11 @@ export function AttachmentMenuButton({
           aria-expanded={controls.isAttachmentMenuOpen}
           title={copy.chat.addFilesKnowledge}
           data-testid="add-message-attachment-button"
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-[14px] border border-brand-200 bg-gradient-to-b from-white to-brand-50 text-brand-700 shadow-sm ring-1 ring-white/70 transition hover:border-brand-400 hover:from-white hover:to-white focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-50"
+          data-highlighted={attachmentHighlight.getDataHighlighted("attachment")}
+          className={`grid h-9 w-9 shrink-0 place-items-center rounded-[14px] border border-brand-200 text-brand-700 shadow-sm ring-1 ring-white/70 transition focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-50 ${getHighlightedActionClass(
+            attachmentHighlight.isHighlighted("attachment"),
+            "bg-white text-brand-700",
+          )}`}
         >
           <Plus size={16} />
         </button>
@@ -1411,8 +1477,7 @@ export function AttachmentMenuButton({
             role="menu"
             aria-label={copy.chat.addAttachment}
             data-testid="attachment-menu"
-            onMouseLeave={() => controls.setIsKnowledgeMenuOpen(false)}
-            className={`${getMenuPlacementClass(placement, alignment)} chat-model-menu-scrollable nowheel max-h-[min(11rem,calc(100svh-8rem))] w-[min(14rem,calc(100vw-1rem))] overflow-auto overscroll-contain rounded-[14px] border border-neutral-200 bg-white/95 p-1 shadow-xl shadow-neutral-900/10 backdrop-blur`}
+            className={`${getMenuPlacementClass(placement, alignment)} chat-model-menu-scrollable nowheel max-h-[min(11rem,calc(100svh-8rem))] w-[min(14rem,calc(100vw-1rem))] overflow-visible overscroll-contain rounded-[14px] border border-neutral-200 bg-white/95 p-1 shadow-xl shadow-neutral-900/10 backdrop-blur`}
           >
             <button
               type="button"
@@ -1421,9 +1486,9 @@ export function AttachmentMenuButton({
               onFocus={() => controls.setIsKnowledgeMenuOpen(false)}
               onClick={controls.openFilePicker}
               data-testid="upload-new-file-button"
-              className="flex w-full items-center gap-3 rounded-[14px] px-3 py-2 text-left text-neutral-700 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-300"
+              className="chat-menu-highlightable flex w-full items-center gap-3 rounded-[14px] px-3 py-2 text-left text-neutral-700 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-300"
             >
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
+              <span className="chat-menu-item-icon grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
                 <Upload size={16} />
               </span>
               <span className="min-w-0 flex-1 truncate text-sm font-black">
@@ -1431,27 +1496,21 @@ export function AttachmentMenuButton({
               </span>
             </button>
 
-            <div
-              className="relative"
-              onMouseEnter={() => controls.setIsKnowledgeMenuOpen(true)}
-              onFocus={() => controls.setIsKnowledgeMenuOpen(true)}
-              onBlur={(event) => {
-                const nextFocus = event.relatedTarget;
-                if (!nextFocus || !event.currentTarget.contains(nextFocus as Node)) {
-                  controls.setIsKnowledgeMenuOpen(false);
-                }
-              }}
-            >
+            <div className="relative">
               <button
                 type="button"
                 role="menuitem"
                 aria-haspopup="menu"
                 aria-expanded={controls.isKnowledgeMenuOpen}
-                onClick={() => controls.setIsKnowledgeMenuOpen(true)}
+                ref={knowledgeMenuButtonRef}
+                onClick={() => {
+                  controls.setIsKnowledgeMenuOpen((isOpen) => !isOpen);
+                  controls.setIsSkillMenuOpen(false);
+                }}
                 data-testid="knowledge-menu-button"
-                className="flex w-full items-center gap-3 rounded-[14px] px-3 py-2 text-left text-neutral-700 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                className="chat-menu-highlightable flex w-full items-center gap-3 rounded-[14px] px-3 py-2 text-left text-neutral-700 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-300"
               >
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
+                <span className="chat-menu-item-icon grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
                   <BookOpen size={16} />
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm font-black">
@@ -1460,18 +1519,21 @@ export function AttachmentMenuButton({
                 <ChevronRight
                   size={15}
                   className={`shrink-0 text-neutral-500 transition ${
-                    controls.isKnowledgeMenuOpen ? "rotate-90" : ""
+                    controls.isKnowledgeMenuOpen ? "rotate-180" : ""
                   }`}
                 />
               </button>
 
-              {controls.isKnowledgeMenuOpen && (
-                <div
+              {controls.isKnowledgeMenuOpen && typeof document !== "undefined"
+                ? createPortal(
+                    <div
+                      onPointerDown={(event) => event.stopPropagation()}
                   role="menu"
                   aria-label={copy.chat.knowledgePdfs}
                   data-testid="knowledge-document-menu"
                   onWheel={stopFloatingMenuWheelPropagation}
-                  className="nowheel mt-1 max-h-64 overflow-auto overscroll-contain rounded-[16px] border border-neutral-200 bg-brand-50/55 p-1"
+                  style={{ top: submenuPosition.top, left: submenuPosition.left }}
+                  className="nowheel fixed z-[100] max-h-64 w-[min(14rem,calc(100vw-1rem))] overflow-auto overscroll-contain rounded-[16px] border border-neutral-200 bg-brand-50 p-1 shadow-xl shadow-neutral-900/10"
                 >
                   {controls.isLoadingKnowledgeDocuments && (
                     <p
@@ -1521,9 +1583,9 @@ export function AttachmentMenuButton({
                           disabled={!canSelect}
                           onClick={() => controls.selectKnowledgeDocument(document)}
                           data-testid="knowledge-document-option"
-                          className="flex w-full min-w-0 items-center gap-3 rounded-[12px] px-3 py-2 text-left text-neutral-700 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                          className="chat-menu-highlightable flex w-full min-w-0 items-center gap-3 rounded-[12px] px-3 py-2 text-left text-neutral-700 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
                         >
-                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
+                          <span className="chat-menu-item-icon grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
                             <BookOpen size={16} />
                           </span>
                           <span className="min-w-0 flex-1">
@@ -1537,31 +1599,27 @@ export function AttachmentMenuButton({
                         </button>
                       );
                     })}
-                </div>
-              )}
+                    </div>,
+                    document.body,
+                  )
+                : null}
             </div>
 
-            <div
-              className="relative"
-              onMouseEnter={() => controls.setIsSkillMenuOpen(true)}
-              onFocus={() => controls.setIsSkillMenuOpen(true)}
-              onBlur={(event) => {
-                const nextFocus = event.relatedTarget;
-                if (!nextFocus || !event.currentTarget.contains(nextFocus as Node)) {
-                  controls.setIsSkillMenuOpen(false);
-                }
-              }}
-            >
+            <div className="relative">
               <button
                 type="button"
                 role="menuitem"
                 aria-haspopup="menu"
                 aria-expanded={controls.isSkillMenuOpen}
-                onClick={() => controls.setIsSkillMenuOpen(true)}
+                ref={skillMenuButtonRef}
+                onClick={() => {
+                  controls.setIsSkillMenuOpen((isOpen) => !isOpen);
+                  controls.setIsKnowledgeMenuOpen(false);
+                }}
                 data-testid="skill-menu-button"
-                className="flex w-full items-center gap-3 rounded-[14px] px-3 py-2 text-left text-neutral-700 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                className="chat-menu-highlightable flex w-full items-center gap-3 rounded-[14px] px-3 py-2 text-left text-neutral-700 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-300"
               >
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
+                <span className="chat-menu-item-icon grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
                   <Sparkles size={16} />
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm font-black">
@@ -1570,19 +1628,21 @@ export function AttachmentMenuButton({
                 <ChevronRight
                   size={15}
                   className={`shrink-0 text-neutral-500 transition ${
-                    controls.isSkillMenuOpen ? "rotate-90" : ""
+                    controls.isSkillMenuOpen ? "rotate-180" : ""
                   }`}
                 />
               </button>
 
-              {controls.isSkillMenuOpen && (
-                <div
-                  ref={controls.skillMenuRef}
+              {controls.isSkillMenuOpen && typeof document !== "undefined"
+                ? createPortal(
+                    <div
+                      onPointerDown={(event) => event.stopPropagation()}
                   role="menu"
                   aria-label={copy.chat.skill}
                   data-testid="skill-document-menu"
                   onWheel={stopFloatingMenuWheelPropagation}
-                  className="nowheel mt-1 max-h-64 overflow-auto overscroll-contain rounded-[16px] border border-neutral-200 bg-brand-50/55 p-1"
+                  style={{ top: submenuPosition.top, left: submenuPosition.left }}
+                  className="nowheel fixed z-[100] max-h-64 w-[min(14rem,calc(100vw-1rem))] overflow-auto overscroll-contain rounded-[16px] border border-neutral-200 bg-brand-50 p-1 shadow-xl shadow-neutral-900/10"
                 >
                   {controls.availableSkills.length === 0 && (
                     <p className="rounded-[12px] px-3 py-3 text-sm font-bold text-neutral-600">
@@ -1601,13 +1661,13 @@ export function AttachmentMenuButton({
                         role="menuitem"
                         onClick={() => controls.selectSkill(skill.id)}
                         data-testid="skill-option"
-                        className={`flex w-full min-w-0 items-center gap-3 rounded-[12px] px-3 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-brand-300 ${
+                        className={`chat-menu-highlightable flex w-full min-w-0 items-center gap-3 rounded-[12px] px-3 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-brand-300 ${
                           isSelected
                             ? "bg-white text-brand-800"
                             : "text-neutral-700 hover:bg-white"
                         }`}
                       >
-                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
+                        <span className="chat-menu-item-icon grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
                           <Sparkles size={16} />
                         </span>
                         <span className="min-w-0 flex-1">
@@ -1616,7 +1676,7 @@ export function AttachmentMenuButton({
                               {skill.name}
                             </span>
                             {isDefault && (
-                              <span className="shrink-0 rounded-full border border-brand-200 bg-brand-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-700">
+                              <span className="chat-menu-item-badge shrink-0 rounded-full border border-brand-200 bg-brand-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-700">
                                 {copy.chat.skillDefault}
                               </span>
                             )}
@@ -1638,9 +1698,9 @@ export function AttachmentMenuButton({
                     onClick={controls.openSkillDirectoryPicker}
                     disabled={controls.isImportingSkill}
                     data-testid="import-skill-button"
-                    className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2 text-left text-neutral-700 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="chat-menu-highlightable flex w-full items-center gap-3 rounded-[12px] px-3 py-2 text-left text-neutral-700 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
+                    <span className="chat-menu-item-icon grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
                       <Upload size={16} />
                     </span>
                     <span className="min-w-0 flex-1 truncate text-sm font-black">
@@ -1653,8 +1713,10 @@ export function AttachmentMenuButton({
                       {controls.skillImportError}
                     </p>
                   )}
-                </div>
-              )}
+                    </div>,
+                    document.body,
+                  )
+                : null}
             </div>
           </div>
         )}
@@ -1673,18 +1735,26 @@ export function ModelSelectorButton({
   alignment?: FloatingMenuAlignment;
 }) {
   const { copy } = useLanguage();
+  const modelHighlight = useHighlightedAction<"model">();
 
   return (
     <div ref={controls.modelMenuRef} className="relative min-w-0 shrink">
       <button
         type="button"
         onClick={controls.toggleModelMenu}
+        {...modelHighlight.getPointerHoverHandlers("model", {
+          clearOnMouseLeave: true,
+        })}
         disabled={controls.controlsBusy}
         aria-label={copy.chat.chooseChatModel}
         aria-haspopup="listbox"
         aria-expanded={controls.isModelMenuOpen}
         data-testid="chat-model-selector-button"
-        className="inline-flex h-9 w-full min-w-0 max-w-[150px] items-center justify-center gap-1.5 rounded-[14px] border border-brand-200 bg-white/82 px-2.5 text-xs font-black text-neutral-800 shadow-sm transition hover:border-brand-400 hover:bg-white focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-50"
+        data-highlighted={modelHighlight.getDataHighlighted("model")}
+        className={`inline-flex h-9 w-full min-w-0 max-w-[150px] items-center justify-center gap-1.5 rounded-[14px] border border-brand-200 px-2.5 text-xs font-black shadow-sm transition hover:border-brand-400 focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-50 ${getHighlightedActionClass(
+          modelHighlight.isHighlighted("model"),
+          "bg-white/82 text-neutral-800",
+        )}`}
       >
         {controls.isAutoSelected ? (
           <InfinityIcon size={18} strokeWidth={2.4} className="shrink-0 text-neutral-800" />
@@ -1714,13 +1784,13 @@ export function ModelSelectorButton({
             disabled={controls.controlsBusy}
             onClick={controls.selectAutoModel}
             data-testid="chat-model-auto-option"
-            className={`mb-0.5 flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-45 ${
+            className={`chat-menu-highlightable mb-0.5 flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-45 ${
               controls.isAutoSelected
                 ? "bg-neutral-100 text-neutral-900"
                 : "text-neutral-700 hover:bg-brand-50"
             }`}
           >
-            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-neutral-200 bg-white text-neutral-800">
+            <span className="chat-menu-item-icon grid h-6 w-6 shrink-0 place-items-center rounded-full border border-neutral-200 bg-white text-neutral-800">
               <InfinityIcon size={16} strokeWidth={2.2} />
             </span>
             <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{copy.chat.autoModel}</span>
@@ -1740,7 +1810,7 @@ export function ModelSelectorButton({
                 disabled={controls.controlsBusy}
                 onClick={() => controls.selectModel(option)}
                 data-testid="chat-model-option"
-                className={`flex w-full min-w-0 items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-45 ${
+                className={`chat-menu-highlightable flex w-full min-w-0 items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-45 ${
                   isLocked
                     ? "cursor-not-allowed text-neutral-600"
                     : !controls.isAutoSelected && isSelected

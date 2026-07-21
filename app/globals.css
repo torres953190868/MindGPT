@@ -368,6 +368,49 @@ textarea {
   color: #ffffff;
 }
 
+.chat-menu-highlightable {
+  transition-property: background-color, background-image, color, box-shadow;
+  transition-duration: 100ms;
+  transition-timing-function: ease-in;
+}
+
+.chat-menu-highlightable:not(:disabled):hover,
+.chat-menu-highlightable:not(:disabled):focus-visible {
+  background-color: var(--theme-neutral-900) !important;
+  background-image: none !important;
+  color: var(--theme-surface-elevated) !important;
+  box-shadow: var(--theme-shadow-lg);
+  transition-duration: 1000ms;
+  transition-timing-function: ease-out;
+}
+
+.chat-menu-highlightable:not(:disabled):hover svg,
+.chat-menu-highlightable:not(:disabled):focus-visible svg,
+.chat-menu-highlightable:not(:disabled):hover [class*="text-brand-"],
+.chat-menu-highlightable:not(:disabled):focus-visible [class*="text-brand-"],
+.chat-menu-highlightable:not(:disabled):hover [class*="text-neutral-"],
+.chat-menu-highlightable:not(:disabled):focus-visible [class*="text-neutral-"] {
+  color: currentColor !important;
+}
+
+.chat-menu-highlightable:not(:disabled):hover .chat-menu-item-icon,
+.chat-menu-highlightable:not(:disabled):focus-visible .chat-menu-item-icon {
+  background-color: #ffffff !important;
+  color: var(--theme-neutral-900) !important;
+}
+
+.chat-menu-highlightable:not(:disabled):hover .chat-menu-item-icon svg,
+.chat-menu-highlightable:not(:disabled):focus-visible .chat-menu-item-icon svg {
+  color: var(--theme-neutral-900) !important;
+}
+
+.chat-menu-highlightable:not(:disabled):hover .chat-menu-item-badge,
+.chat-menu-highlightable:not(:disabled):focus-visible .chat-menu-item-badge {
+  background-color: #ffffff !important;
+  border-color: var(--theme-border-default) !important;
+  color: var(--theme-neutral-900) !important;
+}
+
 .react-flow__attribution {
   display: none;
 }

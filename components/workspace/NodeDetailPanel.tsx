@@ -862,7 +862,7 @@ export function NodeDetailPanel({
       aria-labelledby={titleId}
       data-testid="node-detail-panel"
       data-has-composer={showComposer ? "true" : "false"}
-      className="node-detail-panel-surface grid h-full min-h-0 w-full overflow-hidden rounded-lg border border-neutral-200 bg-white p-4 shadow-sm lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
+      className="node-detail-panel-surface grid h-full min-h-0 w-full overflow-visible rounded-lg border border-neutral-200 bg-white p-4 shadow-sm lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
       style={panelStyle}
     >
       <div className="node-detail-header-region relative min-h-0 shrink-0 overflow-hidden border-b border-neutral-200 pb-3 sm:pb-4">
@@ -1214,7 +1214,7 @@ export function NodeDetailPanel({
             aria-describedby={displayError ? errorId : isComposerBusy ? statusId : undefined}
             data-testid="message-composer"
             onSubmit={handleSubmit}
-            className="flex h-full min-h-0 flex-1 flex-col justify-end overflow-hidden"
+            className="flex h-full min-h-0 flex-1 flex-col justify-end overflow-visible"
           >
           <div className="flex shrink-0 flex-col gap-3">
           {!isInitialSubmit && !isBlankNode && (

@@ -442,12 +442,12 @@ export function WorkspaceCanvasShell({
       ? "branchmind-side-panel-clip branchmind-side-panel-clip-left contents lg:absolute lg:inset-y-0 lg:left-0 lg:z-30 lg:flex lg:w-[var(--workspace-sidebar-width)] lg:min-w-0 lg:overflow-hidden"
       : "branchmind-side-panel-clip branchmind-side-panel-clip-left hidden lg:absolute lg:inset-y-0 lg:left-0 lg:z-30 lg:flex lg:w-[var(--workspace-sidebar-width)] lg:min-w-0 lg:overflow-hidden";
   const nodeDetailMobileClassName = usesMobileDrawers
-    ? isNodeDetailMobileDrawerOpen
-      ? "branchmind-mobile-drawer branchmind-mobile-drawer-right branchmind-side-panel-clip branchmind-side-panel-clip-right fixed bottom-2 right-2 top-2 z-40 flex w-[min(88vw,360px)] min-w-0 lg:relative lg:inset-auto lg:z-auto lg:h-full lg:w-full lg:overflow-hidden"
-      : "branchmind-side-panel-clip branchmind-side-panel-clip-right hidden lg:flex lg:min-w-0 lg:overflow-hidden"
+      ? isNodeDetailMobileDrawerOpen
+        ? "branchmind-mobile-drawer branchmind-mobile-drawer-right branchmind-side-panel-clip branchmind-side-panel-clip-right fixed bottom-2 right-2 top-2 z-40 flex w-[min(88vw,360px)] min-w-0 lg:relative lg:inset-auto lg:z-40 lg:h-full lg:w-full lg:!overflow-visible"
+        : "branchmind-side-panel-clip branchmind-side-panel-clip-right hidden lg:flex lg:min-w-0 lg:overflow-hidden"
     : mobileWorkspaceView === "chat"
-      ? "branchmind-side-panel-clip branchmind-side-panel-clip-right h-full max-h-full min-h-0 min-w-0 overflow-hidden lg:flex"
-      : "branchmind-side-panel-clip branchmind-side-panel-clip-right hidden lg:flex lg:min-w-0 lg:overflow-hidden";
+      ? "branchmind-side-panel-clip branchmind-side-panel-clip-right h-full max-h-full min-h-0 min-w-0 overflow-hidden lg:relative lg:z-40 lg:flex lg:!overflow-visible"
+      : "branchmind-side-panel-clip branchmind-side-panel-clip-right hidden lg:relative lg:z-40 lg:flex lg:min-w-0 lg:!overflow-visible";
   const mapShellClassName = usesMobileDrawers
     ? "branchmind-map-shell relative h-full min-h-0 overflow-hidden bg-surface-canvas lg:h-full lg:min-h-0"
     : `branchmind-map-shell relative h-full min-h-0 overflow-hidden rounded-lg border border-neutral-200 bg-surface-canvas shadow-sm lg:h-full lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none ${
