@@ -1,9 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   composeProjectsFromRows,
+  getProjectsRepository,
   projectToRows,
 } from "@/lib/server/projects-repository";
 import type { Project } from "@/lib/types";
+
+const supabaseServerMock = vi.hoisted(() => {
+  const state: { client: unknown } = { client: null };
+  return {
+    state,
+    hasSupabaseServerConfig: vi.fn(() => true),
+    getSupabaseAdminClient: vi.fn(() => state.client),
+    requireSupabaseServerConfig: vi.fn(),
+  };
+});
+
+vi.mock("@/lib/supabase/server", () => ({
+  hasSupabaseServerConfig: supabaseServerMock.hasSupabaseServerConfig,
+  getSupabaseAdminClient: supabaseServerMock.getSupabaseAdminClient,
+  requireSupabaseServerConfig: supabaseServerMock.requireSupabaseServerConfig,
+}));
 
 const timestamp = "2026-01-01T00:00:00.000Z";
 
@@ -117,5 +134,144 @@ describe("projects repository row mapping", () => {
     expect(rootNode.messages[1].citations).toEqual(
       project.nodes[project.rootNodeId].messages[1].citations,
     );
+  });
+});
+
+type MockedCall = { fn: string; args: Record<string, unknown> };
+type RecordedUpsert = { table: string; rows: unknown };
+
+function createSupabaseClientMock(rpcError: { code?: string; message: string } | null) {
+  const upserts: RecordedUpsert[] = [];
+  const rpcCalls: MockedCall[] = [];
+
+  const client = {
+    rpc: vi.fn(async (fn: string, args: Record<string, unknown>) => {
+      rpcCalls.push({ fn, args });
+      return { data: null, error: rpcError };
+    }),
+    from: vi.fn((table: string) => {
+      const ops: string[] = [];
+      const query: Record<string, unknown> = {};
+      const chain =
+        (method: string) =>
+        (...args: unknown[]) => {
+          ops.push(method);
+          if (method === "upsert") upserts.push({ table, rows: args[0] });
+          return query;
+        };
+      for (const method of [
+        "select",
+        "upsert",
+        "insert",
+        "update",
+        "delete",
+        "eq",
+        "in",
+        "limit",
+        "order",
+        "maybeSingle",
+        "single",
+      ]) {
+        query[method] = chain(method);
+      }
+      query.then = (
+        resolve: (value: unknown) => unknown,
+        reject: (reason: unknown) => unknown,
+      ) => {
+        const isSelect = ops[0] === "select";
+        const isExistingProjectLookup =
+          table === "branchmind_projects" && isSelect && ops.includes("eq");
+        const result = {
+          data: isSelect ? (isExistingProjectLookup ? [{ id: "project-repository-test" }] : []) : null,
+          error: null,
+        };
+        return Promise.resolve(result).then(resolve, reject);
+      };
+      return query;
+    }),
+  };
+
+  return { client, upserts, rpcCalls };
+}
+
+describe("SupabaseProjectsRepository.saveProject", () => {
+  afterEach(() => {
+    supabaseServerMock.state.client = null;
+    vi.restoreAllMocks();
+  });
+
+  it("saves through the RPC without per-table upserts when available", async () => {
+    const mock = createSupabaseClientMock(null);
+    supabaseServerMock.state.client = mock.client;
+    const project = makeProject();
+
+    await getProjectsRepository().saveProject(project);
+
+    const rows = projectToRows(project);
+    expect(mock.rpcCalls).toHaveLength(1);
+    expect(mock.rpcCalls[0].fn).toBe("branchmind_save_project");
+    expect(mock.rpcCalls[0].args.project_row).toEqual(rows.projectRow);
+    expect(mock.rpcCalls[0].args.node_rows).toEqual(rows.nodeRows);
+    expect(mock.rpcCalls[0].args.message_rows).toEqual(rows.messageRows);
+    expect(mock.upserts).toHaveLength(0);
+    expect(mock.client.from).not.toHaveBeenCalled();
+  });
+
+  it("falls back to per-table writes when the RPC function does not exist", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const mock = createSupabaseClientMock({
+      code: "PGRST202",
+      message:
+        "Could not find the function public.branchmind_save_project(message_rows, node_rows, project_row) in the schema cache",
+    });
+    supabaseServerMock.state.client = mock.client;
+    const project = makeProject();
+
+    await getProjectsRepository().saveProject(project);
+
+    expect(warn).toHaveBeenCalled();
+    expect(mock.upserts.map((upsert) => upsert.table)).toEqual([
+      "branchmind_projects",
+      "branchmind_nodes",
+      "branchmind_messages",
+    ]);
+    const rows = projectToRows(project);
+    expect(mock.upserts[0].rows).toEqual(rows.projectRow);
+    expect(mock.upserts[1].rows).toEqual(rows.nodeRows);
+    expect(mock.upserts[2].rows).toEqual(rows.messageRows);
+  });
+
+  it("falls back when the RPC fails with a missing-column schema error", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const mock = createSupabaseClientMock({
+      code: "42703",
+      message: 'column "notes" of relation "branchmind_projects" does not exist',
+    });
+    supabaseServerMock.state.client = mock.client;
+
+    await getProjectsRepository().saveProject(makeProject());
+
+    expect(warn).toHaveBeenCalled();
+    expect(mock.upserts.map((upsert) => upsert.table)).toEqual([
+      "branchmind_projects",
+      "branchmind_nodes",
+      "branchmind_messages",
+    ]);
+  });
+
+  it("rethrows unexpected RPC errors without falling back", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const mock = createSupabaseClientMock({
+      code: "23505",
+      message: "duplicate key value violates unique constraint",
+    });
+    supabaseServerMock.state.client = mock.client;
+
+    await expect(getProjectsRepository().saveProject(makeProject())).rejects.toThrow(
+      /save project RPC failed/,
+    );
+
+    expect(warn).not.toHaveBeenCalled();
+    expect(mock.upserts).toHaveLength(0);
   });
 });

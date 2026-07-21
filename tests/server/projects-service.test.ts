@@ -27,6 +27,7 @@ import {
   deleteProjectForOwner,
   prepareChildContext,
   prepareRegenerateNodeContext,
+  regenerateNodeForOwner,
   syncProjectForOwner,
   updateProjectForOwner,
   updateNodeForOwner,
@@ -283,14 +284,48 @@ describe("prepareRegenerateNodeContext", () => {
       "project_regenerate",
       "node_regenerate",
       {
-        instruction: "Edited first prompt",
-        userMessageId: "user_a",
+        instruction: "Edited second prompt",
+        userMessageId: "user_b",
       },
     );
 
-    expect(context.instruction).toBe("Edited first prompt");
-    expect(context.attachments).toEqual([attachmentA]);
-    expect(context.messages.map((message) => message.content)).toEqual([]);
+    expect(context.instruction).toBe("Edited second prompt");
+    expect(context.attachments).toEqual([attachmentB]);
+    expect(context.messages.map((message) => message.content)).toEqual([
+      "First prompt",
+      "First answer",
+    ]);
+  });
+
+  it("rejects edits and retries outside the latest turn", async () => {
+    await expect(
+      prepareRegenerateNodeContext(
+        "owner_regenerate",
+        "project_regenerate",
+        "node_regenerate",
+        {
+          instruction: "Edited first prompt",
+          userMessageId: "user_a",
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "REGENERATE_NOT_LATEST",
+      status: 400,
+    });
+
+    await expect(
+      prepareRegenerateNodeContext(
+        "owner_regenerate",
+        "project_regenerate",
+        "node_regenerate",
+        {
+          assistantMessageId: "assistant_a",
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "REGENERATE_NOT_LATEST",
+      status: 400,
+    });
   });
 
   it("uses the nearest preceding user message attachments when retrying an assistant reply", async () => {
@@ -327,6 +362,85 @@ describe("prepareRegenerateNodeContext", () => {
       code: "REGENERATE_TARGET_MISMATCH",
       status: 400,
     });
+  });
+});
+
+describe("regenerateNodeForOwner", () => {
+  beforeEach(() => {
+    readProjectsMock.mockReset();
+    readProjectsForSessionMock.mockReset();
+    deleteProjectMock.mockReset();
+    saveProjectMock.mockReset();
+    updateNodePositionForOwnerMock.mockReset();
+    readProjectsMock.mockResolvedValue([makeProject()]);
+    readProjectsForSessionMock.mockResolvedValue([]);
+    deleteProjectMock.mockResolvedValue(undefined);
+    saveProjectMock.mockResolvedValue(undefined);
+    updateNodePositionForOwnerMock.mockResolvedValue(null);
+  });
+
+  const reply = {
+    title: "Regenerated title",
+    summary: "Regenerated summary",
+    content: "Regenerated answer",
+  };
+
+  it("saves the regenerated latest turn when the expected version matches", async () => {
+    const result = await regenerateNodeForOwner(
+      "owner_regenerate",
+      "project_regenerate",
+      "node_regenerate",
+      {
+        assistantMessageId: "assistant_b",
+        expectedNodeUpdatedAt: "2026-01-01T00:00:00.000Z",
+        reply,
+      },
+    );
+
+    expect(result.node.messages.at(-1)).toMatchObject({
+      id: "assistant_b",
+      content: "Regenerated answer",
+    });
+    expect(saveProjectMock).toHaveBeenCalled();
+  });
+
+  it("rejects regeneration when the node changed during generation", async () => {
+    await expect(
+      regenerateNodeForOwner(
+        "owner_regenerate",
+        "project_regenerate",
+        "node_regenerate",
+        {
+          assistantMessageId: "assistant_b",
+          expectedNodeUpdatedAt: "2025-12-31T00:00:00.000Z",
+          reply,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "NODE_CONFLICT",
+      status: 409,
+    });
+
+    expect(saveProjectMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects regeneration of messages outside the latest turn", async () => {
+    await expect(
+      regenerateNodeForOwner(
+        "owner_regenerate",
+        "project_regenerate",
+        "node_regenerate",
+        {
+          assistantMessageId: "assistant_a",
+          reply,
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "REGENERATE_NOT_LATEST",
+      status: 400,
+    });
+
+    expect(saveProjectMock).not.toHaveBeenCalled();
   });
 });
 

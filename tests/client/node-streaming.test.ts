@@ -62,21 +62,38 @@ function makeProject(): Project {
 }
 
 describe("node streaming helpers", () => {
-  it("clears the paired assistant when editing an earlier user message", () => {
+  it("returns null when editing a user message outside the latest turn", () => {
     const result = createRegeneratingNodeProject(makeProject(), "node_streaming", {
       instruction: "Edited first prompt",
       userMessageId: "user_a",
     });
 
-    expect(result?.assistantMessageId).toBe("assistant_a");
+    expect(result).toBeNull();
+  });
+
+  it("clears the paired assistant when editing the latest user message", () => {
+    const result = createRegeneratingNodeProject(makeProject(), "node_streaming", {
+      instruction: "Edited second prompt",
+      userMessageId: "user_b",
+    });
+
+    expect(result?.assistantMessageId).toBe("assistant_b");
     expect(result?.node.title).toBe("Original node title");
-    expect(result?.project.title).toBe("Original project");
+    expect(result?.project.title).toBe("Edited second prompt");
     expect(result?.node.messages.map((message) => message.content)).toEqual([
-      "Edited first prompt",
+      "First prompt",
+      "First answer",
+      "Edited second prompt",
       "",
-      "Second prompt",
-      "Second answer",
     ]);
+  });
+
+  it("returns null when retrying an assistant reply outside the latest turn", () => {
+    const result = createRegeneratingNodeProject(makeProject(), "node_streaming", {
+      assistantMessageId: "assistant_a",
+    });
+
+    expect(result).toBeNull();
   });
 
   it("rejects explicit regenerate targets from different turns", () => {

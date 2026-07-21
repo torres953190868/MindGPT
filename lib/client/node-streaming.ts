@@ -229,7 +229,7 @@ export function createRegeneratingNodeProject(
   if (typeof update.instruction === "string" && !instruction) return null;
 
   const targets = resolveRegenerateTargets(node.messages, update);
-  if (!targets) return null;
+  if (!targets || !targets.isLatestAssistant) return null;
 
   const timestamp = now();
   const messages = node.messages.map((message, index) => {

@@ -175,3 +175,264 @@ describe("useBranchMindStore project deletion", () => {
     expect(readStoredPendingRecords().records).toEqual([]);
   });
 });
+
+function makeRegenerateProject(): Project {
+  const timestamp = "2026-01-01T00:00:00.000Z";
+  const rootNodeId = "project_regenerate_root";
+  return {
+    id: "project_regenerate",
+    title: "Regenerate test project",
+    notes: "",
+    rootNodeId,
+    nodes: {
+      [rootNodeId]: {
+        id: rootNodeId,
+        projectId: "project_regenerate",
+        parentId: null,
+        title: "Root",
+        titleManuallyEdited: false,
+        summary: "Summary",
+        messages: [
+          {
+            id: "user_a",
+            role: "user",
+            content: "First prompt",
+            attachments: [],
+            createdAt: timestamp,
+          },
+          {
+            id: "assistant_a",
+            role: "assistant",
+            content: "First answer",
+            attachments: [],
+            createdAt: timestamp,
+          },
+          {
+            id: "user_b",
+            role: "user",
+            content: "Second prompt",
+            attachments: [],
+            createdAt: timestamp,
+          },
+          {
+            id: "assistant_b",
+            role: "assistant",
+            content: "Second answer",
+            attachments: [],
+            createdAt: timestamp,
+          },
+        ],
+        children: ["project_regenerate_child"],
+        position: { x: 0, y: 0 },
+        branchType: "root",
+        collapsed: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+      project_regenerate_child: {
+        id: "project_regenerate_child",
+        projectId: "project_regenerate",
+        parentId: rootNodeId,
+        title: "Child",
+        titleManuallyEdited: false,
+        summary: "Child summary",
+        messages: [
+          {
+            id: "user_child",
+            role: "user",
+            content: "Child prompt",
+            attachments: [],
+            createdAt: timestamp,
+          },
+          {
+            id: "assistant_child",
+            role: "assistant",
+            content: "Child answer",
+            attachments: [],
+            createdAt: timestamp,
+          },
+        ],
+        children: [],
+        position: { x: 320, y: 0 },
+        branchType: "continue",
+        collapsed: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+describe("useBranchMindStore regenerate", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    const localStorage = new MemoryStorage();
+    vi.stubGlobal("window", {
+      localStorage,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
+    vi.stubGlobal("document", {
+      addEventListener: vi.fn(),
+      visibilityState: "visible",
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubFetchWithDeferredRegenerate(project: Project) {
+    let resolveRegenerate: (response: Response) => void = () => {};
+    let rejectRegenerate: (error: Error) => void = () => {};
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === "/api/projects" && !init?.method) {
+        return Promise.resolve(Response.json({ projects: [project] }));
+      }
+      if (url === `/api/projects/${project.id}/nodes/${project.rootNodeId}/regenerate`) {
+        return new Promise<Response>((resolve, reject) => {
+          resolveRegenerate = resolve;
+          rejectRegenerate = reject;
+        });
+      }
+      return Promise.reject(new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    return {
+      fetchMock,
+      resolveRegenerate: (response: Response) => resolveRegenerate(response),
+      rejectRegenerate: (error: Error) => rejectRegenerate(error),
+    };
+  }
+
+  function applyConcurrentChange(
+    store: typeof import("@/store/useBranchMindStore").useBranchMindStore,
+    projectId: string,
+  ) {
+    store.setState((state) => ({
+      projects: state.projects.map((item) =>
+        item.id === projectId
+          ? {
+              ...item,
+              notes: "Notes written during streaming",
+              updatedAt: "2026-01-03T00:00:00.000Z",
+              nodes: {
+                ...item.nodes,
+                project_regenerate_child: {
+                  ...item.nodes.project_regenerate_child,
+                  position: { x: 7, y: 7 },
+                },
+              },
+            }
+          : item,
+      ),
+    }));
+  }
+
+  it("restores only the regenerated messages on failure and keeps other changes", async () => {
+    const project = makeRegenerateProject();
+    const { rejectRegenerate } = stubFetchWithDeferredRegenerate(project);
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+
+    await useBranchMindStore.getState().hydrate({ force: true });
+    useBranchMindStore.getState().selectProject(project.id);
+
+    const started = await useBranchMindStore
+      .getState()
+      .editUserMessage(project.rootNodeId, "user_b", "Edited second prompt");
+    expect(started).toBe(true);
+
+    const draft = useBranchMindStore.getState().projects[0];
+    expect(draft.title).toBe("Edited second prompt");
+    expect(
+      draft.nodes[project.rootNodeId].messages.map((message) => message.content),
+    ).toEqual(["First prompt", "First answer", "Edited second prompt", ""]);
+
+    applyConcurrentChange(useBranchMindStore, project.id);
+    rejectRegenerate(new Error("Network down"));
+
+    await vi.waitFor(() => {
+      expect(useBranchMindStore.getState().aiError).toBe("Network down");
+    });
+
+    const restored = useBranchMindStore.getState().projects[0];
+    expect(restored.title).toBe("Regenerate test project");
+    expect(restored.notes).toBe("Notes written during streaming");
+    expect(restored.updatedAt).toBe("2026-01-03T00:00:00.000Z");
+    expect(restored.nodes.project_regenerate_child.position).toEqual({ x: 7, y: 7 });
+    expect(
+      restored.nodes[project.rootNodeId].messages.map((message) => message.content),
+    ).toEqual(["First prompt", "First answer", "Second prompt", "Second answer"]);
+    expect(useBranchMindStore.getState().streamingNodeId).toBeNull();
+  });
+
+  it("merges only the regenerated node on success and keeps other changes", async () => {
+    const project = makeRegenerateProject();
+    const { fetchMock, resolveRegenerate } = stubFetchWithDeferredRegenerate(project);
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+
+    await useBranchMindStore.getState().hydrate({ force: true });
+    useBranchMindStore.getState().selectProject(project.id);
+
+    const started = await useBranchMindStore
+      .getState()
+      .editUserMessage(project.rootNodeId, "user_b", "Edited second prompt");
+    expect(started).toBe(true);
+
+    applyConcurrentChange(useBranchMindStore, project.id);
+
+    const serverNode = {
+      ...project.nodes[project.rootNodeId],
+      title: "Regenerated title",
+      summary: "Regenerated summary",
+      messages: project.nodes[project.rootNodeId].messages.map((message) =>
+        message.id === "user_b"
+          ? { ...message, content: "Edited second prompt" }
+          : message.id === "assistant_b"
+            ? { ...message, content: "Regenerated answer" }
+            : message,
+      ),
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    };
+    const serverProject = {
+      ...project,
+      title: "Edited second prompt",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+      nodes: { ...project.nodes, [project.rootNodeId]: serverNode },
+    };
+    resolveRegenerate(
+      new Response(
+        `event: complete\ndata: ${JSON.stringify({ project: serverProject, node: serverNode })}\n\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      ),
+    );
+
+    await vi.waitFor(() => {
+      expect(useBranchMindStore.getState().streamingNodeId).toBeNull();
+    });
+
+    const merged = useBranchMindStore.getState().projects[0];
+    expect(useBranchMindStore.getState().aiError).toBeNull();
+    expect(merged.title).toBe("Edited second prompt");
+    expect(merged.notes).toBe("Notes written during streaming");
+    expect(merged.updatedAt).toBe("2026-01-03T00:00:00.000Z");
+    expect(merged.nodes.project_regenerate_child.position).toEqual({ x: 7, y: 7 });
+    expect(merged.nodes[project.rootNodeId].title).toBe("Regenerated title");
+    expect(
+      merged.nodes[project.rootNodeId].messages.map((message) => message.content),
+    ).toEqual(["First prompt", "First answer", "Edited second prompt", "Regenerated answer"]);
+
+    const regenerateCall = fetchMock.mock.calls.find(([input]) =>
+      input.toString().endsWith("/regenerate"),
+    );
+    expect(regenerateCall).toBeDefined();
+    const body = JSON.parse(String(regenerateCall?.[1]?.body)) as Record<string, unknown>;
+    expect(body.expectedNodeUpdatedAt).toBe("2026-01-01T00:00:00.000Z");
+    expect(body.userMessageId).toBe("user_b");
+    expect(body.assistantMessageId).toBe("assistant_b");
+  });
+});

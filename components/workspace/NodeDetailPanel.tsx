@@ -47,6 +47,7 @@ import {
   useHighlightedAction,
 } from "@/components/ui/highlighted-action";
 import type { ConversationMessageItem } from "@/lib/graph";
+import { resolveRegenerateTargets } from "@/lib/message-regeneration";
 import type {
   ChatAttachment,
   ChatMessage,
@@ -350,6 +351,34 @@ export function NodeDetailPanel({
           }))
         : [];
   const shouldShowNodeBrief = Boolean(node && node.messages.length === 0);
+  let lastNodeUserMessage: ChatMessage | null = null;
+  let lastNodeAssistantMessage: ChatMessage | null = null;
+  if (node) {
+    for (let index = node.messages.length - 1; index >= 0; index -= 1) {
+      const message = node.messages[index];
+      if (!lastNodeAssistantMessage && message.role === "assistant") {
+        lastNodeAssistantMessage = message;
+      }
+      if (!lastNodeUserMessage && message.role === "user") {
+        lastNodeUserMessage = message;
+      }
+      if (lastNodeUserMessage && lastNodeAssistantMessage) break;
+    }
+  }
+  const latestEditableUserMessageId =
+    node && lastNodeUserMessage &&
+    resolveRegenerateTargets(node.messages, {
+      userMessageId: lastNodeUserMessage.id,
+    })?.isLatestAssistant
+      ? lastNodeUserMessage.id
+      : null;
+  const latestRetryableAssistantMessageId =
+    node && lastNodeAssistantMessage &&
+    resolveRegenerateTargets(node.messages, {
+      assistantMessageId: lastNodeAssistantMessage.id,
+    })?.isLatestAssistant
+      ? lastNodeAssistantMessage.id
+      : null;
   const isComposerBusy = composerControls.controlsBusy;
   const displayError = composerControls.attachmentError ?? error;
   const isInitialSubmit = initialSubmit;
@@ -1151,26 +1180,30 @@ export function NodeDetailPanel({
                     >
                       {isCopied ? <Check size={15} /> : <Copy size={15} />}
                     </MessageActionButton>
-                    {!inherited && (
+                    {!inherited && sourceNodeId === node.id && (
                       message.role === "user" ? (
-                        <MessageActionButton
-                          label={copy.workspace.editUserMessage}
-                          testId="edit-message-button"
-                          onClick={() => handleStartEdit(message)}
-                          disabled={isCreating}
-                          highlightedHover
-                        >
-                          <Pencil size={15} />
-                        </MessageActionButton>
+                        message.id === latestEditableUserMessageId && (
+                          <MessageActionButton
+                            label={copy.workspace.editUserMessage}
+                            testId="edit-message-button"
+                            onClick={() => handleStartEdit(message)}
+                            disabled={isCreating}
+                            highlightedHover
+                          >
+                            <Pencil size={15} />
+                          </MessageActionButton>
+                        )
                       ) : (
-                        <MessageActionButton
-                          label={copy.workspace.retryAssistant}
-                          testId="retry-message-button"
-                          onClick={() => handleRetryMessage(message)}
-                          disabled={isCreating}
-                        >
-                          <RotateCcw size={15} />
-                        </MessageActionButton>
+                        message.id === latestRetryableAssistantMessageId && (
+                          <MessageActionButton
+                            label={copy.workspace.retryAssistant}
+                            testId="retry-message-button"
+                            onClick={() => handleRetryMessage(message)}
+                            disabled={isCreating}
+                          >
+                            <RotateCcw size={15} />
+                          </MessageActionButton>
+                        )
                       )
                     )}
                   </div>

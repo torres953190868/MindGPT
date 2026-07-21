@@ -47,6 +47,7 @@ type RegenerateNodeUpdate = {
   instruction?: string;
   userMessageId?: string;
   assistantMessageId?: string;
+  expectedNodeUpdatedAt?: string;
 };
 
 type PrepareRegenerateNodeUpdate = Omit<RegenerateNodeUpdate, "reply">;
@@ -111,7 +112,16 @@ function getRegenerateTargetsOrBadRequest(
   update: PrepareRegenerateNodeUpdate,
 ) {
   const targets = resolveRegenerateTargets(node.messages, update);
-  if (targets) return targets;
+  if (targets) {
+    if (!targets.isLatestAssistant) {
+      badRequest(
+        "Only the latest message in a node can be edited or retried.",
+        "REGENERATE_NOT_LATEST",
+      );
+    }
+
+    return targets;
+  }
 
   if (
     update.userMessageId &&
@@ -433,6 +443,21 @@ export async function regenerateNodeForOwner(
   const node = project?.nodes[nodeId];
   if (!project || !node) notFound();
 
+  if (
+    update.expectedNodeUpdatedAt &&
+    node.updatedAt !== update.expectedNodeUpdatedAt
+  ) {
+    throw new HttpError(
+      "This conversation was updated in another window. Reload and try again.",
+      {
+        code: "NODE_CONFLICT",
+        expose: true,
+        status: 409,
+      },
+    );
+  }
+
+  getRegenerateTargetsOrBadRequest(node, update);
   const result = regenerateNode(project, nodeId, update);
   if (!result) {
     badRequest("Node message could not be regenerated.", "NODE_REGENERATION_FAILED");

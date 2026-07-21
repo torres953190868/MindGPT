@@ -20,9 +20,15 @@ import {
   type PendingProjectSyncRecord,
   upsertPendingProjectSyncRecord,
 } from "@/lib/client/pending-project-sync";
+import {
+  getBranchMindLanguage,
+  LANGUAGE_STORAGE_KEY,
+} from "@/lib/language";
+import { LANGUAGE_COPY } from "@/lib/language-copy";
 import type {
   BranchType,
   ChatAttachment,
+  ChatMessage,
   ChatModelSelection,
   ChatSkill,
   MindNode,
@@ -215,6 +221,68 @@ function isNotFoundError(error: unknown) {
     error instanceof ApiRequestError &&
     (error.status === 404 || error.code === "NOT_FOUND")
   );
+}
+
+function isNodeConflictError(error: unknown) {
+  const candidate = error as { code?: unknown; status?: unknown } | null;
+  return candidate?.status === 409 || candidate?.code === "NODE_CONFLICT";
+}
+
+function getNodeConflictErrorMessage() {
+  let storedLanguage: string | null = null;
+  try {
+    storedLanguage =
+      typeof window === "undefined"
+        ? null
+        : window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+  } catch {
+    storedLanguage = null;
+  }
+
+  return LANGUAGE_COPY[getBranchMindLanguage(storedLanguage)].workspace
+    .regenerateConflict;
+}
+
+type RegenerateRollback = {
+  nodeId: string;
+  userMessage?: ChatMessage;
+  assistantMessage?: ChatMessage;
+  title?: string;
+};
+
+function rollbackRegeneratedMessages(
+  projects: Project[],
+  projectId: string,
+  rollback: RegenerateRollback,
+) {
+  const project = projects.find((item) => item.id === projectId);
+  const node = project?.nodes[rollback.nodeId];
+  if (!project || !node) return projects;
+
+  const messages = node.messages.map((message) => {
+    if (rollback.userMessage && message.id === rollback.userMessage.id) {
+      return { ...message, content: rollback.userMessage.content };
+    }
+
+    if (rollback.assistantMessage && message.id === rollback.assistantMessage.id) {
+      return {
+        ...message,
+        content: rollback.assistantMessage.content,
+        citations: rollback.assistantMessage.citations,
+      };
+    }
+
+    return message;
+  });
+
+  return replaceProject(projects, {
+    ...project,
+    title: rollback.title ?? project.title,
+    nodes: {
+      ...project.nodes,
+      [rollback.nodeId]: { ...node, messages },
+    },
+  });
 }
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -756,6 +824,17 @@ async function regenerateNodeInPlace(
   });
   if (!draft) return false;
 
+  const rollback: RegenerateRollback = {
+    nodeId,
+    userMessage: userMessageId
+      ? node.messages.find((message) => message.id === userMessageId)
+      : undefined,
+    assistantMessage: node.messages.find(
+      (message) => message.id === draft.assistantMessageId,
+    ),
+    title: draft.project.title === project.title ? undefined : project.title,
+  };
+
   set({
     projects: replaceProject(state.projects, draft.project),
     selectedNodeId: nodeId,
@@ -798,6 +877,7 @@ async function regenerateNodeInPlace(
             instruction,
             userMessageId,
             assistantMessageId: draft.assistantMessageId,
+            expectedNodeUpdatedAt: node.updatedAt,
             modelSelection,
             ...(skill ? { skill } : {}),
           }),
@@ -819,21 +899,41 @@ async function regenerateNodeInPlace(
         ) {
           clearPendingSyncRecord(event.project.id);
         }
-        set({
-          projects: replaceProject(get().projects, event.project),
-          selectedNodeId: event.node.id,
-          creatingNodeId: null,
-          streamingNodeId: null,
-          streamingMessageId: null,
-          pendingProjectSyncs:
-            pendingSync?.nodeId === nodeId &&
-            pendingSync.assistantMessageId === draft.assistantMessageId
-              ? Object.fromEntries(
-                  Object.entries(get().pendingProjectSyncs).filter(
-                    ([pendingProjectId]) => pendingProjectId !== event.project.id,
-                  ),
-                )
-              : get().pendingProjectSyncs,
+        set((current) => {
+          const currentProject = current.projects.find(
+            (item) => item.id === event.project.id,
+          );
+          const nextProjects = currentProject
+            ? replaceProject(current.projects, {
+                ...currentProject,
+                title: event.project.title,
+                updatedAt: newestTimestamp(
+                  currentProject.updatedAt,
+                  event.project.updatedAt,
+                ),
+                nodes: {
+                  ...currentProject.nodes,
+                  [event.node.id]: event.node,
+                },
+              })
+            : replaceProject(current.projects, event.project);
+
+          return {
+            projects: nextProjects,
+            selectedNodeId: event.node.id,
+            creatingNodeId: null,
+            streamingNodeId: null,
+            streamingMessageId: null,
+            pendingProjectSyncs:
+              pendingSync?.nodeId === nodeId &&
+              pendingSync.assistantMessageId === draft.assistantMessageId
+                ? Object.fromEntries(
+                    Object.entries(current.pendingProjectSyncs).filter(
+                      ([pendingProjectId]) => pendingProjectId !== event.project.id,
+                    ),
+                  )
+                : current.pendingProjectSyncs,
+          };
         });
       });
 
@@ -842,7 +942,9 @@ async function regenerateNodeInPlace(
       }
     } catch (error) {
       deltaBatch.cancel();
-      const errorMessage = getErrorMessage(error);
+      const errorMessage = isNodeConflictError(error)
+        ? getNodeConflictErrorMessage()
+        : getErrorMessage(error);
       const currentPendingSync = get().pendingProjectSyncs[project.id];
       const failedPendingSync =
         !completed &&
@@ -863,7 +965,7 @@ async function regenerateNodeInPlace(
       set((current) => ({
         projects: completed
           ? current.projects
-          : replaceProject(current.projects, project),
+          : rollbackRegeneratedMessages(current.projects, project.id, rollback),
         selectedNodeId: nodeId,
         creatingNodeId: null,
         streamingNodeId: null,

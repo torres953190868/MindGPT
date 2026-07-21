@@ -69,6 +69,18 @@ function isMissingColumnError(error: SupabaseErrorLike) {
   );
 }
 
+function isMissingFunctionError(error: SupabaseErrorLike) {
+  const text = [error?.message, error?.details, error?.hint]
+    .filter(Boolean)
+    .join(" ");
+  return Boolean(
+    text &&
+      (error?.code === "42883" ||
+        error?.code === "PGRST202" ||
+        /function .* does not exist|could not find .* function/i.test(text)),
+  );
+}
+
 function getErrorText(error: unknown) {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
@@ -429,8 +441,53 @@ class SupabaseProjectsRepository implements ProjectsRepository {
 
   async saveProject(project: Project) {
     const client = getSupabaseAdminClient();
-    const capabilities = await getSchemaCapabilities(client);
     const rows = projectToRows(project);
+
+    const rpcError = await this.saveProjectWithRpc(client, rows);
+    if (!rpcError) return;
+
+    // Only fall back to per-table writes for recognizable schema mismatches
+    // (RPC not deployed yet, or a schema missing optional columns the RPC
+    // writes). Any other RPC failure is a real error and must surface.
+    if (!isMissingFunctionError(rpcError) && !isMissingColumnError(rpcError)) {
+      throw new Error(
+        `Supabase save project RPC failed: ${rpcError.message ?? "unknown error"}`,
+      );
+    }
+
+    console.warn(
+      "BranchMind Supabase save project RPC is unavailable; falling back to per-table writes.",
+      { projectId: project.id, message: rpcError.message },
+    );
+
+    await this.saveProjectPerTable(client, project, rows);
+  }
+
+  private async saveProjectWithRpc(
+    client: SupabaseClient<Database>,
+    rows: ReturnType<typeof projectToRows>,
+  ): Promise<SupabaseErrorLike> {
+    // database.types.ts is generated and does not include the
+    // branchmind_save_project RPC yet, so call it through a loosely typed
+    // signature instead of editing the generated file.
+    const rpc = client.rpc as unknown as (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => Promise<{ error: SupabaseErrorLike }>;
+    const { error } = await rpc("branchmind_save_project", {
+      project_row: rows.projectRow,
+      node_rows: rows.nodeRows,
+      message_rows: rows.messageRows,
+    });
+    return error;
+  }
+
+  private async saveProjectPerTable(
+    client: SupabaseClient<Database>,
+    project: Project,
+    rows: ReturnType<typeof projectToRows>,
+  ) {
+    const capabilities = await getSchemaCapabilities(client);
     const existingProject = await client
       .from("branchmind_projects")
       .select("id")

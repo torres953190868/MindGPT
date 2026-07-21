@@ -89,6 +89,7 @@ export const regenerateNodeSchema = z
     instruction: z.string().trim().min(1).max(1_500).optional(),
     userMessageId: z.string().trim().min(1).optional(),
     assistantMessageId: z.string().trim().min(1).optional(),
+    expectedNodeUpdatedAt: z.string().trim().min(1).optional(),
     modelSelection: chatModelSelectionSchema.optional(),
     skill: chatSkillSchema.optional(),
   })

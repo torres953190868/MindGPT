@@ -135,6 +135,7 @@ export async function POST(request: NextRequest, context: RegenerateNodeRouteCon
                 instruction: body.instruction,
                 userMessageId: body.userMessageId,
                 assistantMessageId: body.assistantMessageId,
+                expectedNodeUpdatedAt: body.expectedNodeUpdatedAt,
                 reply: event.reply,
               },
             );
