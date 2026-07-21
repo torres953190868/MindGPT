@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createRegeneratingNodeProject } from "@/lib/client/node-streaming";
+import {
+  createRegeneratingNodeProject,
+  readNodeStreamingEvents,
+} from "@/lib/client/node-streaming";
 import type { Project } from "@/lib/types";
 
 function makeProject(): Project {
@@ -104,5 +107,24 @@ describe("node streaming helpers", () => {
     });
 
     expect(result).toBeNull();
+  });
+});
+
+describe("node streaming errors", () => {
+  it("retains status, code, and request id for generic SSE failures", async () => {
+    const response = new Response(
+      "event: error\ndata: {\"message\":\"Request failed.\",\"status\":500,\"code\":\"DEEPSEEK_NOT_CONFIGURED\",\"requestId\":\"req_stream_failure\"}\n\n",
+      {
+        headers: { "Content-Type": "text/event-stream" },
+      },
+    );
+
+    await expect(readNodeStreamingEvents(response, () => undefined)).rejects.toMatchObject({
+      message:
+        "Request failed. (HTTP 500, DEEPSEEK_NOT_CONFIGURED, requestId: req_stream_failure)",
+      code: "DEEPSEEK_NOT_CONFIGURED",
+      requestId: "req_stream_failure",
+      status: 500,
+    });
   });
 });

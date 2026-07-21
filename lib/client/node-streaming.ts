@@ -391,10 +391,9 @@ function parseNodeStreamingEvent({ event, data }: SseEvent): NodeStreamingEvent 
     const status = getErrorStatus(payload);
     const code = getErrorString(payload, "code");
     const requestId = getErrorString(payload, "requestId");
-    const message =
-      typeof payload.message === "string" ? payload.message : "Request failed.";
+    const message = formatApiErrorMessage({ error: payload }, status);
     throw new ApiRequestError(
-      requestId ? `${message} (Reference: ${requestId})` : message,
+      message,
       {
         code,
         requestId,
