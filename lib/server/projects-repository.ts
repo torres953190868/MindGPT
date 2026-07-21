@@ -470,7 +470,10 @@ class SupabaseProjectsRepository implements ProjectsRepository {
     // database.types.ts is generated and does not include the
     // branchmind_save_project RPC yet, so call it through a loosely typed
     // signature instead of editing the generated file.
-    const rpc = client.rpc as unknown as (
+    // Supabase's rpc method reads from `this.rest`, so retain the client as
+    // its receiver. Calling a detached `client.rpc` function makes `this`
+    // undefined and prevents newly generated nodes from being saved.
+    const rpc = client.rpc.bind(client) as unknown as (
       fn: string,
       args: Record<string, unknown>,
     ) => Promise<{ error: SupabaseErrorLike }>;

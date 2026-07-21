@@ -145,8 +145,13 @@ function createSupabaseClientMock(rpcError: { code?: string; message: string } |
   const rpcCalls: MockedCall[] = [];
 
   const client = {
-    rpc: vi.fn(async (fn: string, args: Record<string, unknown>) => {
-      rpcCalls.push({ fn, args });
+    rest: { rpcCalls },
+    rpc: vi.fn(async function (
+      this: { rest: { rpcCalls: MockedCall[] } },
+      fn: string,
+      args: Record<string, unknown>,
+    ) {
+      this.rest.rpcCalls.push({ fn, args });
       return { data: null, error: rpcError };
     }),
     from: vi.fn((table: string) => {
