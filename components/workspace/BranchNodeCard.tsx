@@ -271,7 +271,9 @@ export function BranchNodeCard({ data }: NodeProps) {
           <button
             type="button"
             onClick={handleSelectNodeClick}
-            aria-label={copy.workspace.openNode(mindNode.title)}
+            aria-label={copy.workspace.openNode(
+              isStreaming ? copy.workspace.thinkingElapsed(0) : mindNode.title,
+            )}
             aria-pressed={selected}
             data-testid="open-node-button"
             data-node-id={mindNode.id}
@@ -296,7 +298,14 @@ export function BranchNodeCard({ data }: NodeProps) {
                     hasInlineComposer ? "text-lg" : "text-base"
                   }`}
                 >
-                  {mindNode.title}
+                  {isStreaming ? (
+                    <>
+                      <span className="sr-only">{copy.workspace.thinkingElapsed(0)}</span>
+                      <ThinkingElapsedTimer />
+                    </>
+                  ) : (
+                    mindNode.title
+                  )}
                 </span>
               </span>
               <span
@@ -307,9 +316,9 @@ export function BranchNodeCard({ data }: NodeProps) {
               </span>
             </span>
 
-            {hasInlineComposer ? (
+            {hasInlineComposer || isStreaming ? (
               <span id={nodeSummaryId} className="sr-only">
-                {mindNode.summary}
+                {isStreaming ? copy.workspace.thinkingElapsed(0) : mindNode.summary}
               </span>
             ) : (
               <span
@@ -542,8 +551,6 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
             className="flex items-center gap-2 px-1 text-xs font-bold text-neutral-500"
           >
             <Loader2 size={13} className="animate-spin" />
-            {copy.workspace.generatingAnswer}
-            {" · "}
             <ThinkingElapsedTimer />
           </p>
         )}

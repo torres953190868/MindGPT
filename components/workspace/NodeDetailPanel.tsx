@@ -1145,7 +1145,7 @@ export function NodeDetailPanel({
                   ) : (
                     <MarkdownMessage
                       content={
-                        message.content || (isStreamingAssistant ? `${copy.workspace.generatingAnswer}...` : "")
+                        message.content || ""
                       }
                       citations={message.citations ?? []}
                       isStreaming={isStreamingAssistant}
@@ -1159,8 +1159,6 @@ export function NodeDetailPanel({
                       data-testid="message-streaming-status"
                       className="mt-2 text-xs font-black uppercase tracking-[0.14em] text-neutral-600"
                     >
-                      {copy.workspace.generatingAnswer}
-                      {" · "}
                       <ThinkingElapsedTimer />
                     </p>
                   )}
