@@ -111,6 +111,59 @@ function makeScrollableWorkspaceProject(seed: string): WorkspaceProject {
   };
 }
 
+function makeScrollableConversationTreeProject(seed: string): WorkspaceProject {
+  const project = makeScrollableWorkspaceProject(`tree-${seed}`);
+  const timestamp = project.createdAt;
+  const rootNode = project.nodes[project.rootNodeId];
+  const childNodeId = `e2e-node-scroll-child-${seed}`;
+  const childMessages: ChatMessage[] = Array.from({ length: 12 }, (_, index) => {
+    const messageNumber = index + 1;
+    const role = index % 2 === 0 ? "user" : "assistant";
+    const content = Array.from(
+      { length: 4 },
+      (_, lineIndex) =>
+        `Child conversation ${messageNumber}.${lineIndex + 1} keeps the selected node content long enough to scroll.`,
+    ).join("\n\n");
+
+    return {
+      id: `e2e-message-scroll-child-${seed}-${messageNumber}`,
+      role,
+      content:
+        messageNumber === 1
+          ? `Teach me machine learning.\n\n${content}`
+          : content,
+      attachments: [],
+      createdAt: timestamp,
+    };
+  });
+
+  return {
+    ...project,
+    nodes: {
+      ...project.nodes,
+      [project.rootNodeId]: {
+        ...rootNode,
+        children: [childNodeId],
+      },
+      [childNodeId]: {
+        id: childNodeId,
+        projectId: project.id,
+        parentId: project.rootNodeId,
+        title: "Machine learning follow-up",
+        titleManuallyEdited: false,
+        summary: "A child conversation used to verify sidebar message focus.",
+        messages: childMessages,
+        children: [],
+        position: { x: 120, y: 410 },
+        branchType: "continue",
+        collapsed: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    },
+  };
+}
+
 function makeWorkspaceTreeProject(seed: string): WorkspaceProject {
   const project = makeWorkspaceProject(`tree-${seed}`);
   const timestamp = project.createdAt;
@@ -4318,6 +4371,63 @@ test("keeps long conversation content inside the node detail scroll area", async
     expect(metrics.panelHeight).toBeGreaterThanOrEqual(metrics.viewportHeight - 2);
     expect(metrics.historyScrollHeight).toBeGreaterThan(metrics.historyClientHeight + 24);
     await expectWheelScrolls(page, history);
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("focuses the selected node's first user message in conversation history", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Conversation focus is covered once.");
+
+  const sourceProject = makeScrollableConversationTreeProject(`focus-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  async function waitForSelectedNodeMessageFocus(nodeId: string) {
+    await page.waitForFunction((nodeId) => {
+      const history = document.querySelector<HTMLElement>(
+        '[data-testid="conversation-history"]',
+      );
+      const target = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-testid="conversation-message"]'),
+      ).find(
+        (message) =>
+          message.dataset.sourceNodeId === nodeId &&
+          Boolean(message.querySelector('[data-role="user"]')),
+      );
+      if (!history || !target) return false;
+
+      const offset = target.getBoundingClientRect().top - history.getBoundingClientRect().top;
+      return history.scrollTop > 0 && offset >= 0 && offset <= 32;
+    }, nodeId);
+  }
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+    const childNode = getNodeByTitle(project, "Machine learning follow-up");
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`/workspace/${project.id}`);
+
+    const history = page.getByTestId("conversation-history");
+    const childCard = page.locator(
+      `[data-testid="branch-node-card"][data-node-id="${childNode.id}"]`,
+    );
+    await expect(childCard).toBeVisible();
+
+    await childCard.click();
+    await waitForSelectedNodeMessageFocus(childNode.id);
+    await expect(history).toContainText("Teach me machine learning.");
+
+    await history.evaluate((element) => element.scrollTo({ top: 0 }));
+    await childCard.click();
+    await waitForSelectedNodeMessageFocus(childNode.id);
   } finally {
     if (projectIdToDelete) {
       await page.request

@@ -353,6 +353,7 @@ export function WorkspaceCanvasShell({
     useState<MobileWorkspaceView>(() => (dataDraftWorkspace ? "map" : "chat"));
   const [mobileDrawerView, setMobileDrawerView] =
     useState<MobileDrawerView>("none");
+  const [conversationFocusRequest, setConversationFocusRequest] = useState(0);
   const [isWorkspaceSidebarCollapsed, setIsWorkspaceSidebarCollapsed] = useState(
     initialWorkspaceSidebarCollapsed,
   );
@@ -706,21 +707,29 @@ export function WorkspaceCanvasShell({
     [hasProjectNotes, restoreAutoCollapsedSidebarForNotes],
   );
 
+  const selectNodeAndFocusConversation = useCallback(
+    (nodeId: string) => {
+      setConversationFocusRequest((current) => current + 1);
+      onSelectNode(nodeId);
+    },
+    [onSelectNode],
+  );
+
   const handleSelectNodeFromOutline = useCallback(
     (nodeId: string) => {
-      onSelectNode(nodeId);
+      selectNodeAndFocusConversation(nodeId);
       if (openMobileChatDrawerIfNeeded()) return;
       setMobileWorkspaceView("chat");
     },
-    [onSelectNode, openMobileChatDrawerIfNeeded],
+    [openMobileChatDrawerIfNeeded, selectNodeAndFocusConversation],
   );
 
   const handleSelectNodeFromMap = useCallback(
     (nodeId: string) => {
-      onSelectNode(nodeId);
+      selectNodeAndFocusConversation(nodeId);
       openMobileChatDrawerIfNeeded();
     },
-    [onSelectNode, openMobileChatDrawerIfNeeded],
+    [openMobileChatDrawerIfNeeded, selectNodeAndFocusConversation],
   );
 
   const handleCloseMobileDrawers = useCallback(() => {
@@ -1167,6 +1176,7 @@ export function WorkspaceCanvasShell({
             <NodeDetailPanel
               node={selectedNode}
               conversationMessages={selectedConversationMessages}
+              conversationFocusRequest={conversationFocusRequest}
               onCreateNode={onCreateNode}
               onPopulateNode={onPopulateNode}
               onEditUserMessage={onEditUserMessage}

@@ -97,6 +97,7 @@ function clampHeight(value: number, min: number, max: number) {
 type NodeDetailPanelProps = {
   node: MindNode | null;
   conversationMessages?: ConversationMessageItem[];
+  conversationFocusRequest?: number;
   onCreateNode: (
     nodeId: string,
     mode: "continue" | "branch",
@@ -284,6 +285,7 @@ function NodeBriefCard({ node }: { node: MindNode }) {
 export function NodeDetailPanel({
   node,
   conversationMessages,
+  conversationFocusRequest = 0,
   onCreateNode,
   onPopulateNode,
   onEditUserMessage,
@@ -341,6 +343,7 @@ export function NodeDetailPanel({
   const composerResizePointerStartedAtRef = useRef(-Infinity);
   const streamingContent =
     node?.messages.find((message) => message.id === streamingMessageId)?.content ?? "";
+  const selectedNodeId = node?.id;
   const displayMessages =
     node && conversationMessages
       ? conversationMessages
@@ -534,6 +537,33 @@ export function NodeDetailPanel({
     if (!container) return;
     container.scrollTo({ top: container.scrollHeight });
   }, [isCreating, node?.id, streamingContent]);
+
+  useEffect(() => {
+    if (!conversationFocusRequest || !selectedNodeId) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const container = messagesRef.current;
+      if (!container) return;
+
+      const nodeMessages = Array.from(
+        container.querySelectorAll<HTMLElement>('[data-testid="conversation-message"]'),
+      ).filter((message) => message.dataset.sourceNodeId === selectedNodeId);
+      const target =
+        nodeMessages.find((message) => message.querySelector('[data-role="user"]')) ??
+        nodeMessages[0];
+
+      if (!target) {
+        container.scrollTo({ top: 0 });
+        return;
+      }
+
+      const containerTop = container.getBoundingClientRect().top;
+      const targetTop = target.getBoundingClientRect().top;
+      container.scrollTo({ top: container.scrollTop + targetTop - containerTop });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [conversationFocusRequest, selectedNodeId]);
 
   async function submitComposer() {
     const trimmed = input.trim();
