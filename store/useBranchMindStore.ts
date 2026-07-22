@@ -1885,7 +1885,7 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
     set({
       projects: replaceProject(state.projects, optimisticDelete.project),
       selectedNodeId,
-      creatingNodeId: null,
+      creatingNodeId: nodeId,
       aiError: null,
     });
 

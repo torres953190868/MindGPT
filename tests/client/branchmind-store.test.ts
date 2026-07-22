@@ -265,6 +265,82 @@ function makeRegenerateProject(): Project {
   };
 }
 
+describe("useBranchMindStore node deletion", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    const localStorage = new MemoryStorage();
+    vi.stubGlobal("window", {
+      localStorage,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
+    vi.stubGlobal("document", {
+      addEventListener: vi.fn(),
+      visibilityState: "visible",
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps project mutations locked until a node deletion completes", async () => {
+    const project = makeRegenerateProject();
+    const childNodeId = "project_regenerate_child";
+    const remainingNodes = { ...project.nodes };
+    delete remainingNodes[childNodeId];
+    const projectWithoutChild: Project = {
+      ...project,
+      nodes: {
+        ...remainingNodes,
+        [project.rootNodeId]: {
+          ...project.nodes[project.rootNodeId],
+          children: [],
+        },
+      },
+    };
+    let resolveDelete: (response: Response) => void = () => {};
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === "/api/projects" && !init?.method) {
+        return Promise.resolve(Response.json({ projects: [project] }));
+      }
+      if (
+        url === `/api/projects/${project.id}/nodes/${childNodeId}` &&
+        init?.method === "DELETE"
+      ) {
+        return new Promise<Response>((resolve) => {
+          resolveDelete = resolve;
+        });
+      }
+      return Promise.reject(new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+    useBranchMindStore.getState().selectProject(project.id);
+    useBranchMindStore.getState().selectNode(childNodeId);
+
+    const deletion = useBranchMindStore.getState().deleteNode(childNodeId);
+    expect(useBranchMindStore.getState().creatingNodeId).toBe(childNodeId);
+
+    await expect(
+      useBranchMindStore.getState().updateNodeTitle(project.rootNodeId, "Renamed root"),
+    ).resolves.toBe(false);
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      `/api/projects/${project.id}/nodes/${project.rootNodeId}`,
+      expect.objectContaining({ method: "PATCH" }),
+    );
+
+    resolveDelete(
+      Response.json({ project: projectWithoutChild, selectedNodeId: project.rootNodeId }),
+    );
+    await deletion;
+    expect(useBranchMindStore.getState().creatingNodeId).toBeNull();
+  });
+});
+
 describe("useBranchMindStore regenerate", () => {
   beforeEach(() => {
     vi.resetModules();
