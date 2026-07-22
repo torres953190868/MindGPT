@@ -100,6 +100,17 @@ function readStoredPendingRecords() {
   };
 }
 
+async function waitForPendingResponseCount(
+  responses: unknown[],
+  count: number,
+): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    if (responses.length === count) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+  expect(responses).toHaveLength(count);
+}
+
 describe("useBranchMindStore project deletion", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -338,6 +349,110 @@ describe("useBranchMindStore node deletion", () => {
     );
     await deletion;
     expect(useBranchMindStore.getState().creatingNodeId).toBeNull();
+  });
+});
+
+describe("useBranchMindStore node collapse", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    const localStorage = new MemoryStorage();
+    vi.stubGlobal("window", {
+      localStorage,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
+    vi.stubGlobal("document", {
+      addEventListener: vi.fn(),
+      visibilityState: "visible",
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("updates immediately and serializes rapid collapse toggles", async () => {
+    const project = makeRegenerateProject();
+    const nodeId = project.rootNodeId;
+    const collapsedProject: Project = {
+      ...project,
+      nodes: {
+        ...project.nodes,
+        [nodeId]: { ...project.nodes[nodeId], collapsed: true },
+      },
+    };
+    const expandedProject: Project = {
+      ...project,
+      nodes: {
+        ...project.nodes,
+        [nodeId]: { ...project.nodes[nodeId], collapsed: false },
+      },
+    };
+    const pendingResponses: Array<{ resolve: (response: Response) => void }> = [];
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === "/api/projects" && !init?.method) {
+        return Promise.resolve(Response.json({ projects: [project] }));
+      }
+      if (url === `/api/projects/${project.id}/nodes/${nodeId}` && init?.method === "PATCH") {
+        return new Promise<Response>((resolve) => {
+          pendingResponses.push({ resolve });
+        });
+      }
+      return Promise.reject(new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+    useBranchMindStore.getState().selectProject(project.id);
+
+    const firstToggle = useBranchMindStore.getState().toggleNodeCollapsed(nodeId);
+    expect(useBranchMindStore.getState().projects[0].nodes[nodeId].collapsed).toBe(true);
+    await waitForPendingResponseCount(pendingResponses, 1);
+
+    const secondToggle = useBranchMindStore.getState().toggleNodeCollapsed(nodeId);
+    expect(useBranchMindStore.getState().projects[0].nodes[nodeId].collapsed).toBe(false);
+
+    pendingResponses[0].resolve(Response.json({ project: collapsedProject }));
+    await waitForPendingResponseCount(pendingResponses, 2);
+    expect(useBranchMindStore.getState().projects[0].nodes[nodeId].collapsed).toBe(false);
+
+    pendingResponses[1].resolve(Response.json({ project: expandedProject }));
+    await Promise.all([firstToggle, secondToggle]);
+
+    const patchBodies = fetchMock.mock.calls
+      .filter(([, init]) => init?.method === "PATCH")
+      .map(([, init]) => JSON.parse(String(init?.body)));
+    expect(patchBodies).toEqual([{ collapsed: true }, { collapsed: false }]);
+    expect(useBranchMindStore.getState().projects[0].nodes[nodeId].collapsed).toBe(false);
+  });
+
+  it("rolls back the optimistic update when saving it fails", async () => {
+    const project = makeRegenerateProject();
+    const nodeId = project.rootNodeId;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === "/api/projects" && !init?.method) {
+        return Promise.resolve(Response.json({ projects: [project] }));
+      }
+      if (url === `/api/projects/${project.id}/nodes/${nodeId}` && init?.method === "PATCH") {
+        return Promise.reject(new Error("Could not save collapse state"));
+      }
+      return Promise.reject(new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+    useBranchMindStore.getState().selectProject(project.id);
+
+    const toggle = useBranchMindStore.getState().toggleNodeCollapsed(nodeId);
+    expect(useBranchMindStore.getState().projects[0].nodes[nodeId].collapsed).toBe(true);
+
+    await toggle;
+    expect(useBranchMindStore.getState().projects[0].nodes[nodeId].collapsed).toBe(false);
+    expect(useBranchMindStore.getState().aiError).toBe("Could not save collapse state");
   });
 });
 

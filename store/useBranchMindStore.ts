@@ -43,9 +43,12 @@ const NODE_POSITION_SYNC_DELAY_MS = 750;
 const NODE_POSITION_SYNC_RETRY_DELAY_MS = 5_000;
 
 const inFlightProjectSyncs = new Set<string>();
+const inFlightNodeCollapsedUpdates = new Map<string, Promise<void>>();
 const pendingNodePositionVersions = new Map<string, number>();
+const pendingNodeCollapsedVersions = new Map<string, number>();
 const pendingNodePositionSyncs = new Map<string, PendingNodePositionSync>();
 let nextNodePositionVersion = 0;
+let nextNodeCollapsedVersion = 0;
 let nodePositionFlushListenersInstalled = false;
 
 type PendingNodePositionSync = PendingNodePositionSyncRecord & {
@@ -310,6 +313,10 @@ function replaceProject(projects: Project[], nextProject: Project) {
 }
 
 function nodePositionKey(projectId: string, nodeId: string) {
+  return `${projectId}:${nodeId}`;
+}
+
+function nodeCollapsedKey(projectId: string, nodeId: string) {
   return `${projectId}:${nodeId}`;
 }
 
@@ -1853,18 +1860,105 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
     const node = project?.nodes[nodeId];
     if (!project || !node || isProjectWaitingForSync(state, project.id)) return;
 
-    try {
-      const response = await fetch(`/api/projects/${project.id}/nodes/${nodeId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ collapsed: !node.collapsed }),
-      });
-      const data = await readJson<UpdateNodeResponse>(response);
+    const collapsed = !node.collapsed;
+    const timestamp = new Date().toISOString();
+    const optimisticProject = {
+      ...project,
+      nodes: {
+        ...project.nodes,
+        [nodeId]: {
+          ...node,
+          collapsed,
+          updatedAt: timestamp,
+        },
+      },
+      updatedAt: timestamp,
+    };
+    const key = nodeCollapsedKey(project.id, nodeId);
+    const version = ++nextNodeCollapsedVersion;
+    pendingNodeCollapsedVersions.set(key, version);
 
-      set({ projects: replaceProject(get().projects, data.project) });
-    } catch (error) {
-      set({ aiError: getErrorMessage(error) });
-    }
+    set({
+      projects: replaceProject(state.projects, optimisticProject),
+      aiError: null,
+    });
+
+    // Keep writes for one node in order. The UI still changes immediately, while
+    // serializing requests prevents a late first response from becoming the saved state.
+    const previousRequest = inFlightNodeCollapsedUpdates.get(key) ?? Promise.resolve();
+    const request = previousRequest
+      .catch(() => undefined)
+      .then(async () => {
+        try {
+          const response = await fetch(`/api/projects/${project.id}/nodes/${nodeId}`, {
+            method: "PATCH",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ collapsed }),
+          });
+          const data = await readJson<UpdateNodeResponse>(response);
+
+          if (pendingNodeCollapsedVersions.get(key) !== version) return;
+
+          set((current) => {
+            const currentProject = current.projects.find((item) => item.id === project.id);
+            const currentNode = currentProject?.nodes[nodeId];
+            const serverNode = data.project.nodes[nodeId];
+            if (!currentProject || !currentNode || !serverNode) return current;
+
+            const nextProject = {
+              ...currentProject,
+              updatedAt: newestTimestamp(currentProject.updatedAt, data.project.updatedAt),
+              nodes: {
+                ...currentProject.nodes,
+                [nodeId]: {
+                  ...currentNode,
+                  collapsed: serverNode.collapsed,
+                  updatedAt: newestTimestamp(currentNode.updatedAt, serverNode.updatedAt),
+                },
+              },
+            };
+
+            return {
+              projects: replaceProject(current.projects, nextProject),
+              aiError: null,
+            };
+          });
+          pendingNodeCollapsedVersions.delete(key);
+        } catch (error) {
+          if (pendingNodeCollapsedVersions.get(key) !== version) return;
+
+          set((current) => {
+            const currentProject = current.projects.find((item) => item.id === project.id);
+            const currentNode = currentProject?.nodes[nodeId];
+            if (!currentProject || !currentNode) return { aiError: getErrorMessage(error) };
+
+            return {
+              projects: replaceProject(current.projects, {
+                ...currentProject,
+                nodes: {
+                  ...currentProject.nodes,
+                  [nodeId]: {
+                    ...currentNode,
+                    collapsed: node.collapsed,
+                  },
+                },
+              }),
+              aiError: getErrorMessage(error),
+            };
+          });
+          pendingNodeCollapsedVersions.delete(key);
+        }
+      });
+
+    inFlightNodeCollapsedUpdates.set(key, request);
+    void request.finally(() => {
+      if (inFlightNodeCollapsedUpdates.get(key) === request) {
+        inFlightNodeCollapsedUpdates.delete(key);
+      }
+    });
+
+    await request;
   },
 
   deleteNode: async (nodeId) => {
