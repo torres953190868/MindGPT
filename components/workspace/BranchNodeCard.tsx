@@ -438,7 +438,7 @@ function InlineNodeComposer({ composer }: { composer: InlineNodeComposerData }) 
     const projectId = await composer.onSubmit(
       trimmed,
       preparedAttachments,
-      composerControls.selectedModel,
+      composerControls.modelSelection,
       skill,
     );
 

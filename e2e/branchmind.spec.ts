@@ -1009,8 +1009,9 @@ test("mobile home launcher starts a workspace from the compact composer", async 
   await expect(mindMapCanvas.getByTestId("expand-workspace-sidebar-button")).toBeVisible();
   await expect(mindMapCanvas.getByTestId("expand-node-detail-panel-button")).toBeVisible();
   await expect.poll(() => syncPayload).not.toBeNull();
-  const payload = syncPayload as { project: Project };
+  const payload = syncPayload as { project: Project; modelSelection?: unknown };
   expect(payload.project.title).toBe(instruction);
+  expect(payload.modelSelection).toBeUndefined();
 });
 
 test("mobile home launcher prompts anonymous users to sign in before starting", async ({
@@ -1332,6 +1333,60 @@ test("home launcher restores a stored model after hydration", async ({
   await page.goto("/");
   await expect(page.getByTestId("chat-model-selector-button")).toContainText("Kimi K2.6");
   expect(consoleErrors.join("\n")).not.toContain("Hydration failed");
+});
+
+test("model catalog stays cached when reopening the workspace", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Session cache is covered once.");
+
+  let catalogRequests = 0;
+  await page.route("**/api/chat/models", async (route) => {
+    catalogRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        defaultSelection: {
+          providerId: "deepseek",
+          model: "deepseek-v4-flash",
+        },
+        providers: [
+          {
+            id: "deepseek",
+            displayName: "DeepSeek",
+            configured: true,
+            models: ["deepseek-v4-flash"],
+          },
+          {
+            id: "opencode-go",
+            displayName: "OpenCode Go",
+            configured: true,
+            models: ["kimi-k2.6"],
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await expect.poll(() => catalogRequests).toBeGreaterThan(0);
+  const initialCatalogRequests = catalogRequests;
+  await page.getByTestId("chat-model-selector-button").click();
+  await page
+    .getByTestId("chat-model-option")
+    .filter({ hasText: "Kimi K2.6" })
+    .click();
+
+  await page.reload();
+  await expect(page.getByTestId("workspace-shell")).toBeVisible();
+  await expect(page.getByTestId("chat-model-selector-button")).toContainText("Kimi K2.6");
+  await expect.poll(() => catalogRequests).toBe(initialCatalogRequests);
+
+  await page.getByTestId("chat-model-selector-button").click();
+  await expect(page.getByTestId("chat-model-loading")).toHaveCount(0);
+  await expect(
+    page.getByTestId("chat-model-option").filter({ hasText: "Kimi K2.6" }),
+  ).toBeVisible();
+  expect(catalogRequests).toBe(initialCatalogRequests);
 });
 
 test("home launcher sends the selected model without model-named loading copy", async ({

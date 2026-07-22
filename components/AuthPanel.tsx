@@ -115,7 +115,7 @@ const accountMenuItemClass =
 const accountMenuDangerItemClass =
   "flex min-h-9 w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-danger-100 disabled:cursor-not-allowed disabled:opacity-65";
 const accountMenuIconBaseClass =
-  "grid h-6 w-6 shrink-0 place-items-center rounded-md transition-all";
+  "grid h-6 w-6 shrink-0 place-items-center rounded-md bg-transparent transition-all";
 
 function getAccountMenuItemClass(isHighlighted: boolean) {
   return `${accountMenuItemClass} ${
@@ -135,13 +135,13 @@ function getAccountMenuDangerItemClass(isHighlighted: boolean) {
 
 function getAccountMenuIconClass(isHighlighted: boolean, tone: "default" | "danger" = "default") {
   if (isHighlighted) {
-    return `${accountMenuIconBaseClass} bg-white/12 text-white duration-1000 ease-out`;
+    return `${accountMenuIconBaseClass} text-white duration-1000 ease-out`;
   }
 
   return `${accountMenuIconBaseClass} ${
     tone === "danger"
-      ? "bg-danger-50 text-danger-600 duration-100 ease-in"
-      : "bg-neutral-100 text-neutral-600 duration-100 ease-in"
+      ? "text-danger-600 duration-100 ease-in"
+      : "text-neutral-600 duration-100 ease-in"
   }`;
 }
 
@@ -375,10 +375,10 @@ export function AuthPanel({
               aria-label={copy.accountMenu.accountMenu}
               data-testid="account-menu-popover"
               onMouseLeave={() => setHoveredMenuItem(null)}
-              className={`absolute ${popoverHorizontal} z-50 rounded-xl border border-neutral-200 bg-white p-1.5 text-left shadow-2xl ${popoverPosition}`}
+              className={`absolute ${popoverHorizontal} z-50 rounded-xl border border-[var(--theme-border-default)] bg-white p-1.5 text-left shadow-2xl ${popoverPosition}`}
             >
               {/* User info header with plan badge */}
-              <div className="rounded-lg border border-neutral-200 bg-surface-soft px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+              <div className="rounded-lg border border-[var(--theme-border-default)] bg-surface-soft px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
                 <div className="flex items-center gap-2.5">
                   <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-50 text-xs font-bold text-brand-700 ring-1 ring-inset ring-brand-100">
                     {getInitial(displayAccountName)}
@@ -479,7 +479,7 @@ export function AuthPanel({
                 </Link>
               </div>
 
-              <div className="my-1.5 h-px bg-neutral-200" />
+              <div className="my-1.5 h-px bg-[var(--theme-border-default)]" />
 
               {/* Bottom links */}
               <div className="space-y-0.5">
@@ -542,7 +542,7 @@ export function AuthPanel({
                 </a>
               </div>
 
-              <div className="my-1.5 h-px bg-neutral-200" />
+              <div className="my-1.5 h-px bg-[var(--theme-border-default)]" />
 
               {/* Sign out */}
               <button

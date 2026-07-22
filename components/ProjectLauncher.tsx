@@ -98,7 +98,7 @@ function ComposerProjectLauncher() {
     const projectId = await submitProject(
       trimmed,
       preparedAttachments,
-      composerControls.selectedModel,
+      composerControls.modelSelection,
       skill,
     );
     if (projectId) {

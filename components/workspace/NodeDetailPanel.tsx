@@ -560,7 +560,7 @@ export function NodeDetailPanel({
       const projectId = await onStartProject?.(
         trimmed,
         preparedAttachments,
-        composerControls.selectedModel,
+        composerControls.modelSelection,
         skill,
       );
       if (projectId) {
@@ -576,7 +576,7 @@ export function NodeDetailPanel({
         node.id,
         trimmed,
         preparedAttachments,
-        composerControls.selectedModel,
+        composerControls.modelSelection,
         skill,
       );
       if (populated) {
@@ -594,7 +594,7 @@ export function NodeDetailPanel({
       trimmed,
       sourceText,
       preparedAttachments,
-      composerControls.selectedModel,
+      composerControls.modelSelection,
       skill,
     );
     if (createdNodeId) {
@@ -651,7 +651,7 @@ export function NodeDetailPanel({
       node.id,
       editingMessageId,
       trimmed,
-      composerControls.selectedModel,
+      composerControls.modelSelection,
       skill,
     );
     if (started) {
@@ -707,7 +707,7 @@ export function NodeDetailPanel({
   function handleRetryMessage(message: ChatMessage) {
     if (!node || isCreating) return;
     const skill = composerControls.prepareSkillForSend();
-    void onRetryAssistantMessage(node.id, message.id, composerControls.selectedModel, skill);
+    void onRetryAssistantMessage(node.id, message.id, composerControls.modelSelection, skill);
   }
 
   function getPanelMaxResizeHeight() {

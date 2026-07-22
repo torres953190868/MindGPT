@@ -77,7 +77,7 @@ export function HomeStartComposer({
     const projectId = await onSubmit(
       trimmed,
       preparedAttachments,
-      composerControls.selectedModel,
+      composerControls.modelSelection,
       skill,
     );
 

@@ -124,6 +124,8 @@ const FALLBACK_MODEL_SELECTION: ChatModelSelection = {
 };
 
 const MODEL_SELECTION_STORAGE_KEY = "branchmind.chatModelSelection.v1";
+const MODEL_CATALOG_CACHE_KEY = "branchmind.chatModelCatalog.v1";
+const MODEL_CATALOG_CACHE_TTL_MS = 15 * 60 * 1000;
 const PDF_INDEX_POLL_INTERVAL_MS = 2_500;
 const PDF_INDEX_POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -609,6 +611,44 @@ function normalizeModelCatalog(data: ChatModelCatalogResponse | null) {
   };
 }
 
+function readCachedModelCatalog() {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(MODEL_CATALOG_CACHE_KEY);
+    if (!raw) return null;
+
+    const cached = JSON.parse(raw) as {
+      cachedAt?: unknown;
+      catalog?: ChatModelCatalogResponse;
+    };
+    if (
+      typeof cached.cachedAt !== "number" ||
+      Date.now() - cached.cachedAt > MODEL_CATALOG_CACHE_TTL_MS
+    ) {
+      window.sessionStorage.removeItem(MODEL_CATALOG_CACHE_KEY);
+      return null;
+    }
+
+    return normalizeModelCatalog(cached.catalog ?? null);
+  } catch {
+    return null;
+  }
+}
+
+function cacheModelCatalog(catalog: ChatModelCatalogResponse) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.sessionStorage.setItem(
+      MODEL_CATALOG_CACHE_KEY,
+      JSON.stringify({ cachedAt: Date.now(), catalog }),
+    );
+  } catch {
+    // Model selection remains available for this render if storage is unavailable.
+  }
+}
+
 function replacePendingAttachment(
   attachments: PendingChatAttachment[],
   next: PendingChatAttachment,
@@ -626,15 +666,25 @@ export function useChatComposerControls({
   autoPreparePdfAttachments?: boolean;
 }) {
   const { copy } = useLanguage();
+  const [initialModelCatalog] = useState(() => readCachedModelCatalog());
   const [pendingAttachments, setPendingAttachments] = useState<PendingChatAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isPreparingAttachments, setIsPreparingAttachments] = useState(false);
-  const [modelOptions, setModelOptions] =
-    useState<ChatModelOption[]>(FALLBACK_MODEL_OPTIONS);
+  const [modelOptions, setModelOptions] = useState<ChatModelOption[]>(
+    () => initialModelCatalog?.options ?? FALLBACK_MODEL_OPTIONS,
+  );
   const [selectedModel, setSelectedModel] = useState<ChatModelSelection>(
     AUTO_MODEL_SELECTION,
   );
   const [isAutoSelected, setIsAutoSelected] = useState(true);
+  const [hasLoadedModelCatalog, setHasLoadedModelCatalog] = useState(
+    Boolean(initialModelCatalog),
+  );
+  const [isLoadingModelCatalog, setIsLoadingModelCatalog] = useState(
+    !initialModelCatalog,
+  );
+  const [modelCatalogError, setModelCatalogError] = useState<string | null>(null);
+  const [modelCatalogRequestId, setModelCatalogRequestId] = useState(0);
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
   const [isAttachmentMenuOpen, setIsAttachmentMenuOpen] = useState(false);
   const [isKnowledgeMenuOpen, setIsKnowledgeMenuOpen] = useState(false);
@@ -662,6 +712,7 @@ export function useChatComposerControls({
   const selectedModelLabel = isAutoSelected
     ? copy.chat.autoModel
     : formatModelLabel(selectedModelOption?.model ?? selectedModel.model);
+  const modelSelection = isAutoSelected ? undefined : selectedModel;
   const controlsBusy = isBusy || isPreparingAttachments;
   const indexedKnowledgeDocuments = knowledgeDocuments.filter(
     (document) => document.status === "indexed",
@@ -688,18 +739,36 @@ export function useChatComposerControls({
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
     const storedSelection = readStoredModelSelection();
     const storedAutoSelection = isAutoModelSelection(storedSelection);
     if (storedAutoSelection || !storedSelection) {
       setIsAutoSelected(true);
       setSelectedModel(AUTO_MODEL_SELECTION);
-    } else {
+    } else if (
+      !initialModelCatalog ||
+      initialModelCatalog.options.some(
+          (option) =>
+            !option.locked &&
+            option.configured &&
+            matchesModelSelection(option, storedSelection),
+        )
+    ) {
       setIsAutoSelected(false);
       setSelectedModel(storedSelection);
+    } else {
+      setIsAutoSelected(true);
+      setSelectedModel(AUTO_MODEL_SELECTION);
+      writeStoredModelSelection(AUTO_STORAGE_SELECTION);
     }
 
+    if (initialModelCatalog && modelCatalogRequestId === 0) return;
+
+    let cancelled = false;
+
     async function loadModelOptions() {
+      setIsLoadingModelCatalog(true);
+      setModelCatalogError(null);
+
       try {
         const response = await fetch("/api/chat/models", {
           credentials: "same-origin",
@@ -707,12 +776,15 @@ export function useChatComposerControls({
         const data = (await response.json().catch(() => null)) as
           | ChatModelCatalogResponse
           | null;
-        if (!response.ok || cancelled) return;
+        if (!response.ok) throw new Error(copy.chat.modelCatalogLoadFailed);
 
         const catalog = normalizeModelCatalog(data);
-        if (!catalog) return;
+        if (!catalog || !data) throw new Error(copy.chat.modelCatalogLoadFailed);
+        if (cancelled) return;
 
+        cacheModelCatalog(data);
         setModelOptions(catalog.options);
+        setHasLoadedModelCatalog(true);
         setSelectedModel((current) => {
           const storedSelectionIsValid =
             storedSelection &&
@@ -740,8 +812,14 @@ export function useChatComposerControls({
           writeStoredModelSelection(AUTO_STORAGE_SELECTION);
           return AUTO_MODEL_SELECTION;
         });
-      } catch {
-        // Keep the local default; the server still validates the selected model on send.
+      } catch (error) {
+        if (!cancelled) {
+          setModelCatalogError(
+            error instanceof Error ? error.message : copy.chat.modelCatalogLoadFailed,
+          );
+        }
+      } finally {
+        if (!cancelled) setIsLoadingModelCatalog(false);
       }
     }
 
@@ -750,7 +828,7 @@ export function useChatComposerControls({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [copy.chat.modelCatalogLoadFailed, initialModelCatalog, modelCatalogRequestId]);
 
   useEffect(() => {
     if (!isModelMenuOpen) return undefined;
@@ -1107,6 +1185,11 @@ export function useChatComposerControls({
     setIsSkillMenuOpen(false);
   }
 
+  function refreshModelCatalog() {
+    if (isLoadingModelCatalog) return;
+    setModelCatalogRequestId((current) => current + 1);
+  }
+
   function selectKnowledgeDocument(document: KnowledgeDocument) {
     if (
       controlsBusy ||
@@ -1216,6 +1299,8 @@ export function useChatComposerControls({
     isAutoSelected,
     isImportingSkill,
     isKnowledgeMenuOpen,
+    hasLoadedModelCatalog,
+    isLoadingModelCatalog,
     isLoadingKnowledgeDocuments,
     isModelMenuOpen,
     isPreparingAttachments,
@@ -1224,11 +1309,13 @@ export function useChatComposerControls({
     maxAttachments,
     modelMenuRef,
     modelOptions,
+    modelCatalogError,
     openFilePicker,
     openSkillDirectoryPicker,
     pendingAttachments,
     prepareAttachmentsForSend,
     prepareSkillForSend,
+    refreshModelCatalog,
     removeActiveSkill,
     removeImportedSkill,
     removePendingAttachment,
@@ -1238,6 +1325,7 @@ export function useChatComposerControls({
     selectModel,
     selectSkill,
     selectedModel,
+    modelSelection,
     selectedModelLabel,
     setIsKnowledgeMenuOpen,
     setIsSkillMenuOpen,
@@ -1775,7 +1863,7 @@ export function ModelSelectorButton({
           aria-label={copy.chat.chatModels}
           data-testid="chat-model-menu"
           onWheel={stopFloatingMenuWheelPropagation}
-          className={`${getMenuPlacementClass(placement, alignment)} chat-model-menu-scrollable nowheel max-h-[min(11rem,calc(100svh-8rem))] w-[min(14rem,calc(100vw-1rem))] overflow-auto overscroll-contain rounded-[14px] border border-neutral-200 bg-white/95 p-1 shadow-xl shadow-neutral-900/10 backdrop-blur`}
+          className={`${getMenuPlacementClass(placement, alignment)} chat-model-menu-scrollable nowheel max-h-[min(11rem,calc(100svh-8rem))] w-[min(14rem,calc(100vw-1rem))] overflow-auto overscroll-contain rounded-[14px] border border-[var(--theme-border-default)] bg-white/95 p-1 shadow-xl shadow-neutral-900/10 backdrop-blur`}
         >
           <button
             type="button"
@@ -1786,17 +1874,47 @@ export function ModelSelectorButton({
             data-testid="chat-model-auto-option"
             className={`chat-menu-highlightable mb-0.5 flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-45 ${
               controls.isAutoSelected
-                ? "bg-neutral-100 text-neutral-900"
+                ? "text-neutral-900"
                 : "text-neutral-700 hover:bg-brand-50"
             }`}
           >
-            <span className="chat-menu-item-icon grid h-6 w-6 shrink-0 place-items-center rounded-full border border-neutral-200 bg-white text-neutral-800">
+            <span className="chat-menu-item-icon grid h-6 w-6 shrink-0 place-items-center rounded-full border border-[var(--theme-border-default)] bg-transparent text-neutral-800">
               <InfinityIcon size={16} strokeWidth={2.2} />
             </span>
             <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{copy.chat.autoModel}</span>
             {controls.isAutoSelected && <Check size={16} className="shrink-0 text-neutral-900" />}
           </button>
-          {controls.modelOptions.map((option) => {
+          {controls.isLoadingModelCatalog && !controls.hasLoadedModelCatalog && (
+            <div
+              role="status"
+              data-testid="chat-model-loading"
+              className="flex items-center gap-2 px-2.5 py-2 text-[13px] font-medium text-neutral-500"
+            >
+              <Loader2 size={15} className="animate-spin" />
+              {copy.chat.modelCatalogLoading}
+            </div>
+          )}
+          {controls.modelCatalogError && !controls.isLoadingModelCatalog && (
+            <button
+              type="button"
+              onClick={controls.refreshModelCatalog}
+              data-testid="retry-chat-model-catalog-button"
+              className="flex w-full items-center justify-between gap-2 rounded-[10px] px-2.5 py-2 text-left text-[13px] font-medium text-danger-600 transition hover:bg-danger-50 focus:outline-none focus:ring-2 focus:ring-danger-100"
+            >
+              <span className="truncate">{controls.modelCatalogError}</span>
+              <span className="shrink-0 font-bold">{copy.chat.retryModelCatalog}</span>
+            </button>
+          )}
+          {controls.isLoadingModelCatalog && controls.hasLoadedModelCatalog && (
+            <div
+              role="status"
+              className="flex items-center gap-2 px-2.5 py-1.5 text-[11px] font-medium text-neutral-500"
+            >
+              <Loader2 size={13} className="animate-spin" />
+              {copy.chat.modelCatalogLoading}
+            </div>
+          )}
+          {controls.hasLoadedModelCatalog && controls.modelOptions.map((option) => {
             const isSelected = matchesModelSelection(option, controls.selectedModel);
             const isLocked = option.locked || !option.configured;
 
