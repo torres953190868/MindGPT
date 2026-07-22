@@ -62,6 +62,18 @@ function patchRequest(body: unknown) {
   );
 }
 
+function deleteRequest() {
+  return new NextRequest(
+    "http://localhost/api/projects/project_node_route/nodes/node_route",
+    {
+      method: "DELETE",
+      headers: {
+        Origin: "http://localhost",
+      },
+    },
+  );
+}
+
 describe("node route", () => {
   beforeEach(() => {
     updateNodeForOwnerMock.mockReset();
@@ -105,5 +117,38 @@ describe("node route", () => {
 
     expect(response.status).toBe(400);
     expect(updateNodeForOwnerMock).not.toHaveBeenCalled();
+  });
+
+  it("deletes a node and returns the updated project", async () => {
+    const projectWithoutNode: Project = {
+      ...project,
+      nodes: {
+        node_route: {
+          ...project.nodes.node_route,
+          children: [],
+        },
+      },
+    };
+    deleteNodeForOwnerMock.mockResolvedValue({
+      project: projectWithoutNode,
+      selectedNodeId: null,
+    });
+
+    const { DELETE } = await import("@/app/api/projects/[projectId]/nodes/[nodeId]/route");
+    const response = await DELETE(deleteRequest(), {
+      params: Promise.resolve({
+        projectId: "project_node_route",
+        nodeId: "node_route",
+      }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.project.nodes.node_route).toBeDefined();
+    expect(deleteNodeForOwnerMock).toHaveBeenCalledWith(
+      "owner_node",
+      "project_node_route",
+      "node_route",
+    );
   });
 });

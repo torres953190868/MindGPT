@@ -3319,6 +3319,54 @@ test("edits a root node title from the node detail header", async ({ page }, tes
   }
 });
 
+test("deletes a child node from the node detail header", async ({ page }) => {
+  const sourceProject = makeWorkspaceTreeProject(`delete-node-${makeSeed()}`);
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+    const childNode = getNodeByTitle(project, "Programming Tools");
+
+    await page.goto(`/workspace/${project.id}`);
+    await page
+      .locator(`[data-testid="branch-node-card"][data-node-id="${childNode.id}"]`)
+      .click();
+
+    await expect(page.getByTestId("node-detail-panel")).toBeVisible();
+    const deleteButton = page.getByTestId("delete-node-button");
+    await expect(deleteButton).toBeVisible();
+
+    const deleteResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/projects/${project.id}/nodes/${childNode.id}`) &&
+        response.request().method() === "DELETE",
+    );
+    await deleteButton.click();
+    const deleteResponse = await deleteResponsePromise;
+    expect(deleteResponse.status()).toBe(200);
+
+    await expect(
+      page.locator(`[data-testid="branch-node-card"][data-node-id="${childNode.id}"]`),
+    ).toHaveCount(0);
+    await expect(page.getByTestId("node-detail-panel")).toContainText("Machine Learning Map");
+
+    const response = await page.request.get("/api/projects");
+    expect(response.status(), await response.text()).toBe(200);
+    const data = await response.json();
+    const projects = Array.isArray(data.projects) ? (data.projects as WorkspaceProject[]) : [];
+    const persisted = projects.find((item) => item.id === project.id);
+    expect(persisted?.nodes[childNode.id]).toBeUndefined();
+    expect(persisted?.nodes[persisted.rootNodeId].children).not.toContain(childNode.id);
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
 test("splits node edge drag from inner open actions", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Node hit areas are covered once.");
 

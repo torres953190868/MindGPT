@@ -1885,13 +1885,14 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
     set({
       projects: replaceProject(state.projects, optimisticDelete.project),
       selectedNodeId,
-      creatingNodeId: nodeId,
+      creatingNodeId: null,
       aiError: null,
     });
 
     try {
       const response = await fetch(`/api/projects/${projectId}/nodes/${nodeId}`, {
         method: "DELETE",
+        credentials: "same-origin",
       });
       const data = await readJson<UpdateNodeResponse>(response);
 

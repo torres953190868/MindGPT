@@ -1232,7 +1232,7 @@ export function NodeDetailPanel({
       )}
 
       {showComposer && (
-        <section className="node-detail-composer relative flex min-h-0 shrink-0 flex-col border-t border-neutral-200">
+        <section className="node-detail-composer relative flex min-h-0 shrink-0 flex-col overflow-hidden border-t border-neutral-200 bg-inherit pt-3">
           <div
             role="separator"
             aria-label={copy.workspace.resizeConversationComposer}
