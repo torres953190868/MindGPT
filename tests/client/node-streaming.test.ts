@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  createBlankChildProject,
   createRegeneratingNodeProject,
   readNodeStreamingEvents,
 } from "@/lib/client/node-streaming";
+import { addBlankChildNode } from "@/lib/server/project-model";
 import type { Project } from "@/lib/types";
 
 function makeProject(): Project {
@@ -65,6 +67,36 @@ function makeProject(): Project {
 }
 
 describe("node streaming helpers", () => {
+  it("uses the same collision-free placement as the persisted child creator", () => {
+    const project = makeProject();
+    const parent = project.nodes[project.rootNodeId];
+    const occupiedNode = {
+      ...parent,
+      id: "node_occupied",
+      parentId: parent.id,
+      branchType: "branch" as const,
+      position: { x: 510, y: 120 },
+    };
+    const positionedProject: Project = {
+      ...project,
+      nodes: {
+        ...project.nodes,
+        [occupiedNode.id]: occupiedNode,
+      },
+    };
+
+    const draft = createBlankChildProject(positionedProject, parent.id, "branch");
+    const persisted = addBlankChildNode(
+      positionedProject,
+      parent.id,
+      "branch",
+      "node_persisted",
+    );
+
+    expect(draft?.node.position).toEqual({ x: 510, y: 384 });
+    expect(persisted?.node.position).toEqual(draft?.node.position);
+  });
+
   it("returns null when editing a user message outside the latest turn", () => {
     const result = createRegeneratingNodeProject(makeProject(), "node_streaming", {
       instruction: "Edited first prompt",

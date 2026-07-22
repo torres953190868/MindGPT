@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { getContextTitles, getNodeConversationMessages } from "@/lib/graph";
+import {
+  getChildPosition,
+  getContextTitles,
+  getNodeConversationMessages,
+} from "@/lib/graph";
 import {
   addChildNode,
   createPendingRootProject,
@@ -238,6 +242,26 @@ describe("project model helpers", () => {
       continued!.node.id,
       branched!.node.id,
     ]);
+  });
+
+  it("places new children in the closest free directional slot", () => {
+    const project = createRootProject("Graph search", rootReply);
+    const root = project.nodes[project.rootNodeId];
+    const preferredBranch = { ...root, id: "occupied_branch", position: { x: 510, y: 120 } };
+    const preferredContinue = {
+      ...root,
+      id: "occupied_continue",
+      position: { x: 120, y: 410 },
+    };
+
+    expect(getChildPosition(root, "branch", [root, preferredBranch])).toEqual({
+      x: 510,
+      y: 384,
+    });
+    expect(getChildPosition(root, "continue", [root, preferredContinue])).toEqual({
+      x: 460,
+      y: 410,
+    });
   });
 
   it("stores attachment metadata on child user messages", () => {

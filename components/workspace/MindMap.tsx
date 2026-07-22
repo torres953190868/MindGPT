@@ -11,10 +11,14 @@ import {
 } from "react";
 import { EyeOff } from "lucide-react";
 import {
+  BaseEdge,
   Controls,
   ReactFlow,
   applyNodeChanges,
+  getBezierPath,
   type Edge,
+  type EdgeProps,
+  type EdgeTypes,
   type Node,
   type NodeChange,
   type OnNodeDrag,
@@ -31,9 +35,6 @@ import {
   type MobileLongPressStart,
 } from "./BranchNodeCard";
 
-const nodeTypes: NodeTypes = {
-  branchNode: BranchNodeCard,
-};
 const HOME_CANVAS_PAN_RANGE_RATIO = 1 / 5;
 const HOME_COMPOSER_INITIAL_OFFSET_Y = 16;
 const HOME_CANVAS_WHEEL_PAN_SPEED = 0.5;
@@ -47,6 +48,57 @@ const MOBILE_NODE_LONG_PRESS_CANCEL_DISTANCE = 8;
 const MOBILE_NODE_DRAG_LOCKED_THRESHOLD = 100_000;
 const MOBILE_NODE_DRAG_ACTIVE_THRESHOLD = 1;
 const MOBILE_MOUSE_LONG_PRESS_POINTER_ID = -1;
+const NODE_ENTRANCE_EDGE_DURATION_MS = 280;
+const NODE_ENTRANCE_NODE_DURATION_MS = 220;
+const NODE_ENTRANCE_CAMERA_DURATION_MS = 450;
+const NODE_FOCUS_FALLBACK_WIDTH = 292;
+const NODE_FOCUS_FALLBACK_HEIGHT = 220;
+
+type MindMapEdgeData = {
+  isEntering?: boolean;
+};
+
+type MindMapEdge = Edge<MindMapEdgeData>;
+
+function BranchEdge({
+  id,
+  sourceX,
+  sourceY,
+  sourcePosition,
+  targetX,
+  targetY,
+  targetPosition,
+  data,
+  markerEnd,
+  style,
+}: EdgeProps<MindMapEdge>) {
+  const [edgePath] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
+
+  return (
+    <BaseEdge
+      id={id}
+      path={edgePath}
+      pathLength={data?.isEntering ? 1 : undefined}
+      markerEnd={markerEnd}
+      style={style}
+      className={data?.isEntering ? "branchmind-entering-edge" : undefined}
+    />
+  );
+}
+
+const nodeTypes: NodeTypes = {
+  branchNode: BranchNodeCard,
+};
+const edgeTypes: EdgeTypes = {
+  branchEdge: BranchEdge,
+};
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -107,6 +159,9 @@ export function MindMap({
   const homeViewportBaselineXRef = useRef<number | null>(null);
   const homeViewportBaselineYRef = useRef<number | null>(null);
   const previousFlowBoundsRef = useRef<DOMRectReadOnly | null>(null);
+  const previousProjectIdRef = useRef<string | null>(null);
+  const previousNodeIdsRef = useRef<Set<string>>(new Set());
+  const nodeEntranceTimersRef = useRef<Set<number>>(new Set());
   const mobileRootFocusProjectIdRef = useRef<string | null>(null);
   const mobileRootFocusPendingRef = useRef(false);
   const mobileNodeLongPressGestureRef =
@@ -117,6 +172,9 @@ export function MindMap({
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [mobileLongPressDragNodeId, setMobileLongPressDragNodeId] =
     useState<string | null>(null);
+  const [enteringNodeIds, setEnteringNodeIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [reactFlowInstance, setReactFlowInstance] =
     useState<ReactFlowInstance<Node<BranchNodeData>, Edge> | null>(null);
   const draggingNodeIdRef = useRef<string | null>(null);
@@ -208,6 +266,7 @@ export function MindMap({
         data: {
           mindNode: node,
           selected: selectedNodeId === node.id,
+          isEntering: enteringNodeIds.has(node.id),
           onSelect: onSelectNode,
           onCreate: onCreateNode,
           onToggle: onToggleNode,
@@ -235,34 +294,39 @@ export function MindMap({
     selectedNodeId,
     streamingNodeId,
     visibleNodeIds,
+    enteringNodeIds,
   ]);
   const [nodes, setNodes] = useState(graphNodes);
 
-  const graphEdges = useMemo<Edge[]>(() => {
+  const graphEdges = useMemo<MindMapEdge[]>(() => {
     return Object.values(project.nodes).flatMap((node) =>
       node.children
         .filter((childId) => visibleNodeIds.has(node.id) && visibleNodeIds.has(childId))
         .map((childId) => {
           const child = project.nodes[childId];
           const isBranchChild = child?.branchType === "branch";
+          const isEntering = enteringNodeIds.has(childId);
           return {
             id: `${node.id}-${childId}`,
+            type: "branchEdge",
             source: node.id,
             target: childId,
             sourceHandle: isBranchChild ? "branch-source" : "continue-source",
             targetHandle: isBranchChild ? "branch-target" : "continue-target",
             animated: selectedNodeId === node.id || selectedNodeId === childId,
+            data: { isEntering },
             style: {
               stroke: isBranchChild
                 ? "var(--node-handle-branch)"
                 : "var(--node-handle-continue)",
               strokeWidth: 2,
-              strokeDasharray: "6 5",
+              strokeDasharray: isEntering ? 1 : "6 5",
+              ...(isEntering ? { strokeDashoffset: 1 } : {}),
             },
           };
         }),
     );
-  }, [project.nodes, selectedNodeId, visibleNodeIds]);
+  }, [enteringNodeIds, project.nodes, selectedNodeId, visibleNodeIds]);
 
   const fitViewOptions = useMemo(
     () => ({
@@ -331,6 +395,83 @@ export function MindMap({
       );
     });
   }, [graphNodes]);
+
+  useEffect(() => {
+    const currentNodeIds = new Set(graphNodes.map((node) => node.id));
+
+    if (previousProjectIdRef.current !== project.id) {
+      nodeEntranceTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      nodeEntranceTimersRef.current.clear();
+      previousProjectIdRef.current = project.id;
+      previousNodeIdsRef.current = currentNodeIds;
+      setEnteringNodeIds(new Set());
+      return;
+    }
+
+    const newChild = graphNodes.find(
+      (node) =>
+        !previousNodeIdsRef.current.has(node.id) &&
+        node.data.mindNode.parentId === creatingNodeId,
+    );
+
+    if (!newChild) {
+      previousNodeIdsRef.current = currentNodeIds;
+      return;
+    }
+    if (!reactFlowInstance) return;
+
+    previousNodeIdsRef.current = currentNodeIds;
+
+    const focusNewNode = (duration: number) => {
+      const renderedNode = reactFlowInstance.getNode(newChild.id);
+      const focusOffsetX =
+        (renderedNode?.measured?.width ?? NODE_FOCUS_FALLBACK_WIDTH) / 2;
+      const focusOffsetY =
+        (renderedNode?.measured?.height ?? NODE_FOCUS_FALLBACK_HEIGHT) / 2;
+
+      void reactFlowInstance.setCenter(
+        newChild.position.x + focusOffsetX,
+        newChild.position.y + focusOffsetY,
+        { zoom: reactFlowInstance.getZoom(), duration },
+      );
+    };
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      window.requestAnimationFrame(() => focusNewNode(0));
+      return;
+    }
+
+    setEnteringNodeIds((current) => new Set(current).add(newChild.id));
+
+    const scheduleEntranceStep = (callback: () => void, delay: number) => {
+      const timer = window.setTimeout(() => {
+        nodeEntranceTimersRef.current.delete(timer);
+        callback();
+      }, delay);
+      nodeEntranceTimersRef.current.add(timer);
+    };
+
+    scheduleEntranceStep(
+      () => focusNewNode(NODE_ENTRANCE_CAMERA_DURATION_MS),
+      NODE_ENTRANCE_EDGE_DURATION_MS,
+    );
+    scheduleEntranceStep(() => {
+      setEnteringNodeIds((current) => {
+        if (!current.has(newChild.id)) return current;
+        const next = new Set(current);
+        next.delete(newChild.id);
+        return next;
+      });
+    }, NODE_ENTRANCE_EDGE_DURATION_MS + NODE_ENTRANCE_NODE_DURATION_MS);
+  }, [creatingNodeId, graphNodes, project.id, reactFlowInstance]);
+
+  useEffect(
+    () => () => {
+      nodeEntranceTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      nodeEntranceTimersRef.current.clear();
+    },
+    [],
+  );
 
   useEffect(() => {
     const mobileQuery = window.matchMedia(MOBILE_ROOT_FOCUS_MEDIA_QUERY);
@@ -947,6 +1088,7 @@ export function MindMap({
         nodes={nodes}
         edges={graphEdges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         nodesDraggable={!isMobileViewport}
         onInit={setReactFlowInstance}
         onNodeClick={handleNodeClick}

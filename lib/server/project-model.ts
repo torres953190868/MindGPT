@@ -142,9 +142,7 @@ export function addChildNode(
     position: getChildPosition(
       parent,
       mode,
-      parent.children
-        .map((childId) => project.nodes[childId])
-        .filter((node): node is MindNode => Boolean(node)),
+      Object.values(project.nodes),
     ),
     branchType: mode,
     collapsed: false,
@@ -192,9 +190,7 @@ export function addBlankChildNode(
     position: getChildPosition(
       parent,
       mode,
-      parent.children
-        .map((childId) => project.nodes[childId])
-        .filter((node): node is MindNode => Boolean(node)),
+      Object.values(project.nodes),
     ),
     branchType: mode,
     collapsed: false,

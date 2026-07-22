@@ -57,6 +57,7 @@ export type MobileLongPressStart = {
 export type BranchNodeData = {
   mindNode: MindNode;
   selected: boolean;
+  isEntering: boolean;
   onSelect: (nodeId: string) => void;
   onCreate: (nodeId: string, mode: "continue" | "branch") => void;
   onToggle: (nodeId: string) => void;
@@ -99,6 +100,7 @@ export function BranchNodeCard({ data }: NodeProps) {
   const {
     mindNode,
     selected,
+    isEntering,
     onSelect,
     onCreate,
     onToggle,
@@ -189,6 +191,7 @@ export function BranchNodeCard({ data }: NodeProps) {
       data-testid="branch-node-card"
       data-node-id={mindNode.id}
       data-selected={selected ? "true" : "false"}
+      data-entering={isEntering ? "true" : undefined}
       data-inline-composer={hasInlineComposer ? "true" : undefined}
       data-home-composer={isHomeInlineComposer ? "true" : undefined}
       data-mobile-long-press-dragging={mobileLongPressDragging ? "true" : undefined}
