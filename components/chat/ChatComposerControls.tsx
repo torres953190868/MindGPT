@@ -1839,7 +1839,7 @@ export function ModelSelectorButton({
         aria-expanded={controls.isModelMenuOpen}
         data-testid="chat-model-selector-button"
         data-highlighted={modelHighlight.getDataHighlighted("model")}
-        className={`inline-flex h-9 w-full min-w-0 max-w-[150px] items-center justify-center gap-1.5 rounded-[14px] border border-brand-200 px-2.5 text-xs font-black shadow-sm transition hover:border-brand-400 focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-50 ${getHighlightedActionClass(
+        className={`inline-flex h-9 w-full min-w-0 max-w-[150px] items-center justify-center gap-1.5 rounded-[18px] border border-brand-200 px-2.5 text-xs font-black shadow-sm transition hover:border-brand-400 focus:outline-none focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-50 ${getHighlightedActionClass(
           modelHighlight.isHighlighted("model"),
           "bg-white/82 text-neutral-800",
         )}`}
@@ -1863,7 +1863,7 @@ export function ModelSelectorButton({
           aria-label={copy.chat.chatModels}
           data-testid="chat-model-menu"
           onWheel={stopFloatingMenuWheelPropagation}
-          className={`${getMenuPlacementClass(placement, alignment)} chat-model-menu-scrollable nowheel max-h-[min(11rem,calc(100svh-8rem))] w-[min(14rem,calc(100vw-1rem))] overflow-auto overscroll-contain rounded-[14px] border border-[var(--theme-border-default)] bg-white/95 p-1 shadow-xl shadow-neutral-900/10 backdrop-blur`}
+          className={`${getMenuPlacementClass(placement, alignment)} chat-model-menu-scrollable nowheel max-h-[min(11rem,calc(100svh-8rem))] w-[min(14rem,calc(100vw-1rem))] overflow-auto overscroll-contain rounded-[18px] border border-[var(--theme-border-default)] bg-white/95 p-1 shadow-xl shadow-neutral-900/10 backdrop-blur`}
         >
           <button
             type="button"
