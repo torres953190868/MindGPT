@@ -27,8 +27,6 @@ describe("getPlanModelAccess", () => {
 
     expect(access).toEqual([
       { plan: "free", providerId: "deepseek", model: "deepseek-v4-flash" },
-      { plan: "free", providerId: "opencode-go", model: "kimi-k2.6" },
-      { plan: "free", providerId: "opencode-go", model: "mimo-v2.5-pro" },
     ]);
     expect(getSupabaseAdminClientMock).not.toHaveBeenCalled();
   });
@@ -91,8 +89,6 @@ describe("getPlanModelAccess", () => {
 
     expect(access).toEqual([
       { plan: "free", providerId: "deepseek", model: "deepseek-v4-flash" },
-      { plan: "free", providerId: "opencode-go", model: "kimi-k2.6" },
-      { plan: "free", providerId: "opencode-go", model: "mimo-v2.5-pro" },
     ]);
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       "BranchMind plan model access lookup failed",
@@ -119,8 +115,6 @@ describe("getPlanModelAccess", () => {
 
     expect(access).toEqual([
       { plan: "free", providerId: "deepseek", model: "deepseek-v4-flash" },
-      { plan: "free", providerId: "opencode-go", model: "kimi-k2.6" },
-      { plan: "free", providerId: "opencode-go", model: "mimo-v2.5-pro" },
     ]);
   });
 });

@@ -95,8 +95,8 @@ describe("JSON request validation", () => {
             },
           ],
           modelSelection: {
-            providerId: "opencode-go",
-            model: "qwen3.6-plus",
+            providerId: "gemini",
+            model: "gemini-3.5-flash",
           },
         }),
       ),
@@ -106,8 +106,8 @@ describe("JSON request validation", () => {
     expect(body.topic).toBe("attached root");
     expect(body.attachments).toHaveLength(1);
     expect(body.modelSelection).toEqual({
-      providerId: "opencode-go",
-      model: "qwen3.6-plus",
+      providerId: "gemini",
+      model: "gemini-3.5-flash",
     });
   });
 

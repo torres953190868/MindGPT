@@ -106,11 +106,10 @@ function clean(value: string | null | undefined) {
   return trimmed ? trimmed : null;
 }
 
-function getStaticProviderTimeout(providerId: string, errorPrefix: string) {
+function getStaticProviderTimeout(errorPrefix: string) {
   return (
     parseTimeoutMs(process.env[`${errorPrefix}_TIMEOUT_MS`]) ??
-    parseTimeoutMs(process.env.AI_PROVIDER_TIMEOUT_MS) ??
-    parseTimeoutMs(providerId === "opencode-go" ? "90000" : undefined)
+    parseTimeoutMs(process.env.AI_PROVIDER_TIMEOUT_MS)
   );
 }
 
@@ -121,7 +120,7 @@ function getStaticProviders(): LlmRuntimeProvider[] {
     baseUrl: getProviderUrl(provider),
     apiKeyEnv: provider.apiKeyEnv,
     enabled: true,
-    timeoutMs: getStaticProviderTimeout(provider.id, provider.errorCodePrefix),
+    timeoutMs: getStaticProviderTimeout(provider.errorCodePrefix),
     payloadOptions: provider.payloadOptions ?? {},
     errorCodePrefix: provider.errorCodePrefix,
   }));
@@ -171,7 +170,7 @@ function getStaticPdfProviderId() {
 function getStaticRoutes(): LlmRouteConfig[] {
   const chatProviderId = getStaticChatProviderId();
   const pdfProviderId = getStaticPdfProviderId();
-  const fallbackProviderId = chatProviderId === "opencode-go" ? "deepseek" : "opencode-go";
+  const fallbackProviderId = chatProviderId === "deepseek" ? "gemini" : "deepseek";
 
   return [
     {

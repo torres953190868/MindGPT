@@ -47,8 +47,6 @@ export const PLAN_LIMITS_DISABLED = {
 const ACCOUNT_PLANS = new Set<AccountPlan>(["free", "pro", "max"]);
 const FREE_PLAN_MODEL_ACCESS = [
   { providerId: "deepseek", model: "deepseek-v4-flash" },
-  { providerId: "opencode-go", model: "kimi-k2.6" },
-  { providerId: "opencode-go", model: "mimo-v2.5-pro" },
 ] as const;
 
 export type PlanModelAccess = {

@@ -355,10 +355,6 @@ export function getSupportedProviderIds() {
   return getProviderIds();
 }
 
-export function getOpenCodeGoAllowedModels() {
-  return CHAT_COMPLETIONS_PROVIDERS["opencode-go"].defaultAllowedModels;
-}
-
 export function getActiveChatModel(
   provider = getActiveChatProvider(),
   modelOverride?: string,

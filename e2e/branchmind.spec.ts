@@ -701,10 +701,10 @@ async function mockHomeModelCatalog(page: Page) {
             models: ["deepseek-v4-flash"],
           },
           {
-            id: "opencode-go",
-            displayName: "OpenCode Go",
+            id: "gemini",
+            displayName: "Gemini",
             configured: true,
-            models: ["qwen3.6-plus", "kimi-k2.6"],
+            models: ["gemini-3.5-flash"],
           },
         ],
       }),
@@ -1377,14 +1377,14 @@ test("home launcher restores a stored model after hydration", async ({
     window.localStorage.setItem(
       "branchmind.chatModelSelection.v1",
       JSON.stringify({
-        providerId: "opencode-go",
-        model: "kimi-k2.6",
+        providerId: "gemini",
+        model: "gemini-3.5-flash",
       }),
     );
   });
 
   await page.goto("/new");
-  await expect(page.getByTestId("chat-model-selector-button")).toContainText("Kimi K2.6");
+  await expect(page.getByTestId("chat-model-selector-button")).toContainText("Gemini 3.5 Flash");
   expect(consoleErrors.join("\n")).not.toContain("Hydration failed");
 });
 
@@ -1410,10 +1410,10 @@ test("model catalog stays cached when reopening the workspace", async ({ page },
             models: ["deepseek-v4-flash"],
           },
           {
-            id: "opencode-go",
-            displayName: "OpenCode Go",
+            id: "gemini",
+            displayName: "Gemini",
             configured: true,
-            models: ["kimi-k2.6"],
+            models: ["gemini-3.5-flash"],
           },
         ],
       }),
@@ -1426,18 +1426,18 @@ test("model catalog stays cached when reopening the workspace", async ({ page },
   await page.getByTestId("chat-model-selector-button").click();
   await page
     .getByTestId("chat-model-option")
-    .filter({ hasText: "Kimi K2.6" })
+    .filter({ hasText: "Gemini 3.5 Flash" })
     .click();
 
   await page.reload();
   await expect(page.getByTestId("workspace-shell")).toBeVisible();
-  await expect(page.getByTestId("chat-model-selector-button")).toContainText("Kimi K2.6");
+  await expect(page.getByTestId("chat-model-selector-button")).toContainText("Gemini 3.5 Flash");
   await expect.poll(() => catalogRequests).toBe(initialCatalogRequests);
 
   await page.getByTestId("chat-model-selector-button").click();
   await expect(page.getByTestId("chat-model-loading")).toHaveCount(0);
   await expect(
-    page.getByTestId("chat-model-option").filter({ hasText: "Kimi K2.6" }),
+    page.getByTestId("chat-model-option").filter({ hasText: "Gemini 3.5 Flash" }),
   ).toBeVisible();
   expect(catalogRequests).toBe(initialCatalogRequests);
 });
@@ -1495,14 +1495,14 @@ test("home launcher sends the selected model without model-named loading copy", 
   await expect(page.getByTestId("chat-model-menu")).toBeVisible();
   await page
     .getByTestId("chat-model-option")
-    .filter({ hasText: "Kimi K2.6" })
+    .filter({ hasText: "Gemini 3.5 Flash" })
     .click();
   await page.getByTestId("message-instruction-input").fill(instruction);
   await page.getByTestId("send-message-button").click();
 
   await expect(page).toHaveURL(/\/workspace\/project_/);
   await expect(page.getByTestId("workspace-shell")).toBeVisible();
-  await expect(page.getByTestId("chat-model-selector-button")).toContainText("Kimi K2.6");
+  await expect(page.getByTestId("chat-model-selector-button")).toContainText("Gemini 3.5 Flash");
   await expect(page.getByTestId("project-sync-status")).toHaveCount(0);
   await expect.poll(() => syncPayload).not.toBeNull();
   const pendingRecord = await page.evaluate(() => {
@@ -1511,8 +1511,8 @@ test("home launcher sends the selected model without model-named loading copy", 
   });
   expect(pendingRecord?.project?.title).toBe(instruction);
   expect(pendingRecord?.modelSelection).toEqual({
-    providerId: "opencode-go",
-    model: "kimi-k2.6",
+    providerId: "gemini",
+    model: "gemini-3.5-flash",
   });
   releaseSync();
 });

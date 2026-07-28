@@ -5,10 +5,9 @@
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `AI_PROVIDER` (`deepseek`, `opencode-go`, or `gemini`)
+- `AI_PROVIDER` (`deepseek` or `gemini`)
 - Provider-specific API key/model:
   - `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` when `AI_PROVIDER=deepseek`
-  - `OPENCODE_GO_API_KEY`, `OPENCODE_GO_MODEL` when `AI_PROVIDER=opencode-go`
   - `GEMINI_API_KEY`, `GEMINI_MODEL` when `AI_PROVIDER=gemini`
 - `APP_ORIGIN` or `ALLOWED_ORIGINS`
 

@@ -104,14 +104,14 @@ function createFreePlanConfig(): LlmConfigBundle {
         errorCodePrefix: "DEEPSEEK",
       },
       {
-        providerId: "opencode-go",
-        displayName: "OpenCode Go",
-        baseUrl: "https://opencode.ai/zen/go/v1/chat/completions",
-        apiKeyEnv: "OPENCODE_GO_API_KEY",
+        providerId: "secondary",
+        displayName: "Secondary",
+        baseUrl: "https://secondary.example/v1/chat/completions",
+        apiKeyEnv: "SECONDARY_API_KEY",
         enabled: true,
         timeoutMs: null,
         payloadOptions: {},
-        errorCodePrefix: "OPENCODE_GO",
+        errorCodePrefix: "SECONDARY",
       },
     ],
     models: [
@@ -136,7 +136,7 @@ function createFreePlanConfig(): LlmConfigBundle {
         sortOrder: 20,
       },
       {
-        providerId: "opencode-go",
+        providerId: "secondary",
         model: "deepseek-v4-pro",
         displayName: "DeepSeek V4 Pro",
         enabled: true,
@@ -146,7 +146,7 @@ function createFreePlanConfig(): LlmConfigBundle {
         sortOrder: 10,
       },
       {
-        providerId: "opencode-go",
+        providerId: "secondary",
         model: "qwen3.6-plus",
         displayName: "Qwen 3.6 Plus",
         enabled: true,
@@ -156,7 +156,7 @@ function createFreePlanConfig(): LlmConfigBundle {
         sortOrder: 20,
       },
       {
-        providerId: "opencode-go",
+        providerId: "secondary",
         model: "kimi-k2.6",
         displayName: "Kimi K2.6",
         enabled: true,
@@ -166,7 +166,7 @@ function createFreePlanConfig(): LlmConfigBundle {
         sortOrder: 30,
       },
       {
-        providerId: "opencode-go",
+        providerId: "secondary",
         model: "mimo-v2.5-pro",
         displayName: "MiMo V2.5 Pro",
         enabled: true,
@@ -181,14 +181,14 @@ function createFreePlanConfig(): LlmConfigBundle {
         task: "branch_chat",
         defaultProviderId: "deepseek",
         defaultModel: "deepseek-v4-flash",
-        fallbackProviderId: "opencode-go",
+        fallbackProviderId: "secondary",
         fallbackModel: "deepseek-v4-pro",
       },
       {
         task: "node_generation",
         defaultProviderId: "deepseek",
         defaultModel: "deepseek-v4-flash",
-        fallbackProviderId: "opencode-go",
+        fallbackProviderId: "secondary",
         fallbackModel: "qwen3.6-plus",
       },
       {
@@ -262,7 +262,7 @@ describe("LLM router", () => {
 
   it("exposes free models and locks the rest in the public catalog", () => {
     vi.stubEnv("DEEPSEEK_API_KEY", "deepseek-key");
-    vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
+    vi.stubEnv("SECONDARY_API_KEY", "go-key");
 
     const catalog = getLlmChatModelCatalogFromConfig(createFreePlanConfig(), "free");
 
@@ -279,21 +279,21 @@ describe("LLM router", () => {
         lockedModels: ["deepseek-v4-pro"],
       },
       {
-        id: "opencode-go",
-        displayName: "OpenCode Go",
+        id: "secondary",
+        displayName: "Secondary",
         configured: true,
-        models: ["kimi-k2.6", "mimo-v2.5-pro"],
-        lockedModels: ["deepseek-v4-pro", "qwen3.6-plus"],
+        models: [],
+        lockedModels: ["deepseek-v4-pro", "qwen3.6-plus", "kimi-k2.6", "mimo-v2.5-pro"],
       },
     ]);
   });
 
-  it("rejects OpenCode Go selections for free plan users", () => {
+  it("rejects secondary provider selections for free plan users", () => {
     expect(() =>
       resolveLlmCandidatesFromConfig(
         createFreePlanConfig(),
         "branch_chat",
-        { providerId: "opencode-go", model: "deepseek-v4-pro" },
+        { providerId: "secondary", model: "deepseek-v4-pro" },
         { requireJson: true, accountPlan: "free" },
       ),
     ).toThrow(expect.objectContaining({
@@ -303,29 +303,37 @@ describe("LLM router", () => {
     }));
   });
 
-  it("allows Kimi and MiMo selections for free plan users", () => {
-    expect(
-      resolveLlmCandidatesFromConfig(
-        createFreePlanConfig(),
-        "branch_chat",
-        { providerId: "opencode-go", model: "kimi-k2.6" },
-        { requireJson: true, accountPlan: "free" },
-      )[0].model.model,
-    ).toBe("kimi-k2.6");
+  it("rejects Kimi and MiMo selections for free plan users", () => {
+    for (const model of ["kimi-k2.6", "mimo-v2.5-pro"]) {
+      expect(() =>
+        resolveLlmCandidatesFromConfig(
+          createFreePlanConfig(),
+          "branch_chat",
+          { providerId: "secondary", model },
+          { requireJson: true, accountPlan: "free" },
+        ),
+      ).toThrow(expect.objectContaining({
+        message: "Selected AI model is not available on the free plan.",
+        code: "PLAN_MODEL_NOT_ALLOWED",
+        status: 403,
+      }));
+    }
+  });
 
+  it("allows the official DeepSeek flash selection for free plan users", () => {
     expect(
       resolveLlmCandidatesFromConfig(
         createFreePlanConfig(),
         "branch_chat",
-        { providerId: "opencode-go", model: "mimo-v2.5-pro" },
+        { providerId: "deepseek", model: "deepseek-v4-flash" },
         { requireJson: true, accountPlan: "free" },
       )[0].model.model,
-    ).toBe("mimo-v2.5-pro");
+    ).toBe("deepseek-v4-flash");
   });
 
   it("removes non-free fallbacks while keeping the official DeepSeek default", () => {
     vi.stubEnv("DEEPSEEK_API_KEY", "deepseek-key");
-    vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
+    vi.stubEnv("SECONDARY_API_KEY", "go-key");
 
     const candidates = resolveLlmCandidatesFromConfig(
       createFreePlanConfig(),
@@ -353,9 +361,9 @@ describe("LLM router", () => {
       routes: [
         {
           task: "branch_chat",
-          defaultProviderId: "opencode-go",
+          defaultProviderId: "secondary",
           defaultModel: "qwen3.6-plus",
-          fallbackProviderId: "opencode-go",
+          fallbackProviderId: "secondary",
           fallbackModel: "deepseek-v4-pro",
         },
         ...createFreePlanConfig().routes.filter((route) => route.task !== "branch_chat"),
@@ -414,7 +422,7 @@ describe("LLM router", () => {
 
   it("treats null and undefined account plans as unrestricted", () => {
     vi.stubEnv("DEEPSEEK_API_KEY", "deepseek-key");
-    vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
+    vi.stubEnv("SECONDARY_API_KEY", "go-key");
 
     const nullCatalog = getLlmChatModelCatalogFromConfig(createFreePlanConfig(), null);
     const undefinedCatalog = getLlmChatModelCatalogFromConfig(
@@ -424,7 +432,7 @@ describe("LLM router", () => {
 
     expect(nullCatalog.providers.map((provider) => provider.id)).toEqual([
       "deepseek",
-      "opencode-go",
+      "secondary",
     ]);
     expect(undefinedCatalog).toEqual(nullCatalog);
   });
@@ -453,7 +461,7 @@ describe("LLM router", () => {
 
   it("uses DB-backed planModelAccess to allow only configured free-plan models", () => {
     vi.stubEnv("DEEPSEEK_API_KEY", "deepseek-key");
-    vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
+    vi.stubEnv("SECONDARY_API_KEY", "go-key");
 
     const access: PlanModelAccess[] = [
       { plan: "free", providerId: "deepseek", model: "deepseek-v4-flash" },
@@ -478,8 +486,8 @@ describe("LLM router", () => {
         lockedModels: ["deepseek-v4-pro"],
       },
       {
-        id: "opencode-go",
-        displayName: "OpenCode Go",
+        id: "secondary",
+        displayName: "Secondary",
         configured: true,
         models: [],
         lockedModels: ["deepseek-v4-pro", "qwen3.6-plus", "kimi-k2.6", "mimo-v2.5-pro"],
@@ -512,13 +520,13 @@ describe("LLM router", () => {
 
   it("rejects non-DeepSeek providers even when planModelAccess is empty", () => {
     vi.stubEnv("DEEPSEEK_API_KEY", "deepseek-key");
-    vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
+    vi.stubEnv("SECONDARY_API_KEY", "go-key");
 
     expect(() =>
       resolveLlmCandidatesFromConfig(
         createFreePlanConfig(),
         "branch_chat",
-        { providerId: "opencode-go", model: "deepseek-v4-pro" },
+        { providerId: "secondary", model: "deepseek-v4-pro" },
         { requireJson: true, accountPlan: "free", planModelAccess: [] },
       ),
     ).toThrow(
@@ -532,7 +540,7 @@ describe("LLM router", () => {
 
   it("leaves unrestricted plan behavior unchanged when planModelAccess is provided", () => {
     vi.stubEnv("DEEPSEEK_API_KEY", "deepseek-key");
-    vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
+    vi.stubEnv("SECONDARY_API_KEY", "go-key");
 
     const access: PlanModelAccess[] = [
       { plan: "free", providerId: "deepseek", model: "deepseek-v4-flash" },
@@ -552,7 +560,7 @@ describe("LLM router", () => {
       })),
     ).toEqual([
       { provider: "deepseek", model: "deepseek-v4-flash" },
-      { provider: "opencode-go", model: "deepseek-v4-pro" },
+      { provider: "secondary", model: "deepseek-v4-pro" },
     ]);
   });
 });

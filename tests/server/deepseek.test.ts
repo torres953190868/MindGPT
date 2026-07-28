@@ -310,8 +310,7 @@ describe("requestDeepSeekReply", () => {
   });
 
   it("uses a per-request provider and model selection", async () => {
-    vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
-    vi.stubEnv("OPENCODE_GO_ALLOWED_MODELS", "qwen3.6-plus");
+    vi.stubEnv("GEMINI_API_KEY", "gemini-key");
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -335,22 +334,22 @@ describe("requestDeepSeekReply", () => {
     const reply = await requestDeepSeekReply({
       instruction: "Use the selected model",
       modelSelection: {
-        providerId: "opencode-go",
-        model: "qwen3.6-plus",
+        providerId: "gemini",
+        model: "gemini-3.5-flash",
       },
     });
 
     expect(reply.title).toBe("Selected model");
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://opencode.ai/zen/go/v1/chat/completions",
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
       expect.objectContaining({
         headers: expect.objectContaining({
-          Authorization: "Bearer go-key",
+          Authorization: "Bearer gemini-key",
         }),
       }),
     );
     const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
-    expect(requestBody.model).toBe("qwen3.6-plus");
+    expect(requestBody.model).toBe("gemini-3.5-flash");
   });
 
   it("rejects disallowed per-request model selections as client errors", async () => {

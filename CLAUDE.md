@@ -30,15 +30,11 @@ Copy `.env.example` to `.env.local` and fill the providers you want to use.
 
 Core chat completion:
 
-- `AI_PROVIDER` - Optional, `deepseek` by default. Set to `opencode-go` or `gemini` to use those providers.
+- `AI_PROVIDER` - Optional, `deepseek` by default. Set to `gemini` to use Gemini instead.
 - `AI_MOCK_MODE` - Optional local/CI mock mode for deterministic AI replies.
 - `DEEPSEEK_API_KEY` - Required when `AI_PROVIDER=deepseek` unless mock mode is enabled.
 - `DEEPSEEK_MODEL` - Optional for DeepSeek, defaults to `deepseek-v4-flash`.
 - `DEEPSEEK_ALLOWED_MODELS` - Optional comma-separated allowlist for the model selector.
-- `OPENCODE_GO_API_KEY` - Required when `AI_PROVIDER=opencode-go` unless mock mode is enabled.
-- `OPENCODE_GO_MODEL` - Optional for OpenCode Go, defaults to `glm-5.1`.
-- `OPENCODE_GO_TIMEOUT_MS` - Optional provider timeout, defaults to `90000`.
-- `OPENCODE_GO_ALLOWED_MODELS` - Optional comma-separated allowlist for the model selector.
 - `GEMINI_API_KEY` - Required when `AI_PROVIDER=gemini` unless mock mode is enabled.
 - `GEMINI_MODEL` - Optional for Gemini, defaults to `gemini-3.5-flash`.
 - `GEMINI_URL` - Optional OpenAI-compatible Gemini chat completions endpoint override.
@@ -108,11 +104,11 @@ Mutation routes validate request origins, parse bodies with Zod schemas, and app
 
 Static chat provider defaults are defined in `lib/server/ai-provider.ts`. Runtime model routing is coordinated by `lib/server/llm-router.ts`, which reads Supabase-backed admin configuration from `branchmind_llm_providers`, `branchmind_llm_models`, and `branchmind_llm_routes` when Supabase is configured, and falls back to static env-based config otherwise.
 
-The supported built-in chat completion providers are DeepSeek, OpenCode Go, and Gemini through Google's OpenAI-compatible endpoint. The model selector is served from `/api/chat/models` and only exposes configured providers/models that support JSON responses. LLM route tasks are `node_generation`, `branch_chat`, and `pdf_qa`, each with default and optional fallback model routing.
+The supported built-in chat completion providers are DeepSeek and Gemini through Google's OpenAI-compatible endpoint. The model selector is served from `/api/chat/models` and only exposes configured providers/models that support JSON responses. LLM route tasks are `node_generation`, `branch_chat`, and `pdf_qa`, each with default and optional fallback model routing.
 
 Initial project creation creates a pending root node first, then streams the first assistant response through the node regeneration route. Child nodes are created optimistically on the client and finalized by `/api/projects/[projectId]/nodes/stream`.
 
-Streaming node routes call `streamDeepSeekReply()` from `lib/server/deepseek-streaming.ts`. Despite the DeepSeek name, this path sends OpenAI-compatible requests through the LLM router and can use DeepSeek, OpenCode Go, Gemini, or Supabase-configured providers. Routes emit SSE events:
+Streaming node routes call `streamDeepSeekReply()` from `lib/server/deepseek-streaming.ts`. Despite the DeepSeek name, this path sends OpenAI-compatible requests through the LLM router and can use DeepSeek, Gemini, or Supabase-configured providers. Routes emit SSE events:
 
 - `delta` - assistant content delta for optimistic UI updates
 - `complete` - finalized project/node data after persistence

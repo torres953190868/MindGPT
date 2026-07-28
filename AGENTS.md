@@ -20,7 +20,7 @@ The product also includes a selectable-text PDF reader and a RAG (retrieval-augm
 - **Canvas:** `@xyflow/react` (React Flow).
 - **State:** Zustand (`store/`).
 - **Backend/Auth:** Supabase (`@supabase/ssr`, `@supabase/supabase-js`), with a file-backed fallback for local development.
-- **AI Providers:** DeepSeek, OpenCode Go, and Gemini via OpenAI-compatible chat-completions endpoints.
+- **AI Providers:** DeepSeek and Gemini via OpenAI-compatible chat-completions endpoints.
 - **Embeddings:** DashScope or Gemini.
 - **Queue (production):** Vercel Queues (`@vercel/queue`).
 - **Testing:** Vitest for unit/integration tests, Playwright for E2E tests.
@@ -120,9 +120,9 @@ Copy `.env.example` to `.env.local` and fill in the providers you intend to use.
 
 ### Required for Any Real AI
 
-- `AI_PROVIDER` — `deepseek` (default), `opencode-go`, or `gemini`.
-- Matching provider API key: `DEEPSEEK_API_KEY`, `OPENCODE_GO_API_KEY`, or `GEMINI_API_KEY`.
-- Matching provider model env: `DEEPSEEK_MODEL`, `OPENCODE_GO_MODEL`, `GEMINI_MODEL`.
+- `AI_PROVIDER` — `deepseek` (default) or `gemini`.
+- Matching provider API key: `DEEPSEEK_API_KEY` or `GEMINI_API_KEY`.
+- Matching provider model env: `DEEPSEEK_MODEL`, `GEMINI_MODEL`.
 
 ### Required for Supabase-Backed Production
 
