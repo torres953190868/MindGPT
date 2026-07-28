@@ -69,6 +69,16 @@ const createNextConfig = (phase: string): NextConfig => ({
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
+  async redirects() {
+    return [
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "branchmind.vercel.app" }],
+        destination: "https://branchmind.cn/:path*",
+        permanent: true,
+      },
+    ];
+  },
   webpack: (config) => {
     const ignored = config.watchOptions?.ignored;
     const ignoredPatterns = Array.isArray(ignored)
