@@ -7,6 +7,7 @@ function makeProject(): Project {
     id: "project-export-test",
     ownerSessionId: "owner-session-should-not-export",
     title: "Export test",
+    notes: "Project notes",
     rootNodeId: "node-root-export-test",
     nodes: {
       "node-root-export-test": {
@@ -14,6 +15,7 @@ function makeProject(): Project {
         projectId: "project-export-test",
         parentId: null,
         title: "Root",
+        titleManuallyEdited: false,
         summary: "Root summary",
         messages: [],
         children: [],

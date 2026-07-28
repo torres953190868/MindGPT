@@ -52,9 +52,14 @@ export default defineConfig({
           AI_MOCK_MODE: process.env.AI_MOCK_MODE ?? "true",
           BRANCHMIND_PROJECTS_BACKEND:
             process.env.BRANCHMIND_PROJECTS_BACKEND ?? "file",
+          BRANCHMIND_RAG_BACKEND: process.env.BRANCHMIND_RAG_BACKEND ?? "file",
           DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY ?? "playwright-mock-key",
           DEEPSEEK_MOCK_STREAM_DELAY_MS:
-            process.env.DEEPSEEK_MOCK_STREAM_DELAY_MS ?? "80",
+            process.env.DEEPSEEK_MOCK_STREAM_DELAY_MS ?? "500",
+          NEXT_PUBLIC_SUPABASE_URL: "",
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "",
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "",
+          SUPABASE_SERVICE_ROLE_KEY: "",
         },
         reuseExistingServer: false,
         timeout: 120_000,

@@ -1,21 +1,24 @@
 import {
-  assertConfiguredChatProvider,
   createDeepSeekPayload,
   createProviderHttpError,
-  DEEPSEEK_TIMEOUT_MS,
   deepSeekStreamChunkSchema,
   DeepSeekError,
-  getActiveChatApiKey,
-  getActiveChatModel,
-  getActiveChatUrl,
   getMockReply,
   isAbortError,
   isDeepSeekMockMode,
+  MAX_DEEPSEEK_ATTEMPTS,
   parseDeepSeekResponse,
-  parseRequiredReply,
+  parseStreamingReply,
+  RETRY_DELAY_MS,
   type BranchMindReplyRequest,
+  withReplyCitations,
 } from "@/lib/server/deepseek-core";
-import type { ChatCompletionsProvider } from "@/lib/server/ai-provider";
+import {
+  getLlmProviderApiKey,
+  getLlmRequestTimeoutMs,
+  resolveLlmCandidates,
+  type LlmRuntimeProvider,
+} from "@/lib/server/llm-router";
 import type { MockReply } from "@/lib/types";
 
 export type DeepSeekStreamingEvent =
@@ -130,12 +133,12 @@ export function getJsonStringValuePrefix(rawJson: string, key: string) {
 
 async function fetchDeepSeekStream(
   body: BranchMindReplyRequest,
-  provider: ChatCompletionsProvider,
+  provider: LlmRuntimeProvider,
   apiKey: string,
   model: string,
   signal: AbortSignal,
 ) {
-  return fetch(getActiveChatUrl(provider), {
+  return fetch(provider.baseUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -220,6 +223,26 @@ async function* readDeepSeekContentDeltas(stream: ReadableStream<Uint8Array>) {
   }
 }
 
+function normalizeStreamingError(
+  error: unknown,
+  provider: LlmRuntimeProvider,
+) {
+  if (isAbortError(error)) {
+    return new DeepSeekError(`${provider.displayName} request timed out.`, 504, {
+      code: `${provider.errorCodePrefix}_TIMEOUT`,
+      expose: true,
+      retryable: true,
+    });
+  }
+
+  if (error instanceof DeepSeekError) return error;
+
+  return new DeepSeekError(`${provider.displayName} API request failed.`, 502, {
+    code: `${provider.errorCodePrefix}_NETWORK_ERROR`,
+    retryable: true,
+  });
+}
+
 export async function* streamDeepSeekReply(
   body: BranchMindReplyRequest,
 ): AsyncGenerator<DeepSeekStreamingEvent> {
@@ -228,67 +251,107 @@ export async function* streamDeepSeekReply(
     return;
   }
 
-  const provider = assertConfiguredChatProvider();
-  const apiKey = getActiveChatApiKey(provider);
-  const model = getActiveChatModel(provider);
+  let lastError: DeepSeekError | null = null;
+  const candidates = await resolveLlmCandidates(
+    body.llmTask ?? "node_generation",
+    body.modelSelection,
+    { requireJson: true, requireStreaming: true, accountPlan: body.userPlan },
+  );
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), DEEPSEEK_TIMEOUT_MS);
-  let rawReply = "";
-  let visibleContent = "";
+  for (let candidateIndex = 0; candidateIndex < candidates.length; candidateIndex += 1) {
+    const candidate = candidates[candidateIndex];
+    const provider = candidate.provider;
+    const apiKey = getLlmProviderApiKey(provider);
+    if (!apiKey) {
+      throw new DeepSeekError(`${provider.apiKeyEnv} is not configured.`, 500, {
+        code: `${provider.errorCodePrefix}_NOT_CONFIGURED`,
+      });
+    }
+    const model = candidate.model.model;
 
-  try {
-    const response = await fetchDeepSeekStream(
-      body,
-      provider,
-      apiKey,
-      model,
-      controller.signal,
-    );
-    if (!response.ok) {
-      throw createProviderHttpError(
-        provider,
-        response,
-        await readErrorResponse(response),
+    for (let attempt = 1; attempt <= MAX_DEEPSEEK_ATTEMPTS; attempt += 1) {
+      const controller = new AbortController();
+      const timeout = setTimeout(
+        () => controller.abort(),
+        getLlmRequestTimeoutMs(provider),
       );
-    }
-    if (!response.body) {
-      throw new DeepSeekError("DeepSeek returned an empty stream.", 502, {
-        code: "DEEPSEEK_EMPTY_STREAM",
-        retryable: true,
-      });
-    }
+      let emittedDelta = false;
+      let rawReply = "";
+      let visibleContent = "";
 
-    for await (const rawDelta of readDeepSeekContentDeltas(response.body)) {
-      rawReply += rawDelta;
-      const contentPrefix = getJsonStringValuePrefix(rawReply, "content");
-      if (!contentPrefix || contentPrefix.value.length <= visibleContent.length) {
-        continue;
+      try {
+        const response = await fetchDeepSeekStream(
+          body,
+          provider,
+          apiKey,
+          model,
+          controller.signal,
+        );
+        if (!response.ok) {
+          throw createProviderHttpError(
+            provider,
+            response,
+            await readErrorResponse(response),
+          );
+        }
+        if (!response.body) {
+          throw new DeepSeekError(`${provider.displayName} returned an empty stream.`, 502, {
+            code: `${provider.errorCodePrefix}_EMPTY_STREAM`,
+            retryable: true,
+          });
+        }
+
+        for await (const rawDelta of readDeepSeekContentDeltas(response.body)) {
+          rawReply += rawDelta;
+          const contentPrefix = getJsonStringValuePrefix(rawReply, "content");
+          if (!contentPrefix || contentPrefix.value.length <= visibleContent.length) {
+            continue;
+          }
+
+          const contentDelta = contentPrefix.value.slice(visibleContent.length);
+          visibleContent = contentPrefix.value;
+          emittedDelta = true;
+          yield { type: "delta", contentDelta };
+        }
+
+        const reply = withReplyCitations(
+          parseStreamingReply(
+            rawReply,
+            body.instruction,
+            visibleContent,
+          ),
+          body.documentContexts,
+        );
+        if (reply.content.length > visibleContent.length) {
+          emittedDelta = true;
+          yield {
+            type: "delta",
+            contentDelta: reply.content.slice(visibleContent.length),
+          };
+        }
+        yield { type: "complete", reply };
+        return;
+      } catch (error) {
+        const nextError = normalizeStreamingError(error, provider);
+        lastError = nextError;
+
+        if (emittedDelta || !nextError.retryable) {
+          throw nextError;
+        }
+
+        if (attempt < MAX_DEEPSEEK_ATTEMPTS) {
+          await wait(RETRY_DELAY_MS);
+          continue;
+        }
+
+        if (candidateIndex >= candidates.length - 1) {
+          throw nextError;
+        }
+      } finally {
+        clearTimeout(timeout);
       }
-
-      const contentDelta = contentPrefix.value.slice(visibleContent.length);
-      visibleContent = contentPrefix.value;
-      yield { type: "delta", contentDelta };
     }
-
-    const reply = parseRequiredReply(rawReply);
-    if (reply.content.length > visibleContent.length) {
-      yield {
-        type: "delta",
-        contentDelta: reply.content.slice(visibleContent.length),
-      };
-    }
-    yield { type: "complete", reply };
-  } catch (error) {
-    if (isAbortError(error)) {
-      throw new DeepSeekError(`${provider.displayName} request timed out.`, 504, {
-        code: `${provider.errorCodePrefix}_TIMEOUT`,
-        retryable: true,
-      });
-    }
-
-    throw error;
-  } finally {
-    clearTimeout(timeout);
   }
+
+  throw lastError ?? new DeepSeekError("DeepSeek API call failed.");
 }

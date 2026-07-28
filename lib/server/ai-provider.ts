@@ -1,4 +1,4 @@
-export type ChatCompletionsProviderId = "deepseek" | "opencode-go";
+export type ChatCompletionsProviderId = "deepseek" | "gemini";
 
 export type ChatCompletionsProvider = {
   id: ChatCompletionsProviderId;
@@ -16,31 +16,17 @@ export type ChatCompletionsProvider = {
 
 export const DEEPSEEK_CHAT_COMPLETIONS_URL =
   "https://api.deepseek.com/chat/completions";
-export const OPENCODE_GO_CHAT_COMPLETIONS_URL =
-  "https://opencode.ai/zen/go/v1/chat/completions";
+export const GEMINI_OPENAI_CHAT_COMPLETIONS_URL =
+  "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 
 export const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
 export const DEFAULT_DEEPSEEK_ALLOWED_MODELS = [
   DEFAULT_DEEPSEEK_MODEL,
-  "deepseek-chat",
-  "deepseek-reasoner",
+  "deepseek-v4-pro",
 ];
 
-export const DEFAULT_OPENCODE_GO_MODEL = "deepseek-v4-flash";
-export const DEFAULT_OPENCODE_GO_ALLOWED_MODELS = [
-  "glm-5.1",
-  "glm-5",
-  "kimi-k2.5",
-  "kimi-k2.6",
-  "deepseek-v4-pro",
-  "deepseek-v4-flash",
-  "mimo-v2-pro",
-  "mimo-v2-omni",
-  "mimo-v2.5-pro",
-  "mimo-v2.5",
-  "qwen3.6-plus",
-  "qwen3.5-plus",
-];
+export const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash";
+export const DEFAULT_GEMINI_ALLOWED_MODELS = [DEFAULT_GEMINI_MODEL];
 
 export const CHAT_COMPLETIONS_PROVIDERS: Record<
   ChatCompletionsProviderId,
@@ -59,17 +45,17 @@ export const CHAT_COMPLETIONS_PROVIDERS: Record<
     errorCodePrefix: "DEEPSEEK",
     payloadOptions: { thinking: { type: "disabled" } },
   },
-  "opencode-go": {
-    id: "opencode-go",
-    displayName: "OpenCode Go",
-    url: OPENCODE_GO_CHAT_COMPLETIONS_URL,
-    urlEnv: "OPENCODE_GO_URL",
-    apiKeyEnv: "OPENCODE_GO_API_KEY",
-    modelEnv: "OPENCODE_GO_MODEL",
-    allowedModelsEnv: "OPENCODE_GO_ALLOWED_MODELS",
-    defaultModel: DEFAULT_OPENCODE_GO_MODEL,
-    defaultAllowedModels: DEFAULT_OPENCODE_GO_ALLOWED_MODELS,
-    errorCodePrefix: "OPENCODE_GO",
+  gemini: {
+    id: "gemini",
+    displayName: "Gemini",
+    url: GEMINI_OPENAI_CHAT_COMPLETIONS_URL,
+    urlEnv: "GEMINI_URL",
+    apiKeyEnv: "GEMINI_API_KEY",
+    modelEnv: "GEMINI_MODEL",
+    allowedModelsEnv: "GEMINI_ALLOWED_MODELS",
+    defaultModel: DEFAULT_GEMINI_MODEL,
+    defaultAllowedModels: DEFAULT_GEMINI_ALLOWED_MODELS,
+    errorCodePrefix: "GEMINI",
   },
 };
 

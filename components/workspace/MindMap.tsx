@@ -1,33 +1,144 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Background,
+  type MouseEvent as ReactMouseEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { EyeOff } from "lucide-react";
+import {
+  BaseEdge,
   Controls,
   ReactFlow,
   applyNodeChanges,
+  getBezierPath,
   type Edge,
+  type EdgeProps,
+  type EdgeTypes,
   type Node,
   type NodeChange,
+  type OnNodeDrag,
+  type ReactFlowInstance,
   type NodeTypes,
+  type Viewport,
 } from "@xyflow/react";
 import { getVisibleNodeIds } from "@/lib/graph";
-import type { Project } from "@/lib/types";
-import { BranchNodeCard, type BranchNodeData } from "./BranchNodeCard";
+import type { NodePosition, Project } from "@/lib/types";
+import {
+  BranchNodeCard,
+  type BranchNodeData,
+  type InlineNodeComposerData,
+  type MobileLongPressStart,
+} from "./BranchNodeCard";
+
+const HOME_CANVAS_PAN_RANGE_RATIO = 1 / 5;
+const HOME_COMPOSER_INITIAL_OFFSET_Y = 16;
+const HOME_CANVAS_WHEEL_PAN_SPEED = 0.5;
+const HOME_HERO_MIN_VISIBLE_TOP = 16;
+const HOME_CANVAS_PAN_ACTIVATION_DISTANCE = 6;
+const LINE_SCROLL_DELTA_MULTIPLIER = 20;
+const MOBILE_ROOT_FOCUS_MEDIA_QUERY = "(max-width: 1023px)";
+const MOBILE_ROOT_FOCUS_ZOOM = 1.15;
+const MOBILE_NODE_LONG_PRESS_DELAY_MS = 450;
+const MOBILE_NODE_LONG_PRESS_CANCEL_DISTANCE = 8;
+const MOBILE_NODE_DRAG_LOCKED_THRESHOLD = 100_000;
+const MOBILE_NODE_DRAG_ACTIVE_THRESHOLD = 1;
+const MOBILE_MOUSE_LONG_PRESS_POINTER_ID = -1;
+const NODE_ENTRANCE_EDGE_DURATION_MS = 280;
+const NODE_ENTRANCE_NODE_DURATION_MS = 220;
+const NODE_ENTRANCE_CAMERA_DURATION_MS = 450;
+const NODE_FOCUS_FALLBACK_WIDTH = 292;
+const NODE_FOCUS_FALLBACK_HEIGHT = 220;
+
+type MindMapEdgeData = {
+  isEntering?: boolean;
+};
+
+type MindMapEdge = Edge<MindMapEdgeData>;
+
+function BranchEdge({
+  id,
+  sourceX,
+  sourceY,
+  sourcePosition,
+  targetX,
+  targetY,
+  targetPosition,
+  data,
+  markerEnd,
+  style,
+}: EdgeProps<MindMapEdge>) {
+  const [edgePath] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
+
+  return (
+    <BaseEdge
+      id={id}
+      path={edgePath}
+      pathLength={data?.isEntering ? 1 : undefined}
+      markerEnd={markerEnd}
+      style={style}
+      className={data?.isEntering ? "branchmind-entering-edge" : undefined}
+    />
+  );
+}
 
 const nodeTypes: NodeTypes = {
   branchNode: BranchNodeCard,
 };
+const edgeTypes: EdgeTypes = {
+  branchEdge: BranchEdge,
+};
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
 
 type MindMapProps = {
   project: Project;
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
-  onCreateNode: (nodeId: string, mode: "continue" | "branch") => void;
+  onCreateNode: (nodeId: string, mode: "continue" | "branch") => void | Promise<void>;
   onToggleNode: (nodeId: string) => void;
   onMoveNode: (nodeId: string, position: { x: number; y: number }) => void;
   creatingNodeId: string | null;
   streamingNodeId: string | null;
+  inlineNodeComposer?: InlineNodeComposerData;
+  onHomeCanvasPanOffsetChange?: (offsetY: number) => void;
+};
+
+type HomeCanvasGesture = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startOffsetY: number;
+  baselineX: number;
+  baselineY: number;
+  mode: "pending" | "vertical" | "horizontal";
+  captured: boolean;
+};
+
+type MobileNodeLongPressGesture = {
+  nodeId: string;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startNodePosition: NodePosition;
+  startFlowPosition: NodePosition | null;
+  latestPosition: NodePosition | null;
+  timerId: number;
+  activated: boolean;
+  moved: boolean;
 };
 
 export function MindMap({
@@ -39,8 +150,109 @@ export function MindMap({
   onMoveNode,
   creatingNodeId,
   streamingNodeId,
+  inlineNodeComposer,
+  onHomeCanvasPanOffsetChange,
 }: MindMapProps) {
+  const flowContainerRef = useRef<HTMLDivElement | null>(null);
+  const homeCanvasPanOffsetYRef = useRef(0);
+  const homeCanvasGestureRef = useRef<HomeCanvasGesture | null>(null);
+  const homeViewportBaselineXRef = useRef<number | null>(null);
+  const homeViewportBaselineYRef = useRef<number | null>(null);
+  const previousFlowBoundsRef = useRef<DOMRectReadOnly | null>(null);
+  const previousProjectIdRef = useRef<string | null>(null);
+  const previousNodeIdsRef = useRef<Set<string>>(new Set());
+  const nodeEntranceTimersRef = useRef<Set<number>>(new Set());
+  const mobileRootFocusProjectIdRef = useRef<string | null>(null);
+  const mobileRootFocusPendingRef = useRef(false);
+  const mobileNodeLongPressGestureRef =
+    useRef<MobileNodeLongPressGesture | null>(null);
+  const activeMobileNodeDragIdRef = useRef<string | null>(null);
+  const suppressMobileNodeClickRef = useRef<string | null>(null);
   const visibleNodeIds = useMemo(() => getVisibleNodeIds(project), [project]);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [mobileLongPressDragNodeId, setMobileLongPressDragNodeId] =
+    useState<string | null>(null);
+  const [enteringNodeIds, setEnteringNodeIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [reactFlowInstance, setReactFlowInstance] =
+    useState<ReactFlowInstance<Node<BranchNodeData>, Edge> | null>(null);
+  const draggingNodeIdRef = useRef<string | null>(null);
+  const isHomeInlineComposer = inlineNodeComposer?.variant === "home";
+  const homeComposerNodeId = isHomeInlineComposer ? inlineNodeComposer?.nodeId : null;
+  const mobileLongPressDragEnabled =
+    isMobileViewport && !isHomeInlineComposer;
+
+  const resetMobileNodeLongPressState = useCallback((suppressClick = false) => {
+    const gesture = mobileNodeLongPressGestureRef.current;
+    const nodeIdToSuppress =
+      gesture?.nodeId ?? activeMobileNodeDragIdRef.current ?? null;
+
+    if (gesture) {
+      window.clearTimeout(gesture.timerId);
+    }
+
+    if ((suppressClick || gesture?.activated) && nodeIdToSuppress) {
+      suppressMobileNodeClickRef.current = nodeIdToSuppress;
+    }
+
+    mobileNodeLongPressGestureRef.current = null;
+    activeMobileNodeDragIdRef.current = null;
+    setMobileLongPressDragNodeId(null);
+  }, []);
+
+  const handleMobileNodeLongPressStart = useCallback(
+    (nodeId: string, event: MobileLongPressStart) => {
+      if (!mobileLongPressDragEnabled) return;
+      if (!reactFlowInstance) return;
+      if (!event.isPrimary || event.button !== 0) return;
+
+      const node = project.nodes[nodeId];
+      if (!node) return;
+
+      resetMobileNodeLongPressState(false);
+
+      const pointerId = event.pointerId;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const timerId = window.setTimeout(() => {
+        const gesture = mobileNodeLongPressGestureRef.current;
+        if (!gesture || gesture.pointerId !== pointerId || gesture.nodeId !== nodeId) {
+          return;
+        }
+
+        gesture.activated = true;
+        gesture.startFlowPosition = reactFlowInstance.screenToFlowPosition({
+          x: gesture.startX,
+          y: gesture.startY,
+        });
+        gesture.latestPosition = gesture.startNodePosition;
+        activeMobileNodeDragIdRef.current = nodeId;
+        setMobileLongPressDragNodeId(nodeId);
+      }, MOBILE_NODE_LONG_PRESS_DELAY_MS);
+
+      mobileNodeLongPressGestureRef.current = {
+        nodeId,
+        pointerId,
+        startX,
+        startY,
+        startNodePosition: node.position,
+        startFlowPosition: null,
+        latestPosition: null,
+        timerId,
+        activated: false,
+        moved: false,
+      };
+    },
+    [mobileLongPressDragEnabled, project.nodes, reactFlowInstance, resetMobileNodeLongPressState],
+  );
+
+  const consumeMobileNodeClickSuppression = useCallback((nodeId: string) => {
+    if (suppressMobileNodeClickRef.current !== nodeId) return false;
+
+    suppressMobileNodeClickRef.current = null;
+    return true;
+  }, []);
 
   const graphNodes = useMemo<Node<BranchNodeData>[]>(() => {
     return Object.values(project.nodes)
@@ -49,19 +261,32 @@ export function MindMap({
         id: node.id,
         type: "branchNode",
         position: node.position,
+        selected: selectedNodeId === node.id,
+        dragHandle: ".branch-node-edge-hit-area",
         data: {
           mindNode: node,
           selected: selectedNodeId === node.id,
+          isEntering: enteringNodeIds.has(node.id),
           onSelect: onSelectNode,
           onCreate: onCreateNode,
           onToggle: onToggleNode,
-          isCreating: creatingNodeId === node.id,
           isStreaming: streamingNodeId === node.id,
           creationDisabled: Boolean(creatingNodeId),
+          mobileLongPressDragEnabled,
+          mobileLongPressDragging: mobileLongPressDragNodeId === node.id,
+          onMobileLongPressStart: handleMobileNodeLongPressStart,
+          consumeMobileNodeClickSuppression,
+          inlineComposer:
+            inlineNodeComposer?.nodeId === node.id ? inlineNodeComposer : undefined,
         },
       }));
   }, [
     creatingNodeId,
+    inlineNodeComposer,
+    consumeMobileNodeClickSuppression,
+    handleMobileNodeLongPressStart,
+    mobileLongPressDragEnabled,
+    mobileLongPressDragNodeId,
     onCreateNode,
     onSelectNode,
     onToggleNode,
@@ -69,43 +294,767 @@ export function MindMap({
     selectedNodeId,
     streamingNodeId,
     visibleNodeIds,
+    enteringNodeIds,
   ]);
+  const [nodes, setNodes] = useState(graphNodes);
 
-  const graphEdges = useMemo<Edge[]>(() => {
+  const graphEdges = useMemo<MindMapEdge[]>(() => {
     return Object.values(project.nodes).flatMap((node) =>
       node.children
         .filter((childId) => visibleNodeIds.has(node.id) && visibleNodeIds.has(childId))
         .map((childId) => {
           const child = project.nodes[childId];
           const isBranchChild = child?.branchType === "branch";
+          const isEntering = enteringNodeIds.has(childId);
           return {
             id: `${node.id}-${childId}`,
+            type: "branchEdge",
             source: node.id,
             target: childId,
             sourceHandle: isBranchChild ? "branch-source" : "continue-source",
             targetHandle: isBranchChild ? "branch-target" : "continue-target",
             animated: selectedNodeId === node.id || selectedNodeId === childId,
+            data: { isEntering },
             style: {
-              stroke: isBranchChild ? "#b293d8" : "#8cc9a7",
-              strokeWidth: 2.5,
-              strokeDasharray: "7 6",
+              stroke: isBranchChild
+                ? "var(--node-handle-branch)"
+                : "var(--node-handle-continue)",
+              strokeWidth: 2,
+              strokeDasharray: isEntering ? 1 : "6 5",
+              ...(isEntering ? { strokeDashoffset: 1 } : {}),
             },
           };
         }),
     );
-  }, [project.nodes, selectedNodeId, visibleNodeIds]);
+  }, [enteringNodeIds, project.nodes, selectedNodeId, visibleNodeIds]);
 
-  const [nodes, setNodes] = useState(graphNodes);
+  const fitViewOptions = useMemo(
+    () => ({
+      maxZoom: inlineNodeComposer ? 1 : 1.7,
+    }),
+    [inlineNodeComposer],
+  );
+
+  const centerHomeComposer = useCallback(() => {
+    if (!reactFlowInstance || !homeComposerNodeId) return;
+
+    void reactFlowInstance
+      .fitView({
+        nodes: [{ id: homeComposerNodeId }],
+        maxZoom: 1,
+        duration: 0,
+      })
+      .then(() => {
+        const viewport = reactFlowInstance.getViewport();
+        const initialViewport = {
+          ...viewport,
+          y: viewport.y + HOME_COMPOSER_INITIAL_OFFSET_Y,
+        };
+
+        homeViewportBaselineYRef.current = initialViewport.y;
+        homeViewportBaselineXRef.current = initialViewport.x;
+        homeCanvasPanOffsetYRef.current = 0;
+        onHomeCanvasPanOffsetChange?.(0);
+        void reactFlowInstance.setViewport(initialViewport, { duration: 0 });
+      });
+  }, [homeComposerNodeId, onHomeCanvasPanOffsetChange, reactFlowInstance]);
+
+  const getHomeCanvasPanBounds = useCallback(() => {
+    const containerHeight = flowContainerRef.current?.clientHeight ?? window.innerHeight;
+    const heroTop =
+      document
+        .querySelector<HTMLElement>("[data-testid='home-hero']")
+        ?.getBoundingClientRect().top ?? containerHeight;
+    const baselineHeroTop = heroTop - homeCanvasPanOffsetYRef.current;
+    const maxUpBeforeHeroLeavesScreen = Math.max(
+      0,
+      baselineHeroTop - HOME_HERO_MIN_VISIBLE_TOP,
+    );
+    const panRange = containerHeight * HOME_CANVAS_PAN_RANGE_RATIO;
+
+    return {
+      down: 0,
+      up: Math.min(panRange, maxUpBeforeHeroLeavesScreen),
+    };
+  }, []);
 
   useEffect(() => {
-    setNodes(graphNodes);
+    const draggingNodeId =
+      draggingNodeIdRef.current ?? activeMobileNodeDragIdRef.current;
+    if (!draggingNodeId) {
+      setNodes(graphNodes);
+      return;
+    }
+
+    // Keep the in-progress drag position while streaming updates rebuild the nodes.
+    setNodes((current) => {
+      const draggedNode = current.find((node) => node.id === draggingNodeId);
+      if (!draggedNode) return graphNodes;
+      return graphNodes.map((node) =>
+        node.id === draggingNodeId ? { ...node, position: draggedNode.position } : node,
+      );
+    });
   }, [graphNodes]);
 
-  const handleNodesChange = useCallback(
-    (changes: NodeChange[]) =>
-      setNodes((current) => applyNodeChanges(changes, current) as Node<BranchNodeData>[]),
+  useEffect(() => {
+    const currentNodeIds = new Set(graphNodes.map((node) => node.id));
+
+    if (previousProjectIdRef.current !== project.id) {
+      nodeEntranceTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      nodeEntranceTimersRef.current.clear();
+      previousProjectIdRef.current = project.id;
+      previousNodeIdsRef.current = currentNodeIds;
+      setEnteringNodeIds(new Set());
+      return;
+    }
+
+    const newChild = graphNodes.find(
+      (node) =>
+        !previousNodeIdsRef.current.has(node.id) &&
+        node.data.mindNode.parentId === creatingNodeId,
+    );
+
+    if (!newChild) {
+      previousNodeIdsRef.current = currentNodeIds;
+      return;
+    }
+    if (!reactFlowInstance) return;
+
+    previousNodeIdsRef.current = currentNodeIds;
+
+    const focusNewNode = (duration: number) => {
+      const renderedNode = reactFlowInstance.getNode(newChild.id);
+      const focusOffsetX =
+        (renderedNode?.measured?.width ?? NODE_FOCUS_FALLBACK_WIDTH) / 2;
+      const focusOffsetY =
+        (renderedNode?.measured?.height ?? NODE_FOCUS_FALLBACK_HEIGHT) / 2;
+
+      void reactFlowInstance.setCenter(
+        newChild.position.x + focusOffsetX,
+        newChild.position.y + focusOffsetY,
+        { zoom: reactFlowInstance.getZoom(), duration },
+      );
+    };
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      window.requestAnimationFrame(() => focusNewNode(0));
+      return;
+    }
+
+    setEnteringNodeIds((current) => new Set(current).add(newChild.id));
+
+    const scheduleEntranceStep = (callback: () => void, delay: number) => {
+      const timer = window.setTimeout(() => {
+        nodeEntranceTimersRef.current.delete(timer);
+        callback();
+      }, delay);
+      nodeEntranceTimersRef.current.add(timer);
+    };
+
+    scheduleEntranceStep(
+      () => focusNewNode(NODE_ENTRANCE_CAMERA_DURATION_MS),
+      NODE_ENTRANCE_EDGE_DURATION_MS,
+    );
+    scheduleEntranceStep(() => {
+      setEnteringNodeIds((current) => {
+        if (!current.has(newChild.id)) return current;
+        const next = new Set(current);
+        next.delete(newChild.id);
+        return next;
+      });
+    }, NODE_ENTRANCE_EDGE_DURATION_MS + NODE_ENTRANCE_NODE_DURATION_MS);
+  }, [creatingNodeId, graphNodes, project.id, reactFlowInstance]);
+
+  useEffect(
+    () => () => {
+      nodeEntranceTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      nodeEntranceTimersRef.current.clear();
+    },
     [],
   );
+
+  useEffect(() => {
+    const mobileQuery = window.matchMedia(MOBILE_ROOT_FOCUS_MEDIA_QUERY);
+    const updateMobileViewport = () => setIsMobileViewport(mobileQuery.matches);
+
+    updateMobileViewport();
+    mobileQuery.addEventListener("change", updateMobileViewport);
+    return () => mobileQuery.removeEventListener("change", updateMobileViewport);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileViewport || !reactFlowInstance) {
+      resetMobileNodeLongPressState(false);
+      return undefined;
+    }
+
+    const handleMobileLongPressMove = (
+      pointerId: number,
+      clientX: number,
+      clientY: number,
+      event: PointerEvent | MouseEvent | TouchEvent,
+    ) => {
+      const gesture = mobileNodeLongPressGestureRef.current;
+      if (!gesture || gesture.pointerId !== pointerId) {
+        return;
+      }
+
+      const deltaX = clientX - gesture.startX;
+      const deltaY = clientY - gesture.startY;
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+      if (gesture.activated) {
+        const startFlowPosition = gesture.startFlowPosition;
+        if (!startFlowPosition) return;
+
+        event.preventDefault();
+        const nextFlowPosition = reactFlowInstance.screenToFlowPosition({
+          x: clientX,
+          y: clientY,
+        });
+        const nextPosition = {
+          x: gesture.startNodePosition.x + nextFlowPosition.x - startFlowPosition.x,
+          y: gesture.startNodePosition.y + nextFlowPosition.y - startFlowPosition.y,
+        };
+
+        gesture.latestPosition = nextPosition;
+        gesture.moved = distance > MOBILE_NODE_LONG_PRESS_CANCEL_DISTANCE;
+        setNodes((current) =>
+          current.map((node) =>
+            node.id === gesture.nodeId ? { ...node, position: nextPosition } : node,
+          ),
+        );
+        return;
+      }
+
+      if (distance <= MOBILE_NODE_LONG_PRESS_CANCEL_DISTANCE) return;
+
+      window.clearTimeout(gesture.timerId);
+      mobileNodeLongPressGestureRef.current = null;
+    };
+
+    const handleMobileLongPressEnd = (pointerId: number) => {
+      const gesture = mobileNodeLongPressGestureRef.current;
+      if (!gesture || gesture.pointerId !== pointerId) return;
+
+      if (gesture.activated && gesture.moved && gesture.latestPosition) {
+        void onMoveNode(gesture.nodeId, gesture.latestPosition);
+      }
+
+      resetMobileNodeLongPressState(gesture.activated);
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      handleMobileLongPressMove(event.pointerId, event.clientX, event.clientY, event);
+    };
+    const handlePointerEnd = (event: PointerEvent) => {
+      handleMobileLongPressEnd(event.pointerId);
+    };
+    const handleMouseMove = (event: MouseEvent) => {
+      handleMobileLongPressMove(
+        MOBILE_MOUSE_LONG_PRESS_POINTER_ID,
+        event.clientX,
+        event.clientY,
+        event,
+      );
+    };
+    const handleMouseEnd = () => {
+      handleMobileLongPressEnd(MOBILE_MOUSE_LONG_PRESS_POINTER_ID);
+    };
+    const handleTouchMove = (event: TouchEvent) => {
+      const gesture = mobileNodeLongPressGestureRef.current;
+      if (!gesture) return;
+
+      const touch = Array.from(event.changedTouches).find(
+        (item) => item.identifier === gesture.pointerId,
+      );
+      if (!touch) return;
+
+      handleMobileLongPressMove(
+        touch.identifier,
+        touch.clientX,
+        touch.clientY,
+        event,
+      );
+    };
+    const handleTouchEnd = (event: TouchEvent) => {
+      const gesture = mobileNodeLongPressGestureRef.current;
+      if (!gesture) return;
+
+      const touch = Array.from(event.changedTouches).find(
+        (item) => item.identifier === gesture.pointerId,
+      );
+      if (!touch) return;
+
+      handleMobileLongPressEnd(touch.identifier);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", handlePointerEnd);
+    window.addEventListener("pointercancel", handlePointerEnd);
+    window.addEventListener("mousemove", handleMouseMove, { passive: false });
+    window.addEventListener("mouseup", handleMouseEnd);
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("touchend", handleTouchEnd);
+    window.addEventListener("touchcancel", handleTouchEnd);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerEnd);
+      window.removeEventListener("pointercancel", handlePointerEnd);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseEnd);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+      window.removeEventListener("touchcancel", handleTouchEnd);
+    };
+  }, [isMobileViewport, onMoveNode, reactFlowInstance, resetMobileNodeLongPressState]);
+
+  useEffect(() => {
+    resetMobileNodeLongPressState(false);
+  }, [
+    isHomeInlineComposer,
+    project.id,
+    resetMobileNodeLongPressState,
+  ]);
+
+  useEffect(() => {
+    if (!homeComposerNodeId) return undefined;
+
+    const animationFrame = window.requestAnimationFrame(centerHomeComposer);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [centerHomeComposer, graphNodes, homeComposerNodeId]);
+
+  useEffect(() => {
+    if (!homeComposerNodeId) return undefined;
+
+    const container = flowContainerRef.current;
+    if (!container) return undefined;
+
+    let animationFrame = 0;
+    const scheduleCenter = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(centerHomeComposer);
+    };
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleCenter);
+
+    scheduleCenter();
+    observer?.observe(container);
+    window.addEventListener("resize", scheduleCenter);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      observer?.disconnect();
+      window.removeEventListener("resize", scheduleCenter);
+    };
+  }, [centerHomeComposer, homeComposerNodeId]);
+
+  useEffect(() => {
+    previousFlowBoundsRef.current = null;
+    mobileRootFocusProjectIdRef.current = null;
+    mobileRootFocusPendingRef.current = false;
+  }, [project.id]);
+
+  const focusMobileRootNode = useCallback(() => {
+    if (!reactFlowInstance || isHomeInlineComposer) return;
+    if (mobileRootFocusProjectIdRef.current === project.id) return;
+    if (mobileRootFocusPendingRef.current) return;
+    if (!window.matchMedia(MOBILE_ROOT_FOCUS_MEDIA_QUERY).matches) return;
+    if (!graphNodes.some((node) => node.id === project.rootNodeId)) return;
+
+    const container = flowContainerRef.current;
+    const bounds = container?.getBoundingClientRect();
+    if (!bounds || bounds.width === 0 || bounds.height === 0) return;
+
+    mobileRootFocusPendingRef.current = true;
+    void reactFlowInstance
+      .fitView({
+        nodes: [{ id: project.rootNodeId }],
+        minZoom: MOBILE_ROOT_FOCUS_ZOOM,
+        maxZoom: MOBILE_ROOT_FOCUS_ZOOM,
+        duration: 0,
+      })
+      .then((didFit) => {
+        if (didFit) {
+          mobileRootFocusProjectIdRef.current = project.id;
+        }
+      })
+      .finally(() => {
+        mobileRootFocusPendingRef.current = false;
+      });
+  }, [
+    graphNodes,
+    isHomeInlineComposer,
+    project.id,
+    project.rootNodeId,
+    reactFlowInstance,
+  ]);
+
+  useEffect(() => {
+    if (!reactFlowInstance || isHomeInlineComposer) return undefined;
+
+    const container = flowContainerRef.current;
+    if (!container) return undefined;
+
+    let animationFrame = 0;
+    const scheduleFocusRoot = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(focusMobileRootNode);
+    };
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleFocusRoot);
+
+    scheduleFocusRoot();
+    observer?.observe(container);
+    window.addEventListener("resize", scheduleFocusRoot);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      observer?.disconnect();
+      window.removeEventListener("resize", scheduleFocusRoot);
+    };
+  }, [focusMobileRootNode, isHomeInlineComposer, reactFlowInstance]);
+
+  const preserveViewportPosition = useCallback(() => {
+    if (!reactFlowInstance || isHomeInlineComposer) return;
+    const container = flowContainerRef.current;
+    if (!container) return;
+
+    const nextBounds = container.getBoundingClientRect();
+
+    if (nextBounds.width === 0 || nextBounds.height === 0) {
+      previousFlowBoundsRef.current = null;
+      return;
+    }
+
+    const previousBounds = previousFlowBoundsRef.current;
+    previousFlowBoundsRef.current = nextBounds;
+
+    if (!previousBounds) return;
+
+    const deltaX = previousBounds.left - nextBounds.left;
+    const deltaY = previousBounds.top - nextBounds.top;
+
+    if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return;
+
+    const viewport = reactFlowInstance.getViewport();
+    void reactFlowInstance.setViewport(
+      {
+        ...viewport,
+        x: viewport.x + deltaX,
+        y: viewport.y + deltaY,
+      },
+      { duration: 0 },
+    );
+  }, [isHomeInlineComposer, reactFlowInstance]);
+
+  useLayoutEffect(() => {
+    preserveViewportPosition();
+  });
+
+  useEffect(() => {
+    if (!reactFlowInstance || isHomeInlineComposer) return undefined;
+
+    let animationFrame = 0;
+    const schedulePreserveViewportPosition = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(preserveViewportPosition);
+    };
+    const container = flowContainerRef.current;
+    if (!container) return undefined;
+
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(schedulePreserveViewportPosition);
+
+    schedulePreserveViewportPosition();
+    observer?.observe(container);
+    window.addEventListener("resize", schedulePreserveViewportPosition);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      observer?.disconnect();
+      window.removeEventListener("resize", schedulePreserveViewportPosition);
+    };
+  }, [
+    isHomeInlineComposer,
+    preserveViewportPosition,
+    reactFlowInstance,
+    project.id,
+  ]);
+
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      setNodes((current) => applyNodeChanges(changes, current) as Node<BranchNodeData>[]);
+    },
+    [],
+  );
+
+  const handleNodeClick = useCallback(
+    (_: ReactMouseEvent, node: Node<BranchNodeData>) => {
+      if (consumeMobileNodeClickSuppression(node.id)) return;
+
+      onSelectNode(node.id);
+    },
+    [consumeMobileNodeClickSuppression, onSelectNode],
+  );
+
+  const handleNodeDragStart: OnNodeDrag<Node<BranchNodeData>> = useCallback(
+    (_, node) => {
+      draggingNodeIdRef.current = node.id;
+      if (!isMobileViewport) return;
+
+      activeMobileNodeDragIdRef.current = node.id;
+      setMobileLongPressDragNodeId(node.id);
+    },
+    [isMobileViewport],
+  );
+
+  const handleNodeDragStop: OnNodeDrag<Node<BranchNodeData>> = useCallback(
+    (_, node) => {
+      draggingNodeIdRef.current = null;
+      if (isMobileViewport) {
+        resetMobileNodeLongPressState(true);
+      }
+
+      void onMoveNode(node.id, node.position);
+    },
+    [isMobileViewport, onMoveNode, resetMobileNodeLongPressState],
+  );
+
+  const handleViewportChange = useCallback(
+    (viewport: Viewport) => {
+      if (!isHomeInlineComposer) return;
+
+      if (homeViewportBaselineYRef.current === null) {
+        homeViewportBaselineYRef.current = viewport.y;
+      }
+      if (homeViewportBaselineXRef.current === null) {
+        homeViewportBaselineXRef.current = viewport.x;
+      }
+
+      const baselineX = homeViewportBaselineXRef.current;
+      const baselineY = homeViewportBaselineYRef.current;
+      const panBounds = getHomeCanvasPanBounds();
+      const rawOffsetY = viewport.y - baselineY;
+      const clampedOffsetY = clamp(rawOffsetY, -panBounds.up, panBounds.down);
+      const shouldCorrectViewport =
+        Math.abs(viewport.x - baselineX) > 0.5 ||
+        Math.abs(rawOffsetY - clampedOffsetY) > 0.5;
+
+      homeCanvasPanOffsetYRef.current = clampedOffsetY;
+      onHomeCanvasPanOffsetChange?.(clampedOffsetY);
+
+      if (reactFlowInstance && shouldCorrectViewport) {
+        void reactFlowInstance.setViewport(
+          {
+            ...viewport,
+            x: baselineX,
+            y: baselineY + clampedOffsetY,
+          },
+          { duration: 0 },
+        );
+      }
+    },
+    [
+      getHomeCanvasPanBounds,
+      isHomeInlineComposer,
+      onHomeCanvasPanOffsetChange,
+      reactFlowInstance,
+    ],
+  );
+
+  const handleHomeWheel = useCallback(
+    (event: WheelEvent) => {
+      if (!isHomeInlineComposer || !reactFlowInstance) return;
+
+      const target = event.target instanceof Element ? event.target : null;
+      const deltaY =
+        event.deltaY *
+        (event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? LINE_SCROLL_DELTA_MULTIPLIER
+          : 1);
+      const floatingScrollTarget =
+        target?.closest<HTMLElement>(".nowheel, [data-testid='chat-model-menu']") ??
+        document.querySelector<HTMLElement>("[data-testid='chat-model-menu']");
+      if (floatingScrollTarget) {
+        floatingScrollTarget.scrollTop += deltaY;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const viewport = reactFlowInstance.getViewport();
+      const baselineX = homeViewportBaselineXRef.current ?? viewport.x;
+      const baselineY = homeViewportBaselineYRef.current ?? viewport.y;
+      const panBounds = getHomeCanvasPanBounds();
+      const nextOffsetY = clamp(
+        viewport.y - baselineY - deltaY * HOME_CANVAS_WHEEL_PAN_SPEED,
+        -panBounds.up,
+        0,
+      );
+
+      homeViewportBaselineXRef.current = baselineX;
+      homeViewportBaselineYRef.current = baselineY;
+      homeCanvasPanOffsetYRef.current = nextOffsetY;
+      onHomeCanvasPanOffsetChange?.(nextOffsetY);
+      void reactFlowInstance.setViewport(
+        {
+          ...viewport,
+          x: baselineX,
+          y: baselineY + nextOffsetY,
+        },
+        { duration: 0 },
+      );
+    },
+    [
+      getHomeCanvasPanBounds,
+      isHomeInlineComposer,
+      onHomeCanvasPanOffsetChange,
+      reactFlowInstance,
+    ],
+  );
+
+  useEffect(() => {
+    if (!isHomeInlineComposer || !reactFlowInstance) return;
+
+    const wheelTarget = flowContainerRef.current?.parentElement;
+    if (!wheelTarget) return;
+
+    wheelTarget.addEventListener("wheel", handleHomeWheel, { passive: false });
+    window.addEventListener("wheel", handleHomeWheel, { passive: false });
+    return () => {
+      wheelTarget.removeEventListener("wheel", handleHomeWheel);
+      window.removeEventListener("wheel", handleHomeWheel);
+    };
+  }, [handleHomeWheel, isHomeInlineComposer, reactFlowInstance]);
+
+  useEffect(() => {
+    if (!isHomeInlineComposer || !reactFlowInstance) return undefined;
+
+    const gestureTarget = flowContainerRef.current;
+    if (!gestureTarget) return undefined;
+
+    const stopGesture = (event?: PointerEvent) => {
+      const gesture = homeCanvasGestureRef.current;
+      if (gesture?.captured && event?.pointerId === gesture.pointerId) {
+        try {
+          gestureTarget.releasePointerCapture?.(gesture.pointerId);
+        } catch {
+          // The browser can release capture before pointercancel reaches us.
+        }
+      }
+      homeCanvasGestureRef.current = null;
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!event.isPrimary || event.button !== 0) return;
+
+      const viewport = reactFlowInstance.getViewport();
+      const baselineX = homeViewportBaselineXRef.current ?? viewport.x;
+      const baselineY = homeViewportBaselineYRef.current ?? viewport.y;
+
+      homeViewportBaselineXRef.current = baselineX;
+      homeViewportBaselineYRef.current = baselineY;
+      homeCanvasGestureRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startOffsetY: clamp(
+          viewport.y - baselineY,
+          -getHomeCanvasPanBounds().up,
+          getHomeCanvasPanBounds().down,
+        ),
+        baselineX,
+        baselineY,
+        mode: "pending",
+        captured: false,
+      };
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const gesture = homeCanvasGestureRef.current;
+      if (!gesture || event.pointerId !== gesture.pointerId) return;
+
+      const deltaX = event.clientX - gesture.startX;
+      const deltaY = event.clientY - gesture.startY;
+
+      if (gesture.mode === "pending") {
+        const absX = Math.abs(deltaX);
+        const absY = Math.abs(deltaY);
+
+        if (
+          Math.max(absX, absY) < HOME_CANVAS_PAN_ACTIVATION_DISTANCE
+        ) {
+          return;
+        }
+
+        gesture.mode = absY >= absX ? "vertical" : "horizontal";
+        gestureTarget.setPointerCapture?.(event.pointerId);
+        gesture.captured = true;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (gesture.mode === "horizontal") {
+        void reactFlowInstance.setViewport(
+          {
+            ...reactFlowInstance.getViewport(),
+            x: gesture.baselineX,
+          },
+          { duration: 0 },
+        );
+        return;
+      }
+
+      const panBounds = getHomeCanvasPanBounds();
+      const nextOffsetY = clamp(
+        gesture.startOffsetY + deltaY,
+        -panBounds.up,
+        panBounds.down,
+      );
+
+      homeCanvasPanOffsetYRef.current = nextOffsetY;
+      onHomeCanvasPanOffsetChange?.(nextOffsetY);
+      void reactFlowInstance.setViewport(
+        {
+          ...reactFlowInstance.getViewport(),
+          x: gesture.baselineX,
+          y: gesture.baselineY + nextOffsetY,
+        },
+        { duration: 0 },
+      );
+    };
+
+    const handlePointerUp = (event: PointerEvent) => {
+      stopGesture(event);
+    };
+
+    gestureTarget.addEventListener("pointerdown", handlePointerDown);
+    gestureTarget.addEventListener("pointermove", handlePointerMove, {
+      passive: false,
+    });
+    gestureTarget.addEventListener("pointerup", handlePointerUp);
+    gestureTarget.addEventListener("pointercancel", handlePointerUp);
+
+    return () => {
+      gestureTarget.removeEventListener("pointerdown", handlePointerDown);
+      gestureTarget.removeEventListener("pointermove", handlePointerMove);
+      gestureTarget.removeEventListener("pointerup", handlePointerUp);
+      gestureTarget.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [
+    getHomeCanvasPanBounds,
+    isHomeInlineComposer,
+    onHomeCanvasPanOffsetChange,
+    reactFlowInstance,
+  ]);
 
   if (graphNodes.length === 0) {
     return (
@@ -114,15 +1063,19 @@ export function MindMap({
         aria-live="polite"
         aria-label="Mind map has no visible nodes"
         data-testid="mind-map-empty-state"
-        className="branchmind-grid grid h-full min-h-[360px] place-items-center rounded-[28px] text-sm font-black text-[#5c5065]"
+        className="branchmind-grid grid h-full min-h-[360px] place-items-center rounded-2xl lg:rounded-none"
       >
-        No visible nodes
+        <div className="flex flex-col items-center gap-2 text-center">
+          <EyeOff size={28} className="text-neutral-400" />
+          <span className="text-sm font-black text-neutral-600">No visible nodes</span>
+        </div>
       </div>
     );
   }
 
   return (
     <div
+      ref={flowContainerRef}
       id="mind-map"
       role="region"
       aria-label="Mind map"
@@ -135,15 +1088,33 @@ export function MindMap({
         nodes={nodes}
         edges={graphEdges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        nodesDraggable={!isMobileViewport}
+        onInit={setReactFlowInstance}
+        onNodeClick={handleNodeClick}
+        onViewportChange={handleViewportChange}
         onNodesChange={handleNodesChange}
-        onNodeDragStop={(_, node) => onMoveNode(node.id, node.position)}
+        onNodeDragStart={handleNodeDragStart}
+        onNodeDragStop={handleNodeDragStop}
         fitView
+        fitViewOptions={fitViewOptions}
         minZoom={0.25}
         maxZoom={1.7}
-        className="branchmind-grid h-full rounded-[28px]"
+        nodeDragThreshold={
+          isMobileViewport
+            ? MOBILE_NODE_DRAG_LOCKED_THRESHOLD
+            : MOBILE_NODE_DRAG_ACTIVE_THRESHOLD
+        }
+        zoomOnScroll={!isHomeInlineComposer}
+        panOnScroll={false}
+        panOnDrag={!isHomeInlineComposer}
+        className="branchmind-grid h-full rounded-[28px] lg:rounded-none"
       >
-        <Background color="#d9cceb" gap={28} size={1} />
-        <Controls className="!rounded-[18px] !border-white/80 !bg-white/80 !shadow-lg" />
+        <Controls
+          className={`!rounded-[18px] !border-white/80 !bg-white/80 !shadow-lg ${
+            isHomeInlineComposer ? "!hidden lg:!flex" : ""
+          }`}
+        />
       </ReactFlow>
     </div>
   );

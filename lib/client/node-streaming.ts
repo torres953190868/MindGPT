@@ -1,8 +1,20 @@
 "use client";
 
+import {
+  ApiRequestError,
+  formatApiErrorMessage,
+  getApiErrorMeta,
+} from "@/lib/client/api";
 import { getChildPosition } from "@/lib/graph";
 import { createId } from "@/lib/ids";
-import type { BranchType, ChatMessage, MindNode, Project } from "@/lib/types";
+import { resolveRegenerateTargets } from "@/lib/message-regeneration";
+import type {
+  BranchType,
+  ChatAttachment,
+  ChatMessage,
+  MindNode,
+  Project,
+} from "@/lib/types";
 
 export type NodeStreamingEvent =
   | { type: "delta"; contentDelta: string }
@@ -17,11 +29,16 @@ function now() {
   return new Date().toISOString();
 }
 
-function makeMessage(role: ChatMessage["role"], content: string): ChatMessage {
+function makeMessage(
+  role: ChatMessage["role"],
+  content: string,
+  attachments: ChatAttachment[] = [],
+): ChatMessage {
   return {
     id: createId("msg"),
     role,
     content,
+    attachments,
     createdAt: now(),
   };
 }
@@ -31,6 +48,7 @@ export function createDraftChildProject(
   parentId: string,
   mode: Exclude<BranchType, "root">,
   instruction: string,
+  attachments: ChatAttachment[] = [],
 ) {
   const parent = project.nodes[parentId];
   if (!parent) return null;
@@ -43,15 +61,14 @@ export function createDraftChildProject(
     projectId: project.id,
     parentId,
     title: mode === "branch" ? "Generating branch..." : "Generating continuation...",
+    titleManuallyEdited: false,
     summary: "Streaming DeepSeek response.",
-    messages: [makeMessage("user", instruction), assistantMessage],
+    messages: [makeMessage("user", instruction, attachments), assistantMessage],
     children: [],
     position: getChildPosition(
       parent,
       mode,
-      parent.children
-        .map((childId) => project.nodes[childId])
-        .filter((node): node is MindNode => Boolean(node)),
+      Object.values(project.nodes),
     ),
     branchType: mode,
     collapsed: false,
@@ -72,6 +89,92 @@ export function createDraftChildProject(
           updatedAt: timestamp,
         },
         [nodeId]: child,
+      },
+      updatedAt: timestamp,
+    },
+  };
+}
+
+export function createBlankChildProject(
+  project: Project,
+  parentId: string,
+  mode: Exclude<BranchType, "root">,
+) {
+  const parent = project.nodes[parentId];
+  if (!parent) return null;
+
+  const timestamp = now();
+  const nodeId = createId(`node_${mode}_blank`);
+  const child: MindNode = {
+    id: nodeId,
+    projectId: project.id,
+    parentId,
+    title: mode === "branch" ? "New branch" : "New continuation",
+    titleManuallyEdited: false,
+    summary: "Write the first message from the node detail panel.",
+    messages: [],
+    children: [],
+    position: getChildPosition(
+      parent,
+      mode,
+      Object.values(project.nodes),
+    ),
+    branchType: mode,
+    collapsed: false,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  return {
+    node: child,
+    project: {
+      ...project,
+      nodes: {
+        ...project.nodes,
+        [parentId]: {
+          ...parent,
+          children: [...parent.children, nodeId],
+          updatedAt: timestamp,
+        },
+        [nodeId]: child,
+      },
+      updatedAt: timestamp,
+    },
+  };
+}
+
+export function createPopulatingBlankNodeProject(
+  project: Project,
+  nodeId: string,
+  instruction: string,
+  attachments: ChatAttachment[] = [],
+) {
+  const node = project.nodes[nodeId];
+  const trimmed = instruction.trim();
+  if (!node || node.messages.length > 0 || !trimmed) return null;
+
+  const timestamp = now();
+  const assistantMessage = makeMessage("assistant", "");
+  const nextNode: MindNode = {
+    ...node,
+    title: node.titleManuallyEdited
+      ? node.title
+      : node.branchType === "branch"
+        ? "Generating branch..."
+        : "Generating continuation...",
+    summary: "Streaming DeepSeek response.",
+    messages: [makeMessage("user", trimmed, attachments), assistantMessage],
+    updatedAt: timestamp,
+  };
+
+  return {
+    assistantMessageId: assistantMessage.id,
+    node: nextNode,
+    project: {
+      ...project,
+      nodes: {
+        ...project.nodes,
+        [nodeId]: nextNode,
       },
       updatedAt: timestamp,
     },
@@ -105,6 +208,65 @@ export function appendDraftAssistantDelta(
   };
 }
 
+export function createRegeneratingNodeProject(
+  project: Project,
+  nodeId: string,
+  update: {
+    instruction?: string;
+    userMessageId?: string;
+    assistantMessageId?: string;
+  },
+) {
+  const node = project.nodes[nodeId];
+  if (!node) return null;
+
+  const instruction =
+    typeof update.instruction === "string" ? update.instruction.trim() : undefined;
+  if (typeof update.instruction === "string" && !instruction) return null;
+
+  const targets = resolveRegenerateTargets(node.messages, update);
+  if (!targets || !targets.isLatestAssistant) return null;
+
+  const timestamp = now();
+  const messages = node.messages.map((message, index) => {
+    if (instruction && index === targets.userMessageIndex) {
+      return { ...message, content: instruction };
+    }
+
+    if (index === targets.assistantMessageIndex) {
+      return { ...message, content: "" };
+    }
+
+    return message;
+  });
+
+  const nextNode = {
+    ...node,
+    messages,
+    updatedAt: timestamp,
+  };
+
+  return {
+    node: nextNode,
+    project: {
+      ...project,
+      title:
+        targets.isLatestAssistant &&
+        instruction &&
+        nodeId === project.rootNodeId &&
+        !node.titleManuallyEdited
+          ? instruction
+          : project.title,
+      nodes: {
+        ...project.nodes,
+        [nodeId]: nextNode,
+      },
+      updatedAt: timestamp,
+    },
+    assistantMessageId: targets.assistantMessage.id,
+  };
+}
+
 export function removeDraftChildNode(project: Project, nodeId: string) {
   const node = project.nodes[nodeId];
   if (!node?.parentId) return project;
@@ -129,23 +291,63 @@ export function removeDraftChildNode(project: Project, nodeId: string) {
   };
 }
 
-function getApiErrorMessage(data: unknown) {
-  const payload = data as { error?: string | { message?: string } } | null;
-  const error = payload?.error;
+export function removeNodeProject(project: Project, nodeId: string) {
+  const node = project.nodes[nodeId];
+  if (!node || node.parentId === null) return null;
 
-  if (typeof error === "string") return error;
-  if (error && typeof error === "object" && typeof error.message === "string") {
-    return error.message;
+  const idsToDelete = new Set<string>();
+  const nodesToVisit = [nodeId];
+
+  while (nodesToVisit.length > 0) {
+    const currentNodeId = nodesToVisit.pop();
+    if (!currentNodeId || idsToDelete.has(currentNodeId)) continue;
+
+    idsToDelete.add(currentNodeId);
+    project.nodes[currentNodeId]?.children.forEach((childId) => {
+      nodesToVisit.push(childId);
+    });
   }
 
-  return null;
+  const nodes = { ...project.nodes };
+  idsToDelete.forEach((id) => delete nodes[id]);
+
+  const parent = nodes[node.parentId];
+  if (parent) {
+    nodes[node.parentId] = {
+      ...parent,
+      children: parent.children.filter((childId) => childId !== nodeId),
+      updatedAt: now(),
+    };
+  }
+
+  return {
+    parentId: node.parentId,
+    project: {
+      ...project,
+      nodes,
+      updatedAt: now(),
+    },
+  };
+}
+
+function getErrorString(payload: Record<string, unknown>, key: string) {
+  const value = payload[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function getErrorStatus(payload: Record<string, unknown>) {
+  const status = Number(payload.status ?? 500);
+  return Number.isInteger(status) && status >= 400 && status <= 599 ? status : 500;
 }
 
 async function assertStreamingResponse(response: Response) {
   if (response.ok) return;
 
   const data = (await response.json().catch(() => null)) as unknown;
-  throw new Error(getApiErrorMessage(data) ?? "Request failed.");
+  throw new ApiRequestError(formatApiErrorMessage(data, response.status), {
+    ...getApiErrorMeta(data),
+    status: response.status,
+  });
 }
 
 function parseSseEvent(block: string): SseEvent | null {
@@ -182,8 +384,17 @@ function parseNodeStreamingEvent({ event, data }: SseEvent): NodeStreamingEvent 
   }
 
   if (event === "error") {
-    throw new Error(
-      typeof payload.message === "string" ? payload.message : "Request failed.",
+    const status = getErrorStatus(payload);
+    const code = getErrorString(payload, "code");
+    const requestId = getErrorString(payload, "requestId");
+    const message = formatApiErrorMessage({ error: payload }, status);
+    throw new ApiRequestError(
+      message,
+      {
+        code,
+        requestId,
+        status,
+      },
     );
   }
 

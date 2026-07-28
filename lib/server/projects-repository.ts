@@ -1,6 +1,13 @@
-import { getSupabaseAdminClient, hasSupabaseServerConfig, requireSupabaseServerConfig } from "@/lib/supabase/server";
-import type { Database } from "@/lib/supabase/database.types";
-import type { ChatMessage, MindNode, Project } from "@/lib/types";
+import { normalizeChatAttachments } from "@/lib/chat-attachments";
+import { normalizeChatCitations } from "@/lib/chat-citations";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  getSupabaseAdminClient,
+  hasSupabaseServerConfig,
+  requireSupabaseServerConfig,
+} from "@/lib/supabase/server";
+import type { Database, Json } from "@/lib/supabase/database.types";
+import type { ChatMessage, MindNode, NodePosition, Project } from "@/lib/types";
 import * as fileStore from "./projects-store";
 
 type ProjectRow = Database["public"]["Tables"]["branchmind_projects"]["Row"];
@@ -14,6 +21,20 @@ export type ProjectDto = Omit<Project, "ownerSessionId">;
 export type OwnedProject = Project & { ownerSessionId: string };
 export type ProjectsBackend = "file" | "supabase";
 
+type SupabaseProjectSchemaCapabilities = {
+  messageAttachments: boolean;
+  messageCitations: boolean;
+  nodeManualTitles: boolean;
+  projectNotes: boolean;
+};
+
+type SupabaseErrorLike = {
+  code?: string;
+  details?: string;
+  hint?: string;
+  message?: string;
+} | null;
+
 export type ProjectsRepository = {
   backend: ProjectsBackend;
   readProjects: () => Promise<OwnedProject[]>;
@@ -21,12 +42,120 @@ export type ProjectsRepository = {
   writeProjects: (projects: Project[]) => Promise<void>;
   updateProjects: (updater: (projects: OwnedProject[]) => Project[] | Promise<Project[]>) => Promise<OwnedProject[]>;
   saveProject: (project: Project) => Promise<void>;
+  updateNodePositionForOwner: (
+    ownerId: string,
+    projectId: string,
+    nodeId: string,
+    position: NodePosition,
+  ) => Promise<ProjectDto | null>;
   deleteProject: (projectId: string) => Promise<void>;
+  transferOwner: (fromOwnerId: string, toOwnerId: string) => Promise<number>;
 };
 
 function assertNoError(error: { message: string } | null, operation: string) {
   if (!error) return;
   throw new Error(`Supabase ${operation} failed: ${error.message}`);
+}
+
+function isMissingColumnError(error: SupabaseErrorLike) {
+  const text = [error?.message, error?.details, error?.hint]
+    .filter(Boolean)
+    .join(" ");
+  return Boolean(
+    text &&
+      (error?.code === "42703" ||
+        error?.code === "PGRST204" ||
+        /column .* does not exist|could not find .* column/i.test(text)),
+  );
+}
+
+function isMissingFunctionError(error: SupabaseErrorLike) {
+  const text = [error?.message, error?.details, error?.hint]
+    .filter(Boolean)
+    .join(" ");
+  return Boolean(
+    text &&
+      (error?.code === "42883" ||
+        error?.code === "PGRST202" ||
+        /function .* does not exist|could not find .* function/i.test(text)),
+  );
+}
+
+function getErrorText(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return "";
+}
+
+let schemaCapabilitiesPromise:
+  | Promise<SupabaseProjectSchemaCapabilities>
+  | undefined;
+
+async function getSchemaCapabilities(
+  client = getSupabaseAdminClient(),
+): Promise<SupabaseProjectSchemaCapabilities> {
+  schemaCapabilitiesPromise ??= Promise.all([
+    client
+      .from("branchmind_projects")
+      .select("id,notes")
+      .limit(1),
+    client
+      .from("branchmind_messages")
+      .select("id,attachments")
+      .limit(1),
+    client
+      .from("branchmind_messages")
+      .select("id,citations")
+      .limit(1),
+    client
+      .from("branchmind_nodes")
+      .select("id,title_manually_edited")
+      .limit(1),
+  ]).then(([projectsResult, messagesResult, citationsResult, nodesResult]) => ({
+    projectNotes: !isMissingColumnError(projectsResult.error),
+    messageAttachments: !isMissingColumnError(messagesResult.error),
+    messageCitations: !isMissingColumnError(citationsResult.error),
+    nodeManualTitles: !isMissingColumnError(nodesResult.error),
+  }));
+
+  return schemaCapabilitiesPromise;
+}
+
+function cacheSchemaCapabilities(capabilities: SupabaseProjectSchemaCapabilities) {
+  schemaCapabilitiesPromise = Promise.resolve(capabilities);
+}
+
+function getSchemaCapabilitiesAfterMissingColumnError(
+  capabilities: SupabaseProjectSchemaCapabilities,
+  error: unknown,
+) {
+  const text = getErrorText(error);
+  if (!isMissingColumnError({ message: text })) return null;
+
+  const nextCapabilities = { ...capabilities };
+  if (/branchmind_projects|notes/i.test(text)) {
+    nextCapabilities.projectNotes = false;
+  }
+  if (/branchmind_messages|attachments/i.test(text)) {
+    nextCapabilities.messageAttachments = false;
+  }
+  if (/branchmind_messages|citations/i.test(text)) {
+    nextCapabilities.messageCitations = false;
+  }
+  if (/branchmind_nodes|title_manually_edited/i.test(text)) {
+    nextCapabilities.nodeManualTitles = false;
+  }
+
+  if (
+    nextCapabilities.projectNotes === capabilities.projectNotes &&
+    nextCapabilities.messageAttachments === capabilities.messageAttachments &&
+    nextCapabilities.messageCitations === capabilities.messageCitations &&
+    nextCapabilities.nodeManualTitles === capabilities.nodeManualTitles
+  ) {
+    return null;
+  }
+
+  return nextCapabilities;
 }
 
 function requireProjectOwner(project: Project) {
@@ -63,7 +192,7 @@ export function getProjectsForSession(projects: Project[], sessionId: string) {
   return toProjectDtos(projects.filter((project) => projectBelongsToSession(project, sessionId)));
 }
 
-function projectToRows(project: Project) {
+export function projectToRows(project: Project) {
   const ownerSessionId = requireProjectOwner(project);
   const rootNode = project.nodes[project.rootNodeId];
 
@@ -75,6 +204,7 @@ function projectToRows(project: Project) {
     id: project.id,
     owner_session_id: ownerSessionId,
     title: project.title,
+    notes: project.notes,
     root_node_id: project.rootNodeId,
     created_at: project.createdAt,
     updated_at: project.updatedAt,
@@ -85,6 +215,7 @@ function projectToRows(project: Project) {
     project_id: project.id,
     parent_id: node.parentId,
     title: node.title,
+    title_manually_edited: node.titleManuallyEdited,
     summary: node.summary,
     position_x: node.position.x,
     position_y: node.position.y,
@@ -101,12 +232,45 @@ function projectToRows(project: Project) {
       node_id: node.id,
       role: message.role,
       content: message.content,
+      attachments: normalizeChatAttachments(message.attachments) as unknown as Json,
+      citations: normalizeChatCitations(message.citations) as unknown as Json,
       sort_order: index,
       created_at: message.createdAt,
     })),
   );
 
   return { projectRow, nodeRows, messageRows };
+}
+
+function projectRowsForSchemaCapabilities(
+  rows: ReturnType<typeof projectToRows>,
+  capabilities: SupabaseProjectSchemaCapabilities,
+) {
+  const supportedProjectRow = {
+    ...rows.projectRow,
+  } as ProjectInsert & Record<string, unknown>;
+  if (!capabilities.projectNotes) delete supportedProjectRow.notes;
+
+  const supportedNodeRows = rows.nodeRows.map((nodeRow) => {
+    const supportedNodeRow = { ...nodeRow } as NodeInsert & Record<string, unknown>;
+    if (!capabilities.nodeManualTitles) delete supportedNodeRow.title_manually_edited;
+    return supportedNodeRow as NodeInsert;
+  });
+
+  const supportedMessageRows = rows.messageRows.map((messageRow) => {
+    const supportedMessageRow = {
+      ...messageRow,
+    } as MessageInsert & Record<string, unknown>;
+    if (!capabilities.messageAttachments) delete supportedMessageRow.attachments;
+    if (!capabilities.messageCitations) delete supportedMessageRow.citations;
+    return supportedMessageRow as MessageInsert;
+  });
+
+  return {
+    projectRow: supportedProjectRow as ProjectInsert,
+    nodeRows: supportedNodeRows,
+    messageRows: supportedMessageRows,
+  };
 }
 
 function getPersistenceNodeOrder(project: Project) {
@@ -153,6 +317,12 @@ export function composeProjectsFromRows(
       id: messageRow.id,
       role: messageRow.role,
       content: messageRow.content,
+      attachments: normalizeChatAttachments((messageRow as Partial<MessageRow>).attachments, {
+        fallbackCreatedAt: messageRow.created_at,
+      }),
+      citations: normalizeChatCitations(
+        (messageRow as Partial<MessageRow> & { citations?: unknown }).citations,
+      ),
       createdAt: messageRow.created_at,
     });
     messagesByNode.set(messageRow.node_id, messages);
@@ -182,6 +352,10 @@ export function composeProjectsFromRows(
         projectId: nodeRow.project_id,
         parentId: nodeRow.parent_id,
         title: nodeRow.title,
+        titleManuallyEdited:
+          typeof (nodeRow as { title_manually_edited?: unknown }).title_manually_edited === "boolean"
+            ? nodeRow.title_manually_edited
+            : false,
         summary: nodeRow.summary,
         messages: messagesByNode.get(nodeRow.id) ?? [],
         children: [],
@@ -202,6 +376,7 @@ export function composeProjectsFromRows(
       id: projectRow.id,
       ownerSessionId: projectRow.owner_session_id,
       title: projectRow.title,
+      notes: projectRow.notes ?? "",
       rootNodeId: projectRow.root_node_id,
       nodes,
       createdAt: projectRow.created_at,
@@ -266,37 +441,204 @@ class SupabaseProjectsRepository implements ProjectsRepository {
 
   async saveProject(project: Project) {
     const client = getSupabaseAdminClient();
-    const { projectRow, nodeRows, messageRows } = projectToRows(project);
-    const upsertProject = await client.from("branchmind_projects").upsert(projectRow);
-    assertNoError(upsertProject.error, "upsert project");
+    const rows = projectToRows(project);
 
-    const deleteMessages = await client
-      .from("branchmind_messages")
-      .delete()
-      .eq("project_id", project.id);
-    assertNoError(deleteMessages.error, "delete project messages");
+    const rpcError = await this.saveProjectWithRpc(client, rows);
+    if (!rpcError) return;
 
-    const deleteNodes = await client
+    // Only fall back to per-table writes for recognizable schema mismatches
+    // (RPC not deployed yet, or a schema missing optional columns the RPC
+    // writes). Any other RPC failure is a real error and must surface.
+    if (!isMissingFunctionError(rpcError) && !isMissingColumnError(rpcError)) {
+      throw new Error(
+        `Supabase save project RPC failed: ${rpcError.message ?? "unknown error"}`,
+      );
+    }
+
+    console.warn(
+      "BranchMind Supabase save project RPC is unavailable; falling back to per-table writes.",
+      { projectId: project.id, message: rpcError.message },
+    );
+
+    await this.saveProjectPerTable(client, project, rows);
+  }
+
+  private async saveProjectWithRpc(
+    client: SupabaseClient<Database>,
+    rows: ReturnType<typeof projectToRows>,
+  ): Promise<SupabaseErrorLike> {
+    // database.types.ts is generated and does not include the
+    // branchmind_save_project RPC yet, so call it through a loosely typed
+    // signature instead of editing the generated file.
+    // Supabase's rpc method reads from `this.rest`, so retain the client as
+    // its receiver. Calling a detached `client.rpc` function makes `this`
+    // undefined and prevents newly generated nodes from being saved.
+    const rpc = client.rpc.bind(client) as unknown as (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => Promise<{ error: SupabaseErrorLike }>;
+    const { error } = await rpc("branchmind_save_project", {
+      project_row: rows.projectRow,
+      node_rows: rows.nodeRows,
+      message_rows: rows.messageRows,
+    });
+    return error;
+  }
+
+  private async saveProjectPerTable(
+    client: SupabaseClient<Database>,
+    project: Project,
+    rows: ReturnType<typeof projectToRows>,
+  ) {
+    const capabilities = await getSchemaCapabilities(client);
+    const existingProject = await client
+      .from("branchmind_projects")
+      .select("id")
+      .eq("id", project.id)
+      .limit(1);
+    assertNoError(existingProject.error, "read existing project");
+    const projectAlreadyExisted = (existingProject.data?.length ?? 0) > 0;
+
+    const persistRows = async (schemaCapabilities: SupabaseProjectSchemaCapabilities) => {
+      const {
+        projectRow: supportedProjectRow,
+        nodeRows: supportedNodeRows,
+        messageRows: supportedMessageRows,
+      } = projectRowsForSchemaCapabilities(rows, schemaCapabilities);
+
+      const upsertProject = await client
+        .from("branchmind_projects")
+        .upsert(supportedProjectRow);
+      assertNoError(upsertProject.error, "upsert project");
+
+      if (supportedNodeRows.length > 0) {
+        const upsertNodes = await client.from("branchmind_nodes").upsert(supportedNodeRows);
+        assertNoError(upsertNodes.error, "upsert project nodes");
+      }
+
+      if (supportedMessageRows.length > 0) {
+        const upsertMessages = await client
+          .from("branchmind_messages")
+          .upsert(supportedMessageRows);
+        assertNoError(upsertMessages.error, "upsert project messages");
+      }
+    };
+
+    const cleanupNewProject = async () => {
+      if (projectAlreadyExisted) return;
+
+      const cleanup = await client
+        .from("branchmind_projects")
+        .delete()
+        .eq("id", project.id);
+      if (cleanup.error) {
+        console.error("BranchMind Supabase project cleanup failed", {
+          projectId: project.id,
+          message: cleanup.error.message,
+        });
+      }
+    };
+
+    try {
+      await persistRows(capabilities);
+
+      await this.deleteStaleNodes(
+        client,
+        project.id,
+        rows.nodeRows.map((row) => row.id),
+      );
+    } catch (error) {
+      const retryCapabilities = getSchemaCapabilitiesAfterMissingColumnError(
+        capabilities,
+        error,
+      );
+
+      if (retryCapabilities) {
+        cacheSchemaCapabilities(retryCapabilities);
+        console.warn("BranchMind Supabase schema is missing an optional project column; retrying without it.", {
+          projectId: project.id,
+        });
+
+        try {
+          await persistRows(retryCapabilities);
+          await this.deleteStaleNodes(
+            client,
+            project.id,
+            rows.nodeRows.map((row) => row.id),
+          );
+          return;
+        } catch (retryError) {
+          await cleanupNewProject();
+          throw retryError;
+        }
+      }
+
+      await cleanupNewProject();
+      throw error;
+    }
+  }
+
+  async updateNodePositionForOwner(
+    ownerId: string,
+    projectId: string,
+    nodeId: string,
+    position: NodePosition,
+  ) {
+    const client = getSupabaseAdminClient();
+    const projectLookup = await client
+      .from("branchmind_projects")
+      .select("*")
+      .eq("id", projectId)
+      .eq("owner_session_id", ownerId)
+      .maybeSingle();
+    assertNoError(projectLookup.error, "read existing project");
+    if (!projectLookup.data) return null;
+
+    const timestamp = new Date().toISOString();
+    const nodeUpdate = await client
       .from("branchmind_nodes")
-      .delete()
-      .eq("project_id", project.id);
-    assertNoError(deleteNodes.error, "delete project nodes");
+      .update({
+        position_x: position.x,
+        position_y: position.y,
+        updated_at: timestamp,
+      })
+      .eq("project_id", projectId)
+      .eq("id", nodeId)
+      .select("id")
+      .maybeSingle();
+    assertNoError(nodeUpdate.error, "update node position");
+    if (!nodeUpdate.data) return null;
 
-    if (nodeRows.length > 0) {
-      const insertNodes = await client.from("branchmind_nodes").insert(nodeRows);
-      assertNoError(insertNodes.error, "insert project nodes");
-    }
+    const projectUpdate = await client
+      .from("branchmind_projects")
+      .update({ updated_at: timestamp })
+      .eq("id", projectId)
+      .eq("owner_session_id", ownerId)
+      .select("*")
+      .maybeSingle();
+    assertNoError(projectUpdate.error, "touch project after node position update");
 
-    if (messageRows.length > 0) {
-      const insertMessages = await client
-        .from("branchmind_messages")
-        .insert(messageRows);
-      assertNoError(insertMessages.error, "insert project messages");
-    }
+    const [project] = await this.compose([
+      projectUpdate.data ?? { ...projectLookup.data, updated_at: timestamp },
+    ]);
+    return project ? toProjectDto(project) : null;
   }
 
   async deleteProject(projectId: string) {
     await this.deleteProjects([projectId]);
+  }
+
+  async transferOwner(fromOwnerId: string, toOwnerId: string) {
+    if (fromOwnerId === toOwnerId) return 0;
+
+    const { data, error } = await getSupabaseAdminClient()
+      .from("branchmind_projects")
+      .update({ owner_session_id: toOwnerId })
+      .eq("owner_session_id", fromOwnerId)
+      .select("id");
+
+    assertNoError(error, "transfer project owner");
+    return data?.length ?? 0;
   }
 
   private async deleteProjects(projectIds: string[]) {
@@ -307,6 +649,32 @@ class SupabaseProjectsRepository implements ProjectsRepository {
       .delete()
       .in("id", projectIds);
     assertNoError(error, "delete projects");
+  }
+
+  private async deleteStaleNodes(
+    client: SupabaseClient<Database>,
+    projectId: string,
+    nextNodeIds: string[],
+  ) {
+    const { data: currentRows, error } = await client
+      .from("branchmind_nodes")
+      .select("id")
+      .eq("project_id", projectId);
+    assertNoError(error, "read project node ids");
+
+    const nextNodeIdSet = new Set(nextNodeIds);
+    const staleNodeIds = (currentRows ?? [])
+      .map((row) => row.id)
+      .filter((id) => !nextNodeIdSet.has(id));
+
+    if (staleNodeIds.length === 0) return;
+
+    const deleteNodes = await client
+      .from("branchmind_nodes")
+      .delete()
+      .eq("project_id", projectId)
+      .in("id", staleNodeIds);
+    assertNoError(deleteNodes.error, "delete stale project nodes");
   }
 
   private async compose(projectRows: ProjectRow[]) {
@@ -354,10 +722,52 @@ const fileRepository: ProjectsRepository = {
         : [project, ...projects];
     });
   },
+  updateNodePositionForOwner: async (ownerId, projectId, nodeId, position) => {
+    let updatedProject: Project | null = null;
+
+    await fileStore.updateProjects((projects) => {
+      const project = projects.find(
+        (item) => item.id === projectId && projectBelongsToSession(item, ownerId),
+      );
+      const node = project?.nodes[nodeId];
+      if (!project || !node) return projects;
+
+      const timestamp = new Date().toISOString();
+      updatedProject = {
+        ...project,
+        nodes: {
+          ...project.nodes,
+          [nodeId]: {
+            ...node,
+            position,
+            updatedAt: timestamp,
+          },
+        },
+        updatedAt: timestamp,
+      };
+
+      return projects.map((item) => (item.id === projectId ? updatedProject! : item));
+    });
+
+    return updatedProject ? toProjectDto(updatedProject) : null;
+  },
   deleteProject: async (projectId) => {
     await fileStore.updateProjects((projects) =>
       projects.filter((project) => project.id !== projectId),
     );
+  },
+  transferOwner: async (fromOwnerId, toOwnerId) => {
+    if (fromOwnerId === toOwnerId) return 0;
+
+    let transferredCount = 0;
+    await fileStore.updateProjects((projects) =>
+      projects.map((project) => {
+        if (project.ownerSessionId !== fromOwnerId) return project;
+        transferredCount += 1;
+        return { ...project, ownerSessionId: toOwnerId };
+      }),
+    );
+    return transferredCount;
   },
 };
 
@@ -396,4 +806,7 @@ export async function readProjectsForSession(sessionId: string) { return getProj
 export async function writeProjects(projects: Project[]) { return getProjectsRepository().writeProjects(projects); }
 export async function updateProjects(updater: (projects: OwnedProject[]) => Project[] | Promise<Project[]>) {
   return getProjectsRepository().updateProjects(updater);
+}
+export async function transferProjectsOwner(fromOwnerId: string, toOwnerId: string) {
+  return getProjectsRepository().transferOwner(fromOwnerId, toOwnerId);
 }

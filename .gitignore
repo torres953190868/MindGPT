@@ -1,4 +1,5 @@
 .next/
+.next-dev*/
 node_modules/
 out/
 dist/
@@ -6,6 +7,9 @@ dist/
 !.env.example
 data/branchmind-projects.json
 data/branchmind-projects.json.*.tmp
+data/branchmind-rag.json
+data/branchmind-rag.json.*.tmp
+data/rag-files/
 .playwright-mcp/
 reports/
 playwright-report/
@@ -16,3 +20,9 @@ yarn-error.log*
 pnpm-debug.log*
 *.log
 *.tsbuildinfo
+.vercel
+screenshots/
+.DS_Store
+
+# Vendored dev-only element inspector helper (torres953190868/element-inspector-helper)
+public/useElementInspector.js

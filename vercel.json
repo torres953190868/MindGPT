@@ -1,0 +1,15 @@
+{
+  "functions": {
+    "app/api/queues/rag-document-processing/route.ts": {
+      "maxDuration": 300,
+      "experimentalTriggers": [
+        {
+          "type": "queue/v2beta",
+          "topic": "rag-document-processing",
+          "retryAfterSeconds": 60,
+          "initialDelaySeconds": 0
+        }
+      ]
+    }
+  }
+}

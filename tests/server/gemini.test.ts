@@ -6,7 +6,7 @@ import {
 } from "@/lib/server/deepseek-streaming";
 
 beforeEach(() => {
-  vi.stubEnv("AI_PROVIDER", "opencode-go");
+  vi.stubEnv("AI_PROVIDER", "gemini");
   vi.stubEnv("AI_MOCK_MODE", "false");
   vi.stubEnv("DEEPSEEK_MOCK_MODE", "false");
   vi.stubEnv("MOCK_DEEPSEEK", "false");
@@ -49,7 +49,7 @@ async function collectStreamingEvents() {
   const events: DeepSeekStreamingEvent[] = [];
 
   for await (const event of streamDeepSeekReply({
-    instruction: "Explain streaming",
+    instruction: "Explain Gemini streaming",
   })) {
     events.push(event);
   }
@@ -57,10 +57,10 @@ async function collectStreamingEvents() {
   return events;
 }
 
-describe("OpenCode Go provider", () => {
-  it("routes requests through the Go chat completions endpoint", async () => {
-    vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
-    vi.stubEnv("OPENCODE_GO_MODEL", "kimi-k2.6");
+describe("Gemini provider", () => {
+  it("routes requests through Gemini's OpenAI-compatible chat completions endpoint", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "gemini-key");
+    vi.stubEnv("GEMINI_MODEL", "gemini-3.5-flash");
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -68,9 +68,9 @@ describe("OpenCode Go provider", () => {
             {
               message: {
                 content: JSON.stringify({
-                  title: "Go model",
-                  summary: "OpenCode Go summary",
-                  content: "OpenCode Go response content.",
+                  title: "Gemini model",
+                  summary: "Gemini summary",
+                  content: "Gemini response content.",
                 }),
               },
             },
@@ -81,49 +81,32 @@ describe("OpenCode Go provider", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const reply = await requestDeepSeekReply({ instruction: "Use Go" });
+    const reply = await requestDeepSeekReply({ instruction: "Use Gemini" });
 
-    expect(reply.title).toBe("Go model");
+    expect(reply.title).toBe("Gemini model");
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://opencode.ai/zen/go/v1/chat/completions",
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
       expect.objectContaining({
         headers: expect.objectContaining({
-          Authorization: "Bearer go-key",
+          Authorization: "Bearer gemini-key",
         }),
       }),
     );
     const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
     expect(requestBody).toMatchObject({
-      model: "kimi-k2.6",
+      model: "gemini-3.5-flash",
       response_format: { type: "json_object" },
       stream: false,
     });
-    expect(requestBody).not.toHaveProperty("thinking");
   });
 
-  it("rejects models outside the allowlist before calling upstream", async () => {
-    vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
-    vi.stubEnv("OPENCODE_GO_MODEL", "minimax-m2.7");
-    vi.stubEnv("OPENCODE_GO_ALLOWED_MODELS", "kimi-k2.6");
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-
-    await expect(
-      requestDeepSeekReply({ instruction: "Reject messages endpoint models" }),
-    ).rejects.toMatchObject({
-      code: "OPENCODE_GO_MODEL_NOT_ALLOWED",
-      status: 500,
-    });
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("streams through the Go provider configuration", async () => {
-    vi.stubEnv("OPENCODE_GO_API_KEY", "go-key");
-    vi.stubEnv("OPENCODE_GO_MODEL", "qwen3.5-plus");
+  it("streams through the Gemini provider configuration", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "gemini-key");
+    vi.stubEnv("GEMINI_MODEL", "gemini-3.5-flash");
     const rawReply = JSON.stringify({
-      title: "Go streaming",
-      summary: "Go streaming summary",
-      content: "OpenCode Go streaming content.",
+      title: "Gemini streaming",
+      summary: "Gemini streaming summary",
+      content: "Gemini streaming content.",
     });
     const fetchMock = vi.fn().mockResolvedValue(
       createSseResponse([createSseChunk(rawReply), "data: [DONE]\n\n"]),
@@ -136,18 +119,18 @@ describe("OpenCode Go provider", () => {
         event.type === "complete",
     );
 
-    expect(complete?.reply.content).toBe("OpenCode Go streaming content.");
+    expect(complete?.reply.content).toBe("Gemini streaming content.");
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://opencode.ai/zen/go/v1/chat/completions",
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
       expect.objectContaining({
         headers: expect.objectContaining({
-          Authorization: "Bearer go-key",
+          Authorization: "Bearer gemini-key",
         }),
       }),
     );
     const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
     expect(requestBody).toMatchObject({
-      model: "qwen3.5-plus",
+      model: "gemini-3.5-flash",
       stream: true,
     });
   });

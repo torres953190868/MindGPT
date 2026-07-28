@@ -1,4 +1,6 @@
 import { createId } from "@/lib/ids";
+import { normalizeChatAttachments } from "@/lib/chat-attachments";
+import { normalizeChatCitations } from "@/lib/chat-citations";
 import type {
   BranchType,
   ChatMessage,
@@ -111,6 +113,11 @@ function normalizeMessages(
       id: createUniqueId("msg", usedIds),
       role: message.role as ChatMessage["role"],
       content: message.content,
+      attachments: normalizeChatAttachments(message.attachments, {
+        createId: () => createUniqueId("attachment", usedIds),
+        fallbackCreatedAt: timestamp,
+      }),
+      citations: normalizeChatCitations(message.citations),
       createdAt: isoString(message.createdAt, timestamp),
     };
   });
@@ -194,6 +201,10 @@ export function remapProjectForImport(
       projectId,
       parentId,
       title: cleanString(sourceNode.title, "Imported node"),
+      titleManuallyEdited:
+        typeof (sourceNode as { titleManuallyEdited?: unknown }).titleManuallyEdited === "boolean"
+          ? sourceNode.titleManuallyEdited
+          : false,
       summary: typeof sourceNode.summary === "string" ? sourceNode.summary : "",
       messages: normalizeMessages(sourceNode.messages, timestamp, usedIds),
       children: [],
@@ -226,6 +237,7 @@ export function remapProjectForImport(
     id: projectId,
     ...(options.ownerSessionId ? { ownerSessionId: options.ownerSessionId } : {}),
     title: cleanString(project.title, "Imported project"),
+    notes: typeof (project as { notes?: unknown }).notes === "string" ? project.notes : "",
     rootNodeId,
     nodes,
     createdAt: timestamp,

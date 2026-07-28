@@ -5,6 +5,7 @@ import {
   createSupabaseCookieClient,
   hasSupabaseServerConfig,
 } from "@/lib/supabase/server";
+import { getSupabaseUserPublicEmail } from "@/lib/server/auth-password";
 
 export type BranchMindPrincipal = {
   id: string;
@@ -17,12 +18,24 @@ export type BranchMindAuthContext = {
   session: BranchMindSession;
 };
 
+type SupabaseUserEmailState = {
+  email?: string | null;
+  email_confirmed_at?: string | null;
+  confirmed_at?: string | null;
+};
+
+export function isSupabaseUserEmailConfirmed(user: SupabaseUserEmailState) {
+  if (!user.email) return true;
+  return Boolean(user.email_confirmed_at ?? user.confirmed_at);
+}
+
 export async function getOptionalSupabaseUser() {
   if (!hasSupabaseServerConfig()) return null;
 
   const supabase = await createSupabaseCookieClient();
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) return null;
+  if (!isSupabaseUserEmailConfirmed(data.user)) return null;
 
   return data.user;
 }
@@ -33,7 +46,7 @@ export async function getBranchMindAuthContext(
   if (hasSupabaseServerConfig()) {
     const user = await getOptionalSupabaseUser();
     if (!user) {
-      throw new HttpError("Sign in is required.", {
+      throw new HttpError("You need to sign in to do that.", {
         code: "AUTH_REQUIRED",
         expose: true,
         status: 401,
@@ -43,7 +56,7 @@ export async function getBranchMindAuthContext(
     return {
       principal: {
         id: user.id,
-        email: user.email ?? null,
+        email: getSupabaseUserPublicEmail(user),
         authMode: "supabase",
       },
       session: { id: user.id, isNew: false },

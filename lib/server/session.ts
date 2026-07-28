@@ -33,6 +33,11 @@ export function getOrCreateSession(request: NextRequest): BranchMindSession {
   return { id: createSessionId(), isNew: true };
 }
 
+export function getExistingSessionId(request: NextRequest) {
+  const cookieValue = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  return cookieValue && SESSION_ID_PATTERN.test(cookieValue) ? cookieValue : null;
+}
+
 export function commitSessionCookie(
   response: NextResponse,
   session: BranchMindSession,

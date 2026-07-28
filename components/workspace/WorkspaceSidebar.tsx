@@ -1,169 +1,396 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, GitBranch, PanelLeftClose, PanelLeftOpen, Search, Sprout } from "lucide-react";
-import { useMemo, useState } from "react";
+import {
+  Brain,
+  ChevronDown,
+  ChevronRight,
+  Folder,
+  GitBranch,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+  Sprout,
+} from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  getHighlightedActionClass,
+  useHighlightedAction,
+} from "@/components/ui/highlighted-action";
+import { useLanguage } from "@/components/language/LanguageProvider";
 import type { MindNode, Project } from "@/lib/types";
 
 type WorkspaceSidebarProps = {
+  footer?: ReactNode;
   project: Project;
   selectedNodeId: string | null;
-  isCollapsed: boolean;
   onSelectNode: (nodeId: string) => void;
   onCollapse: () => void;
-  onExpand: () => void;
 };
 
+type OutlineRow = {
+  node: MindNode;
+  depth: number;
+};
+
+type SidebarNavItem = "outline" | "projects";
+
+function getSidebarNavButtonClass(highlighted: boolean) {
+  return `workspace-sidebar-nav-link inline-flex h-11 items-center justify-center gap-2 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 ${
+    getHighlightedActionClass(highlighted, "bg-neutral-100 text-neutral-700")
+  }`;
+}
+
+function matchesQuery(node: MindNode, normalized: string) {
+  return (
+    node.title.toLowerCase().includes(normalized) ||
+    node.summary.toLowerCase().includes(normalized)
+  );
+}
+
+function getDefaultExpandedNodeIds(project: Project) {
+  const expanded = new Set<string>();
+  const root = project.nodes[project.rootNodeId];
+  if (!root) return expanded;
+
+  if (root.children.length > 0) expanded.add(root.id);
+  root.children.forEach((childId) => {
+    const child = project.nodes[childId];
+    if (child && child.children.length > 0) expanded.add(child.id);
+  });
+
+  return expanded;
+}
+
+function getAncestorIds(project: Project, nodeId: string | null) {
+  const ids: string[] = [];
+  let current = nodeId ? project.nodes[nodeId] : null;
+
+  while (current?.parentId) {
+    ids.unshift(current.parentId);
+    current = project.nodes[current.parentId] ?? null;
+  }
+
+  return ids;
+}
+
+function getSearchExpandedNodeIds(project: Project, normalized: string) {
+  const expanded = new Set<string>();
+
+  Object.values(project.nodes).forEach((node) => {
+    if (!matchesQuery(node, normalized)) return;
+    getAncestorIds(project, node.id).forEach((ancestorId) => expanded.add(ancestorId));
+  });
+
+  return expanded;
+}
+
+function getVisibleOutlineRows(
+  project: Project,
+  expandedNodeIds: Set<string>,
+  normalized: string,
+) {
+  const rows: OutlineRow[] = [];
+  const matchingNodeIds = normalized
+    ? new Set(
+        Object.values(project.nodes)
+          .filter((node) => matchesQuery(node, normalized))
+          .map((node) => node.id),
+      )
+    : null;
+  const includedNodeIds = new Set<string>();
+
+  if (matchingNodeIds?.size === 0) return rows;
+
+  if (matchingNodeIds) {
+    matchingNodeIds.forEach((nodeId) => {
+      includedNodeIds.add(nodeId);
+      getAncestorIds(project, nodeId).forEach((ancestorId) => includedNodeIds.add(ancestorId));
+    });
+  }
+
+  function visit(nodeId: string, depth: number) {
+    const node = project.nodes[nodeId];
+    if (!node) return;
+    if (includedNodeIds.size > 0 && !includedNodeIds.has(nodeId)) return;
+
+    rows.push({ node, depth });
+
+    if (!expandedNodeIds.has(nodeId)) return;
+
+    node.children.forEach((childId) => visit(childId, depth + 1));
+  }
+
+  visit(project.rootNodeId, 0);
+  return rows;
+}
+
 export function WorkspaceSidebar({
+  footer,
   project,
   selectedNodeId,
-  isCollapsed,
   onSelectNode,
   onCollapse,
-  onExpand,
 }: WorkspaceSidebarProps) {
+  const { copy } = useLanguage();
   const [query, setQuery] = useState("");
+  const navHighlight = useHighlightedAction<SidebarNavItem>({
+    defaultAction: "outline",
+  });
+  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(() =>
+    getDefaultExpandedNodeIds(project),
+  );
+  const previousProjectId = useRef(project.id);
+  const previousSelectedNodeId = useRef(selectedNodeId);
   const normalized = query.trim().toLowerCase();
-  const nodes = useMemo(() => Object.values(project.nodes), [project.nodes]);
-  const visibleNodes = normalized
-    ? nodes.filter(
-        (node) =>
-          node.title.toLowerCase().includes(normalized) ||
-          node.summary.toLowerCase().includes(normalized),
-      )
-    : nodes;
+  const effectiveExpandedNodeIds = useMemo(() => {
+    if (!normalized) return expandedNodeIds;
+    return new Set([...expandedNodeIds, ...getSearchExpandedNodeIds(project, normalized)]);
+  }, [expandedNodeIds, normalized, project]);
+  const outlineRows = useMemo(
+    () => getVisibleOutlineRows(project, effectiveExpandedNodeIds, normalized),
+    [effectiveExpandedNodeIds, normalized, project],
+  );
+  const hasMatches = outlineRows.length > 0;
+  const isOutlineNavHighlighted = navHighlight.isHighlighted("outline");
+  const isProjectsNavHighlighted = navHighlight.isHighlighted("projects");
 
-  if (isCollapsed) {
-    return (
-      <aside
-        aria-label="Workspace sidebar"
-        data-testid="workspace-sidebar"
-        className="flex min-h-[76px] w-full items-center justify-center rounded-[28px] border border-white/80 bg-white/72 p-3 shadow-lg shadow-[#e4d6ef]/40 lg:min-h-0"
-      >
-        <button
-          type="button"
-          onClick={onExpand}
-          aria-label="Expand workspace sidebar"
-          aria-expanded="false"
-          data-testid="expand-workspace-sidebar-button"
-          className="grid h-11 w-11 place-items-center rounded-full bg-[#f1e8fb] text-[#6c538d] transition hover:bg-[#e4d5f6] focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
-        >
-          <PanelLeftOpen size={18} />
-        </button>
-      </aside>
-    );
+  useEffect(() => {
+    if (previousProjectId.current === project.id) return;
+    previousProjectId.current = project.id;
+    setExpandedNodeIds(getDefaultExpandedNodeIds(project));
+  }, [project]);
+
+  useEffect(() => {
+    if (previousSelectedNodeId.current === selectedNodeId) return;
+    previousSelectedNodeId.current = selectedNodeId;
+    if (!selectedNodeId) return;
+
+    const ancestorIds = getAncestorIds(project, selectedNodeId);
+    if (ancestorIds.length === 0) return;
+
+    setExpandedNodeIds((current) => {
+      const next = new Set(current);
+      let changed = false;
+      ancestorIds.forEach((ancestorId) => {
+        if (next.has(ancestorId)) return;
+        next.add(ancestorId);
+        changed = true;
+      });
+      if (!changed) return current;
+      return next;
+    });
+  }, [project, selectedNodeId]);
+
+  function toggleOutlineNode(nodeId: string) {
+    setExpandedNodeIds((current) => {
+      const next = new Set(current);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
   }
 
   return (
     <aside
-      aria-label="Workspace sidebar"
+      aria-label={copy.workspace.sidebar}
       data-testid="workspace-sidebar"
-      className="flex min-h-[220px] w-full flex-col gap-5 rounded-[28px] border border-white/80 bg-white/72 p-4 shadow-lg shadow-[#e4d6ef]/40 lg:min-h-0 lg:w-[292px]"
+      className="workspace-sidebar-panel flex min-h-[220px] w-full flex-col gap-4 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm lg:min-h-0 lg:rounded-none lg:border-0 lg:shadow-none"
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex shrink-0 items-center gap-2">
-          <Link
-            href="/projects"
-            className="grid h-10 w-10 place-items-center rounded-full bg-[#f1e8fb] text-[#6c538d] transition hover:bg-[#e4d5f6] focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
-            aria-label="Project list"
-            data-testid="project-list-link"
-          >
-            <ArrowLeft size={18} />
-          </Link>
-          <button
-            type="button"
-            onClick={onCollapse}
-            aria-label="Collapse workspace sidebar"
-            aria-controls="conversation-outline"
-            aria-expanded="true"
-            data-testid="collapse-workspace-sidebar-button"
-            className="grid h-10 w-10 place-items-center rounded-full bg-white/75 text-[#6c538d] transition hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#eadcf7]"
-          >
-            <PanelLeftClose size={18} />
-          </button>
-        </div>
-        <div className="min-w-0 text-right">
-          <p className="truncate text-sm font-black text-[#382d41]">{project.title}</p>
-          <p className="text-xs font-bold text-[#665a70]">{nodes.length} nodes</p>
-        </div>
+      <div className="flex min-h-10 items-center justify-between gap-3">
+        <Link
+          href="/"
+          aria-label={copy.projects.branchMindHome}
+          className="workspace-brand-link flex min-w-0 items-center gap-2 rounded-md py-1 pr-2 text-neutral-900 transition hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
+        >
+          <span className="branchmind-logo-mark grid h-8 w-8 shrink-0 place-items-center rounded-md border border-brand-200 bg-brand-50 text-brand-600">
+            <Brain size={18} />
+          </span>
+          <span className="branchmind-logo-text truncate text-base font-extrabold">BranchMind</span>
+        </Link>
+        <button
+          type="button"
+          onClick={onCollapse}
+          aria-label={copy.workspace.collapseSidebar}
+          aria-controls="conversation-outline"
+          aria-expanded="true"
+          data-testid="collapse-workspace-sidebar-button"
+          className="workspace-sidebar-icon-button grid h-10 w-10 shrink-0 place-items-center rounded-full bg-neutral-100 text-neutral-600 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
+        >
+          <PanelLeftClose size={18} />
+        </button>
       </div>
 
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8f8299]" size={17} />
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500" size={16} />
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          aria-label="Search project nodes"
+          aria-label={copy.workspace.searchProjectNodes}
           data-testid="node-search-input"
-          placeholder="Search nodes"
-          className="h-11 w-full rounded-[18px] border border-white bg-white/82 pl-10 pr-3 text-sm outline-none focus:border-[#b696d4] focus:ring-4 focus:ring-[#eadcf7]"
+          placeholder={copy.workspace.searchNodes}
+          className="workspace-sidebar-search h-11 w-full rounded-xl border border-neutral-200 bg-white pl-10 pr-14 text-sm font-bold text-neutral-900 outline-none placeholder:text-neutral-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-200"
         />
+        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full bg-neutral-100 px-2 py-1 text-[11px] font-black text-neutral-500">
+          ⌘K
+        </span>
       </div>
 
       <nav
+        aria-label={copy.workspace.views}
+        onMouseLeave={navHighlight.clearHighlightedAction}
+        className="grid grid-cols-2 gap-2 text-sm font-black"
+      >
+        <button
+          type="button"
+          aria-current="page"
+          data-highlighted={navHighlight.getDataHighlighted("outline")}
+          {...navHighlight.getHoverHandlers("outline")}
+          className={getSidebarNavButtonClass(isOutlineNavHighlighted)}
+        >
+          <PanelLeftOpen size={16} />
+          {copy.workspace.outline}
+        </button>
+        <Link
+          href="/projects"
+          data-testid="workspace-sidebar-projects-link"
+          data-highlighted={navHighlight.getDataHighlighted("projects")}
+          {...navHighlight.getHoverHandlers("projects")}
+          className={getSidebarNavButtonClass(isProjectsNavHighlighted)}
+        >
+          <Folder size={16} />
+          {copy.common.projects}
+        </Link>
+      </nav>
+
+      <nav
         id="conversation-outline"
-        aria-label="Conversation outline"
+        aria-label={copy.workspace.conversationOutline}
         data-testid="conversation-outline"
         className="min-h-[96px] flex-1 space-y-2 overflow-auto pr-1 lg:min-h-0"
       >
-        {visibleNodes.length === 0 ? (
-          <p
+        {!hasMatches ? (
+          <div
             role="status"
             data-testid="conversation-outline-empty-state"
-            className="rounded-[18px] bg-white/65 p-3 text-sm font-bold text-[#665a70]"
+            className="flex flex-col items-center rounded-lg bg-neutral-50 p-4 text-center"
           >
-            No matching nodes
-          </p>
+            <Search size={20} className="text-neutral-300" />
+            <p className="mt-2 text-sm font-bold text-neutral-600">{copy.workspace.noMatchingNodes}</p>
+          </div>
         ) : (
-          visibleNodes.map((node) => (
+          outlineRows.map(({ node, depth }) => (
             <OutlineItem
               key={node.id}
               node={node}
+              depth={depth}
+              expanded={effectiveExpandedNodeIds.has(node.id)}
               selected={selectedNodeId === node.id}
               onSelectNode={onSelectNode}
+              onToggleNode={toggleOutlineNode}
+              labels={{
+                childCount: copy.workspace.childCount,
+                collapseChildrenFor: copy.workspace.collapseChildrenFor,
+                expandChildrenFor: copy.workspace.expandChildrenFor,
+                openNode: copy.workspace.openNode,
+              }}
             />
           ))
         )}
       </nav>
+      {footer && (
+        <div
+          data-testid="workspace-sidebar-footer"
+          className="mt-auto border-t border-neutral-200 pt-3"
+        >
+          {footer}
+        </div>
+      )}
     </aside>
   );
 }
 
 function OutlineItem({
   node,
+  depth,
+  expanded,
   selected,
   onSelectNode,
+  onToggleNode,
+  labels,
 }: {
   node: MindNode;
+  depth: number;
+  expanded: boolean;
   selected: boolean;
   onSelectNode: (nodeId: string) => void;
+  onToggleNode: (nodeId: string) => void;
+  labels: {
+    childCount: (count: number) => string;
+    collapseChildrenFor: (title: string) => string;
+    expandChildrenFor: (title: string) => string;
+    openNode: (title: string) => string;
+  };
 }) {
   const Icon = node.branchType === "branch" ? GitBranch : Sprout;
+  const hasChildren = node.children.length > 0;
 
   return (
-    <button
-      type="button"
-      onClick={() => onSelectNode(node.id)}
-      aria-label={`Open conversation node ${node.title}`}
-      aria-current={selected ? "true" : undefined}
-      data-testid="conversation-outline-item"
+    <div
+      data-testid="conversation-outline-row"
       data-node-id={node.id}
-      className={`flex w-full items-start gap-3 rounded-[18px] p-3 text-left transition ${
-        selected ? "bg-[#eadcf7] text-[#49315f]" : "bg-white/65 text-[#655a6d] hover:bg-white"
+      data-depth={depth}
+      className={`workspace-outline-row relative flex w-full items-start gap-1 rounded-xl px-1.5 py-1 text-left transition ${
+        selected ? "bg-brand-50 text-brand-800" : "bg-white/65 text-neutral-700 hover:bg-white"
       }`}
+      style={{ paddingLeft: `${Math.min(depth, 4) * 6 + 6}px` }}
     >
-      <span
-        aria-hidden="true"
-        className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/80"
+      {selected && (
+        <span className="workspace-outline-active-bar absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-500" />
+      )}
+      {hasChildren ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleNode(node.id);
+          }}
+          aria-label={expanded ? labels.collapseChildrenFor(node.title) : labels.expandChildrenFor(node.title)}
+          aria-expanded={expanded}
+          data-testid="conversation-outline-toggle"
+          data-node-id={node.id}
+          className="workspace-outline-toggle mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/75 text-brand-600 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-200 lg:mt-1"
+        >
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </button>
+      ) : (
+        <span aria-hidden="true" className="h-7 w-7 shrink-0 lg:mt-1" />
+      )}
+      <button
+        type="button"
+        onClick={() => onSelectNode(node.id)}
+        aria-label={labels.openNode(node.title)}
+        aria-current={selected ? "true" : undefined}
+        data-testid="conversation-outline-item"
+        data-node-id={node.id}
+        className="flex min-h-11 min-w-0 flex-1 items-start gap-2 rounded-xl p-0.5 text-left outline-none transition focus:ring-2 focus:ring-brand-200 lg:min-h-0"
       >
-        <Icon size={15} />
-      </span>
-      <span className="min-w-0">
-        <span className="line-clamp-2 text-sm font-black">{node.title}</span>
-        <span className="mt-1 block text-xs font-semibold opacity-75">
-          {node.children.length} children
+        <span
+          aria-hidden="true"
+          className={`workspace-outline-icon grid h-7 w-7 shrink-0 place-items-center rounded-full ${selected ? "bg-brand-100 text-brand-700" : "bg-white/80 text-neutral-500"}`}
+        >
+          <Icon size={14} />
         </span>
-      </span>
-    </button>
+        <span className="min-w-0">
+          <span className="line-clamp-2 text-sm font-black leading-5">{node.title}</span>
+          <span className="mt-0.5 block text-xs font-semibold leading-4 opacity-75">
+            {labels.childCount(node.children.length)}
+          </span>
+        </span>
+      </button>
+    </div>
   );
 }

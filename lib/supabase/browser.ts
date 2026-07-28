@@ -13,9 +13,16 @@ function clean(value: string | undefined) {
   return trimmed ? trimmed : undefined;
 }
 
+function getSupabasePublicKey() {
+  return (
+    clean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) ??
+    clean(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)
+  );
+}
+
 export function getSupabaseBrowserConfig(): SupabaseBrowserConfig | null {
   const url = clean(process.env.NEXT_PUBLIC_SUPABASE_URL);
-  const anonKey = clean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  const anonKey = getSupabasePublicKey();
 
   if (!url || !anonKey) return null;
   return { url, anonKey };
@@ -26,7 +33,7 @@ export function createSupabaseBrowserClient() {
 
   if (!config) {
     throw new Error(
-      "Supabase browser configuration is missing. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
+      "Supabase browser configuration is missing. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.",
     );
   }
 

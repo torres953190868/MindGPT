@@ -1,24 +1,31 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { ArrowLeft, FileText, FolderKanban } from "lucide-react";
+import { ArrowLeft, FileText, FolderKanban, ScrollText } from "lucide-react";
+import { ResponsiveHeader } from "@/components/ResponsiveHeader";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | BranchMind",
+  title: "Privacy Policy",
   description: "BranchMind beta privacy policy.",
+  alternates: { canonical: "/privacy" },
 };
+
+const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim();
+
+const privacyContactParagraph = supportEmail
+  ? `Questions or deletion requests should be directed to ${supportEmail}.`
+  : "Questions or deletion requests should be directed to the BranchMind operator or project maintainer for the current deployment.";
 
 const privacySections = [
   {
     title: "What BranchMind Collects",
     body: [
       "During the beta, BranchMind stores the project titles, prompts, AI responses, node summaries, node positions, timestamps, and related workspace data needed to run the branching conversation experience.",
-      "BranchMind may also process basic technical data that your browser and the app send with requests, such as request timing and error context. The beta does not intentionally collect payment details or special category personal data.",
+      "BranchMind may also process basic technical data that your browser and the app send with requests, such as request timing and error context. The beta does not intentionally collect payment details or special categories of personal data.",
     ],
   },
   {
     title: "AI Provider Processing",
     body: [
-      "When you create or continue a project, your prompt, selected source text, and recent conversation context may be sent to the configured AI provider. This beta is configured to use DeepSeek through its chat completions API.",
+      "When you create or continue a project, your prompt, selected source text, and recent conversation context may be sent to the configured AI provider. Requests are routed to the configured AI provider(s) through their chat completions APIs.",
       "AI outputs can be inaccurate or incomplete. Do not include secrets, credentials, regulated records, or information you are not allowed to submit to third-party AI services.",
     ],
   },
@@ -30,17 +37,26 @@ const privacySections = [
     ],
   },
   {
-    title: "Data Export And Deletion",
+    title: "Data Export and Deletion",
     body: [
       "The beta includes per-project JSON export so you can keep a local copy of your project data.",
       "Project deletion removes the selected project from the BranchMind project store. Deletion is intended to be permanent for the beta workspace, although operational backups or logs, if any, may take additional time to expire.",
     ],
   },
   {
+    title: "Cookies",
+    body: [
+      "BranchMind uses a small set of first-party cookies to keep the workspace working. No third-party tracking cookies are set.",
+      "branchmind_session keeps you signed in and links the app to your account or local workspace session. It is HttpOnly and expires after 1 year.",
+      "branchmind-language remembers your interface language preference. It expires after 1 year.",
+      "branchmind-theme remembers your interface theme preference. It expires after 1 year.",
+    ],
+  },
+  {
     title: "Beta Notice",
     body: [
       "This page is a practical beta-stage privacy notice for product testing and store review. It is not legal advice and should be reviewed by qualified counsel before production launch in regulated or commercial environments.",
-      "Questions or deletion requests should be directed to the BranchMind operator or project maintainer for the current deployment.",
+      privacyContactParagraph,
     ],
   },
 ];
@@ -48,61 +64,55 @@ const privacySections = [
 export default function PrivacyPage() {
   return (
     <main
-      className="min-h-screen px-5 py-6"
+      className="min-h-[100svh] px-3 py-4 sm:px-5 sm:py-6"
       aria-labelledby="privacy-title"
       data-testid="privacy-page"
     >
-      <div className="mx-auto flex max-w-4xl flex-col gap-8">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <Link
-            href="/"
-            aria-label="Back to BranchMind home"
-            data-testid="privacy-home-link"
-            className="inline-flex items-center gap-2 rounded-[18px] bg-white/75 px-4 py-3 font-bold text-[#554665] shadow-sm transition hover:bg-white"
-          >
-            <ArrowLeft size={18} />
-            Home
-          </Link>
-          <nav
-            aria-label="Compliance navigation"
-            data-testid="privacy-compliance-navigation"
-            className="flex flex-wrap items-center gap-3 text-sm font-extrabold"
-          >
-            <Link
-              href="/projects"
-              data-testid="privacy-projects-link"
-              className="inline-flex items-center gap-2 rounded-[18px] bg-white/75 px-4 py-3 text-[#554665] shadow-sm transition hover:bg-white"
-            >
-              <FolderKanban size={17} />
-              Projects
-            </Link>
-            <Link
-              href="/terms"
-              data-testid="privacy-terms-link"
-              className="rounded-[18px] bg-white/75 px-4 py-3 text-[#554665] shadow-sm transition hover:bg-white"
-            >
-              Terms
-            </Link>
-          </nav>
-        </header>
+      <div className="mx-auto flex max-w-4xl flex-col gap-5 sm:gap-8">
+        <ResponsiveHeader
+          title="Privacy Policy"
+          icon={<FileText size={22} />}
+          navLabel="Compliance navigation"
+          navTestId="privacy-compliance-navigation"
+          links={[
+            {
+              href: "/",
+              label: "Home",
+              icon: <ArrowLeft size={18} />,
+              testId: "privacy-home-link",
+            },
+            {
+              href: "/projects",
+              label: "Projects",
+              icon: <FolderKanban size={17} />,
+              testId: "privacy-projects-link",
+            },
+            {
+              href: "/terms",
+              label: "Terms",
+              icon: <ScrollText size={17} />,
+              testId: "privacy-terms-link",
+            },
+          ]}
+        />
 
         <section
           aria-labelledby="privacy-title"
           data-testid="privacy-policy-content"
-          className="rounded-[28px] border border-white/80 bg-white/72 p-6 shadow-lg shadow-[#e8dcef]/35 md:p-8"
+          className="rounded-lg border border-white/80 bg-white/78 p-4 shadow-lg shadow-[#e8dcef]/30 sm:p-6 md:p-8"
         >
-          <div className="mb-8 flex items-start gap-4">
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-[18px] bg-[#e5f6ee] text-[#3d7558] shadow-sm">
+          <div className="mb-6 flex items-start gap-3 sm:mb-8 sm:gap-4">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#e5f6ee] text-[#3d7558] shadow-sm sm:h-12 sm:w-12">
               <FileText size={23} />
             </div>
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               <p className="text-sm font-extrabold uppercase tracking-[0.08em] text-[#6a5d74]">
                 Beta notice
               </p>
-              <h1 id="privacy-title" className="text-4xl font-black text-[#312737]">
+              <h1 id="privacy-title" className="text-3xl font-black text-[#312737] sm:text-4xl">
                 Privacy Policy
               </h1>
-              <p className="text-sm font-bold text-[#7c7184]">Last updated: May 2, 2026</p>
+              <p className="text-sm font-bold text-[#7c7184]">Last updated: July 17, 2026</p>
             </div>
           </div>
 

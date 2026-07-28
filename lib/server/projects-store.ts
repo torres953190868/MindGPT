@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "fs/promises";
 import path from "path";
-import type { Project } from "@/lib/types";
+import type { MindNode, Project } from "@/lib/types";
 
 type BranchMindDataFile = {
   version: 1;
@@ -15,6 +15,32 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
 
+function normalizeNode(node: MindNode): MindNode {
+  return {
+    ...node,
+    titleManuallyEdited:
+      typeof (node as { titleManuallyEdited?: unknown }).titleManuallyEdited === "boolean"
+        ? node.titleManuallyEdited
+        : false,
+  };
+}
+
+function normalizeProject(project: Project): Project {
+  return {
+    ...project,
+    notes:
+      typeof (project as { notes?: unknown }).notes === "string"
+        ? (project as { notes: string }).notes
+        : "",
+    nodes: Object.fromEntries(
+      Object.entries(project.nodes ?? {}).map(([nodeId, node]) => [
+        nodeId,
+        normalizeNode(node),
+      ]),
+    ),
+  };
+}
+
 function normalizeDataFile(value: unknown): BranchMindDataFile {
   if (
     value &&
@@ -24,7 +50,7 @@ function normalizeDataFile(value: unknown): BranchMindDataFile {
   ) {
     return {
       version: 1,
-      projects: (value as { projects: Project[] }).projects,
+      projects: (value as { projects: Project[] }).projects.map(normalizeProject),
     };
   }
 

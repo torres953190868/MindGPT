@@ -27,7 +27,7 @@ describe("requestDeepSeekReply", () => {
     await expect(
       requestDeepSeekReply({ instruction: "Explain trees" }),
     ).rejects.toMatchObject({
-      name: "DeepSeekError",
+      name: "AIProviderError",
       status: 500,
     });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -104,6 +104,273 @@ describe("requestDeepSeekReply", () => {
       stream: false,
     });
     expect(requestBody.messages[1].content).toContain("Selected source text: selected source");
+  });
+
+  it("includes retrieved PDF context in node reply prompts", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  title: "PDF answer",
+                  summary: "Uses PDF context.",
+                  content: "The attached PDF discusses retrieval cues [[cite:1]].",
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const reply = await requestDeepSeekReply({
+      instruction: "Summarize the attached PDF.",
+      documentContexts: [
+        {
+          documentId: "doc_memory",
+          fileName: "memory.pdf",
+          title: "Memory Systems",
+          snippets: [
+            {
+              chunkId: "chunk_memory",
+              pageStart: 3,
+              pageEnd: 3,
+              headingPath: ["Chapter 1", "Retrieval"],
+              content: "Retrieval cues help long term memory recall.",
+            },
+          ],
+        },
+      ],
+    });
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(requestBody.messages[0].content).toContain(
+      "When retrieved PDF context is provided",
+    );
+    expect(requestBody.messages[0].content).toContain("[[cite:N]]");
+    expect(requestBody.messages[1].content).toContain("Retrieved PDF context:");
+    expect(requestBody.messages[1].content).toContain("PDF: memory.pdf (Memory Systems)");
+    expect(requestBody.messages[1].content).toContain(
+      "[source 1; cite as [[cite:1]]] p. 3 | Chapter 1 > Retrieval | chunk chunk_memory",
+    );
+    expect(requestBody.messages[1].content).toContain(
+      "Retrieval cues help long term memory recall.",
+    );
+    expect(reply.citations).toEqual([
+      expect.objectContaining({
+        index: 1,
+        documentId: "doc_memory",
+        documentName: "Memory Systems",
+        chunkId: "chunk_memory",
+        pageStart: 3,
+        pageEnd: 3,
+      }),
+    ]);
+  });
+
+  it("accepts single-bracket PDF citation markers from model replies", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  title: "PDF answer",
+                  summary: "Uses PDF context.",
+                  content: "The attached PDF discusses retrieval cues [cite:1].",
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const reply = await requestDeepSeekReply({
+      instruction: "Summarize the attached PDF.",
+      documentContexts: [
+        {
+          documentId: "doc_memory",
+          fileName: "memory.pdf",
+          title: "Memory Systems",
+          snippets: [
+            {
+              chunkId: "chunk_memory",
+              pageStart: 3,
+              pageEnd: 3,
+              headingPath: ["Chapter 1", "Retrieval"],
+              content: "Retrieval cues help long term memory recall.",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(reply.citations).toEqual([
+      expect.objectContaining({
+        index: 1,
+        documentId: "doc_memory",
+        documentName: "Memory Systems",
+        chunkId: "chunk_memory",
+      }),
+    ]);
+  });
+
+  it("includes an active skill as a separate user message before the instruction", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  title: "Skill title",
+                  summary: "Skill summary.",
+                  content: "Skill content.",
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestDeepSeekReply({
+      instruction: "Explain trees",
+      skill: {
+        id: "skill_trees",
+        name: "Tree Tutor",
+        description: "Teaches like a patient tutor",
+        instructions: "Use analogies from nature.",
+        version: "v1",
+      },
+    });
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(requestBody.messages).toHaveLength(3);
+    expect(requestBody.messages[0].role).toBe("system");
+    expect(requestBody.messages[1].role).toBe("user");
+    expect(requestBody.messages[1].content).toContain("Active skill customization:");
+    expect(requestBody.messages[1].content).toContain("Tree Tutor");
+    expect(requestBody.messages[1].content).toContain("Teaches like a patient tutor");
+    expect(requestBody.messages[1].content).toContain("Use analogies from nature.");
+    expect(requestBody.messages[2].role).toBe("user");
+    expect(requestBody.messages[2].content).toContain("User instruction: Explain trees");
+  });
+
+  it("does not add a skill block when no skill is active", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  title: "No skill",
+                  summary: "No skill summary.",
+                  content: "No skill content.",
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestDeepSeekReply({ instruction: "Explain trees" });
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(requestBody.messages).toHaveLength(2);
+    expect(requestBody.messages[0].role).toBe("system");
+    expect(requestBody.messages[1].role).toBe("user");
+    expect(requestBody.messages[1].content).not.toContain("Active skill customization");
+  });
+
+  it("uses a per-request provider and model selection", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "gemini-key");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  title: "Selected model",
+                  summary: "Selected model summary",
+                  content: "Selected model response.",
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const reply = await requestDeepSeekReply({
+      instruction: "Use the selected model",
+      modelSelection: {
+        providerId: "gemini",
+        model: "gemini-3.5-flash",
+      },
+    });
+
+    expect(reply.title).toBe("Selected model");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer gemini-key",
+        }),
+      }),
+    );
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(requestBody.model).toBe("gemini-3.5-flash");
+  });
+
+  it("rejects disallowed per-request model selections as client errors", async () => {
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "deepseek-chat");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      requestDeepSeekReply({
+        instruction: "Use a blocked model",
+        modelSelection: {
+          providerId: "deepseek",
+          model: "not-allowed",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "DEEPSEEK_MODEL_NOT_ALLOWED",
+      message: "Selected AI model is not allowed.",
+      status: 400,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("retries retryable upstream API failures once", async () => {
@@ -275,14 +542,84 @@ describe("streamDeepSeekReply", () => {
     vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
-        createSseResponse([createSseChunk('{"title":'), "data: [DONE]\n\n"]),
+      vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          createSseResponse([createSseChunk('{"title":'), "data: [DONE]\n\n"]),
+        ),
       ),
     );
 
     await expect(collectStreamingEvents()).rejects.toMatchObject({
       code: "DEEPSEEK_INVALID_STREAMING_JSON",
       status: 502,
+    });
+  });
+
+  it("retries retryable upstream streaming failures before emitting deltas", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+    const rawReply = JSON.stringify({
+      title: "Retried stream",
+      summary: "The retry succeeded.",
+      content: "Recovered after an upstream failure.",
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { message: "try again" } }), {
+          status: 502,
+        }),
+      )
+      .mockResolvedValueOnce(
+        createSseResponse([createSseChunk(rawReply), "data: [DONE]\n\n"]),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const events = await collectStreamingEvents();
+    const complete = events.find(
+      (event): event is Extract<DeepSeekStreamingEvent, { type: "complete" }> =>
+        event.type === "complete",
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(complete?.reply).toMatchObject({
+      title: "Retried stream",
+      content: "Recovered after an upstream failure.",
+    });
+  });
+
+  it("falls back to visible streamed content when final JSON is truncated", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        createSseResponse([
+          createSseChunk('{"title":"Recovered","summary":"Recovered","content":"Recovered body'),
+          "data: [DONE]\n\n",
+        ]),
+      ),
+    );
+
+    const events = await collectStreamingEvents();
+    const streamedContent = events
+      .filter((event): event is Extract<DeepSeekStreamingEvent, { type: "delta" }> =>
+        event.type === "delta",
+      )
+      .map((event) => event.contentDelta)
+      .join("");
+    const complete = events.find(
+      (event): event is Extract<DeepSeekStreamingEvent, { type: "complete" }> =>
+        event.type === "complete",
+    );
+
+    expect(streamedContent).toBe("Recovered body");
+    expect(complete?.reply).toMatchObject({
+      title: "AI: Explain streaming",
+      summary: "Recovered body",
+      content: "Recovered body",
     });
   });
 

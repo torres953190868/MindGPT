@@ -27,6 +27,24 @@ describe("API error helpers", () => {
 
   it("does not leak upstream error details to clients", () => {
     expect(getSafeErrorMessage(429)).toBe("Too many requests.");
+    expect(
+      getSafeErrorMessage(429, {
+        code: "GEMINI_EMBEDDING_FAILED",
+        expose: true,
+        message: "Resource exhausted. Please try again later.",
+      }),
+    ).toBe(
+      "Embedding provider quota or rate limit was reached. Please retry in a bit.",
+    );
+    expect(
+      getSafeErrorMessage(429, {
+        code: "LLM_REQUEST_FAILED",
+        expose: true,
+        message: "Resource exhausted. Please try again later.",
+      }),
+    ).toBe(
+      "AI provider quota or rate limit was reached. Please retry in a bit.",
+    );
     expect(getSafeErrorMessage(500)).toBe("Request failed.");
     expect(getSafeErrorMessage(400)).toBe("Request failed.");
   });

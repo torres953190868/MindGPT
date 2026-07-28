@@ -28,6 +28,27 @@ export type RateLimitResult = {
 
 const buckets = new Map<string, RateLimitEntry>();
 let supabaseClient: SupabaseClient | null | undefined;
+let hasWarnedAboutMapFallback = false;
+
+function getFallbackErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+
+  const message = (error as { message?: unknown } | null)?.message;
+  return typeof message === "string" ? message : undefined;
+}
+
+function warnAboutMapFallback(reason: string, error?: unknown) {
+  if (hasWarnedAboutMapFallback) return;
+  hasWarnedAboutMapFallback = true;
+
+  console.warn(
+    "BranchMind rate limiting fell back to in-memory storage; limits are per-instance only.",
+    {
+      reason,
+      error: getFallbackErrorMessage(error),
+    },
+  );
+}
 
 function getClientFingerprint(request: NextRequest) {
   const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
@@ -82,7 +103,8 @@ function getSupabaseClient() {
   const key =
     process.env.SUPABASE_SERVICE_ROLE_KEY ??
     process.env.SUPABASE_ANON_KEY ??
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
   supabaseClient = url && key
     ? createClient(url, key, {
@@ -136,7 +158,10 @@ async function checkSupabaseRateLimit(
   options: RateLimitOptions,
 ): Promise<RateLimitResult | null> {
   const client = getSupabaseClient();
-  if (!client) return null;
+  if (!client) {
+    warnAboutMapFallback("supabase-client-unavailable");
+    return null;
+  }
 
   const table = getRateLimitTableName();
   const hashedKey = await hashRateLimitKey(key);
@@ -149,7 +174,10 @@ async function checkSupabaseRateLimit(
     .eq("key", hashedKey)
     .maybeSingle();
 
-  if (error) return null;
+  if (error) {
+    warnAboutMapFallback("supabase-read-failed", error);
+    return null;
+  }
 
   const row = normalizeSupabaseRow(data);
   const resetAt = row ? getRowResetAt(row) : null;
@@ -169,7 +197,10 @@ async function checkSupabaseRateLimit(
       { onConflict: "key" },
     );
 
-    if (upsertError) return null;
+    if (upsertError) {
+      warnAboutMapFallback("supabase-write-failed", upsertError);
+      return null;
+    }
     return { allowed: true, retryAfterSeconds: 0, storage: "supabase" };
   }
 
@@ -187,7 +218,10 @@ async function checkSupabaseRateLimit(
     .update({ count: count + 1, updated_at: updatedAt })
     .eq("key", hashedKey);
 
-  if (updateError) return null;
+  if (updateError) {
+    warnAboutMapFallback("supabase-write-failed", updateError);
+    return null;
+  }
   return { allowed: true, retryAfterSeconds: 0, storage: "supabase" };
 }
 
