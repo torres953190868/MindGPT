@@ -160,7 +160,7 @@ Copy `.env.example` to `.env.local` and fill in the providers you intend to use.
 ### Frontend
 
 - `store/useBranchMindStore.ts` is the client workspace coordinator. It holds hydrated project state, selection, pending sync, optimistic node drafts, streaming status, and UI errors.
-- `app/page.tsx` renders a draft workspace before a real project exists.
+- `app/page.tsx` renders a draft workspace before a real project exists (noindex) and forwards `?code` params to `/auth/callback` for Supabase OAuth. `app/new/page.tsx` redirects to `/`. `app/help/page.tsx` is the bilingual (zh/en) help & support page (feature overview, FAQ, contact) with JSON-LD structured data.
 - `app/workspace/[projectId]/page.tsx` is the main workspace.
 - Components live under `components/workspace/` and include the React Flow canvas (`MindMap.tsx`), node cards (`BranchNodeCard.tsx`), detail panel (`NodeDetailPanel.tsx`), sidebar (`WorkspaceSidebar.tsx`), and notes editor (`ProjectNotesPanel.tsx`, `ProjectNotesEditor.tsx`).
 - `components/rag/PdfReader.tsx` is the PDF reader + RAG query UI at `/reader`.

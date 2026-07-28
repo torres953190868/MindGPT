@@ -5,6 +5,7 @@ import { ResponsiveHeader } from "@/components/ResponsiveHeader";
 export const metadata: Metadata = {
   title: "Terms of Use",
   description: "BranchMind beta terms of use.",
+  alternates: { canonical: "/terms" },
 };
 
 const termsSections = [

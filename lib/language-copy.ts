@@ -242,6 +242,82 @@ const zhCopy = {
       "让灵感发散，让理解收束。",
     ],
   },
+  help: {
+    ctaSignIn: "登录账号",
+    ctaTitle: "准备好把下一个复杂主题学成地图了吗？",
+    ctaWorkspace: "进入工作区",
+    contactBugNote: "发现问题？也可以通过账号菜单中的“报告问题”入口直接提交。",
+    contactEmailLabel: "support@branchmind.app",
+    contactTitle: "联系支持",
+    eyebrow: "可视化知识工作区",
+    faq: [
+      {
+        question: "BranchMind 和普通 AI 聊天有什么区别？",
+        answer:
+          "普通聊天是一条直线，BranchMind 是一张地图。你可以向下延续主线，也可以随时向右开分支探索子话题——每个节点拥有独立的对话上下文，分支之间互不干扰。",
+      },
+      {
+        question: "BranchMind 适合什么场景？",
+        answer:
+          "深度学习与研究：拆解论文论点、规划学习路线、比较不同观点、整理学习笔记——任何需要把复杂知识拆开再收束的场景。",
+      },
+      {
+        question: "可以免费使用吗？",
+        answer:
+          "可以。免费方案包含 5 个项目、100 个节点、3 份 PDF 文档和每日 50 条 AI 消息，无需绑定账单。",
+      },
+      {
+        question: "支持上传 PDF 吗？",
+        answer:
+          "支持。上传可选中文本的 PDF 并建立索引后，就能提出带页码引用的有据问题，还可以把 PDF 附加到对话中作为知识上下文。",
+      },
+      {
+        question: "需要注册账号才能开始吗？",
+        answer:
+          "不需要。打开工作区就能在本地创建第一个项目；登录账号后可以跨设备同步，并解锁更高的使用额度。",
+      },
+    ],
+    faqTitle: "常见问题",
+    features: [
+      {
+        title: "向右分支",
+        body: "遇到疑点随时向右开一个分支节点，深入子话题而不打断主线思路。",
+      },
+      {
+        title: "向下继续",
+        body: "沿着主线层层递进，把复杂主题按自己的节奏学透。",
+      },
+      {
+        title: "节点级独立上下文",
+        body: "每个节点只携带自己的对话上下文，分支之间互不干扰，追问更聚焦。",
+      },
+      {
+        title: "PDF 阅读 + 页码引用",
+        body: "上传可选中文本的 PDF，建立索引后提出带页码引用的有据问题。",
+      },
+    ],
+    featuresTitle: "为深度学习而设计",
+    footerPrivacy: "隐私政策",
+    footerTerms: "使用条款",
+    heroLead:
+      "BranchMind 是一张会生长的知识地图：沿着主线向下深挖，随时向右开分支探索子话题，每个节点都有独立的对话上下文，还能上传 PDF 提出带页码引用的问题。",
+    heroTitle: "把复杂知识学成一张知识地图",
+    steps: [
+      {
+        title: "提出研究问题",
+        body: "从一个复杂主题开始，BranchMind 会把理解路径拆成可以探索的分支。",
+      },
+      {
+        title: "分支探索",
+        body: "对任何回答继续追问，或向右开分支，把每个疑点展开成独立的子话题。",
+      },
+      {
+        title: "沉淀知识地图",
+        body: "节点在画布上连成分支地图，随时可以回顾、导出，或继续生长。",
+      },
+    ],
+    stepsTitle: "三步开始",
+  },
   language: {
     description: "选择 BranchMind 的界面语言。登录后会同步到你的账号。",
     englishDescription: "Use English across the core BranchMind interface.",
@@ -755,6 +831,82 @@ export const LANGUAGE_COPY = {
         "Every follow-up question opens a new branch.",
         "Let ideas branch out, then let understanding converge.",
       ],
+    },
+    help: {
+      ctaSignIn: "Sign in",
+      ctaTitle: "Ready to turn your next complex topic into a map?",
+      ctaWorkspace: "Open the workspace",
+      contactBugNote: "Found a bug? You can also submit it from the account menu's report-a-bug entry.",
+      contactEmailLabel: "support@branchmind.app",
+      contactTitle: "Contact support",
+      eyebrow: "Visual knowledge workspace",
+      faq: [
+        {
+          question: "How is BranchMind different from a regular AI chat?",
+          answer:
+            "Regular chat is a straight line; BranchMind is a map. Continue down the main thread or branch right into subtopics — every node keeps its own isolated conversation context.",
+        },
+        {
+          question: "What is BranchMind best for?",
+          answer:
+            "Deep study and research: breaking down papers, planning study paths, comparing viewpoints, and organizing study notes — anywhere complex knowledge needs to be unpacked and reconnected.",
+        },
+        {
+          question: "Is BranchMind free?",
+          answer:
+            "Yes. The free plan includes 5 projects, 100 nodes, 3 PDF documents, and 50 AI messages per day — no billing required.",
+        },
+        {
+          question: "Can I upload PDFs?",
+          answer:
+            "Yes. Upload a selectable-text PDF, index it, ask grounded questions with page citations, and attach it to conversations as knowledge context.",
+        },
+        {
+          question: "Do I need an account to start?",
+          answer:
+            "No. Open the workspace to create your first project locally; sign in to sync across devices and unlock higher limits.",
+        },
+      ],
+      faqTitle: "Frequently asked questions",
+      features: [
+        {
+          title: "Branch Right",
+          body: "Open a branch node for any open question and deep-dive subtopics without losing the main thread.",
+        },
+        {
+          title: "Continue Down",
+          body: "Extend the main line and work through a complex topic layer by layer, at your own pace.",
+        },
+        {
+          title: "Isolated node context",
+          body: "Each node carries only its own conversation context, so branches never bleed into each other.",
+        },
+        {
+          title: "PDF reader + RAG citations",
+          body: "Upload selectable-text PDFs, index them, and ask grounded questions with page citations.",
+        },
+      ],
+      featuresTitle: "Designed for deep study",
+      footerPrivacy: "Privacy Policy",
+      footerTerms: "Terms of Use",
+      heroLead:
+        "BranchMind is a living knowledge map: continue down the main thread, branch right into subtopics with isolated per-node context, and ask cited questions over your PDFs.",
+      heroTitle: "Turn complex topics into a knowledge map",
+      steps: [
+        {
+          title: "Ask a research question",
+          body: "Start with a complex topic and BranchMind splits the path of understanding into explorable branches.",
+        },
+        {
+          title: "Branch to explore",
+          body: "Follow up on any answer or branch right to unfold each open question into its own subtopic.",
+        },
+        {
+          title: "Grow the knowledge map",
+          body: "Nodes connect into a branching map you can revisit, export, and keep growing.",
+        },
+      ],
+      stepsTitle: "How it works",
     },
     language: {
       description: "Choose the BranchMind interface language. Signed-in accounts sync this preference.",

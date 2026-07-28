@@ -515,14 +515,14 @@ export function ProjectCardList() {
             <Settings size={16} />
             {copy.common.settings}
           </button>
-          <button
-            type="button"
-            disabled
-            className="inline-flex min-h-10 shrink-0 cursor-not-allowed items-center gap-2 rounded-md px-3 text-neutral-600 opacity-60"
+          <Link
+            href="/help"
+            data-testid="help-feedback-link"
+            className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
           >
             <HelpCircle size={16} />
             {copy.projects.helpFeedback}
-          </button>
+          </Link>
           <Link
             href="/reader"
             className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"

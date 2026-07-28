@@ -714,7 +714,7 @@ async function mockHomeModelCatalog(page: Page) {
 
 test("home opens directly into a draft workspace", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto("/");
+  await page.goto("/new");
 
   await expect(page.getByTestId("workspace-shell")).toBeVisible();
   await expect(page.getByTestId("workspace-header")).toHaveCount(0);
@@ -858,7 +858,7 @@ test("home shows the canvas-first mobile launcher with collapsed side panels", a
     { width: 375, height: 667 },
   ]) {
     await page.setViewportSize(viewport);
-    await page.goto("/");
+    await page.goto("/new");
 
     await expect(page.getByTestId("workspace-shell")).toBeVisible();
     await expect(page.getByTestId("mobile-home-shell")).toHaveCount(0);
@@ -937,7 +937,7 @@ test("mobile home composer gestures only pan vertically while controls stay inte
   await mockAuthSession(page, { configured: true, user: null });
   await mockHomeModelCatalog(page);
   await page.setViewportSize({ width: 390, height: 780 });
-  await page.goto("/");
+  await page.goto("/new");
 
   const mindMapCanvas = page.getByTestId("mind-map-canvas");
   const composer = page.getByTestId("message-composer");
@@ -1051,7 +1051,7 @@ test("mobile home launcher starts a workspace from the compact composer", async 
   });
 
   await page.setViewportSize({ width: 390, height: 780 });
-  await page.goto("/");
+  await page.goto("/new");
   await expect(page.getByTestId("workspace-shell")).toBeVisible();
   await page.getByTestId("message-instruction-input").fill(instruction);
   await page.getByTestId("send-message-button").click();
@@ -1130,7 +1130,7 @@ test("mobile home launcher prompts anonymous users to sign in before starting", 
   });
 
   await page.setViewportSize({ width: 390, height: 780 });
-  await page.goto("/");
+  await page.goto("/new");
   await page.getByTestId("message-instruction-input").fill(instruction);
   await page.getByTestId("send-message-button").click();
 
@@ -1217,7 +1217,7 @@ test("home launcher can create an account from the auth prompt and continue", as
     });
   });
 
-  await page.goto("/");
+  await page.goto("/new");
   await page.getByTestId("message-instruction-input").fill(instruction);
   await page.getByTestId("send-message-button").click();
   await expect(page.getByTestId("auth-required-dialog")).toBeVisible();
@@ -1241,7 +1241,7 @@ test("home draft workspace sidebars resize and snap like workspace", async ({
   test.skip(testInfo.project.name !== "chromium", "Desktop draft resizing is covered once.");
 
   await page.setViewportSize({ width: 1600, height: 900 });
-  await page.goto("/");
+  await page.goto("/new");
 
   const mindMapCanvas = page.getByTestId("mind-map-canvas");
   const workspaceSidebar = page.getByTestId("workspace-sidebar");
@@ -1336,7 +1336,7 @@ test("home model menu scrolls without panning the canvas", async ({
     });
   });
 
-  await page.goto("/");
+  await page.goto("/new");
   const mindMapCanvas = page.getByTestId("mind-map-canvas");
   const menu = page.getByTestId("chat-model-menu");
 
@@ -1383,7 +1383,7 @@ test("home launcher restores a stored model after hydration", async ({
     );
   });
 
-  await page.goto("/");
+  await page.goto("/new");
   await expect(page.getByTestId("chat-model-selector-button")).toContainText("Kimi K2.6");
   expect(consoleErrors.join("\n")).not.toContain("Hydration failed");
 });
@@ -1420,7 +1420,7 @@ test("model catalog stays cached when reopening the workspace", async ({ page },
     });
   });
 
-  await page.goto("/");
+  await page.goto("/new");
   await expect.poll(() => catalogRequests).toBeGreaterThan(0);
   const initialCatalogRequests = catalogRequests;
   await page.getByTestId("chat-model-selector-button").click();
@@ -1488,7 +1488,7 @@ test("home launcher sends the selected model without model-named loading copy", 
     });
   });
 
-  await page.goto("/");
+  await page.goto("/new");
   await expect.poll(() => projectPostRequests).toBe(0);
   await expect.poll(() => syncPayload).toBeNull();
   await page.getByTestId("chat-model-selector-button").click();
@@ -1546,7 +1546,7 @@ test("home launcher keeps a failed local project sync across reload", async ({
     });
   });
 
-  await page.goto("/");
+  await page.goto("/new");
   await page.getByTestId("message-instruction-input").fill(instruction);
   await page.getByTestId("send-message-button").click();
 
@@ -1583,7 +1583,7 @@ test("home launcher opens the workspace while the initial root answer streams", 
   let projectIdToDelete: string | null = null;
 
   try {
-    await page.goto("/");
+    await page.goto("/new");
     await page.getByTestId("message-instruction-input").fill(instruction);
     await page.getByTestId("send-message-button").click();
 
@@ -1713,7 +1713,7 @@ test("home launcher uploads queued PDF attachments before creating a project onc
     });
   });
 
-  await page.goto("/");
+  await page.goto("/new");
   const fileChooserPromise = page.waitForEvent("filechooser");
   await page.getByTestId("add-message-attachment-button").click();
   await page.getByTestId("upload-new-file-button").click();
@@ -1876,7 +1876,7 @@ test("home launcher delays anonymous PDF upload until auth prompt succeeds", asy
     });
   });
 
-  await page.goto("/");
+  await page.goto("/new");
   const fileChooserPromise = page.waitForEvent("filechooser");
   await page.getByTestId("add-message-attachment-button").click();
   await page.getByTestId("upload-new-file-button").click();
@@ -1995,7 +1995,7 @@ test("home launcher selects an indexed knowledge PDF without re-uploading", asyn
     });
   });
 
-  await page.goto("/");
+  await page.goto("/new");
   await page.getByTestId("add-message-attachment-button").click();
   await expect(page.getByTestId("attachment-menu")).toBeVisible();
   await page.getByTestId("knowledge-menu-button").hover();
@@ -2038,7 +2038,7 @@ test("hides the home account entry and keeps responsive mobile navigation", asyn
   await mockAuthSession(page, { configured: true, user: null });
 
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto("/");
+  await page.goto("/new");
   await expect(page.getByTestId("auth-account-name-input")).toHaveCount(0);
   await expect(page.locator('[data-testid="account-sign-in-button"]:visible')).toHaveCount(0);
   await expect(page.locator('[data-testid="account-menu-button"]:visible')).toHaveCount(0);

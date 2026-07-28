@@ -524,8 +524,8 @@ export function AuthPanel({
                   </span>
                   {copy.accountMenu.reportBug}
                 </button>
-                <a
-                  href="mailto:support@branchmind.app"
+                <Link
+                  href="/help"
                   {...getAccountMenuHoverHandlers("help-support")}
                   className={getAccountMenuItemClass(
                     isAccountMenuItemHighlighted("help-support"),
@@ -539,7 +539,7 @@ export function AuthPanel({
                     <HelpCircle size={14} />
                   </span>
                   {copy.accountMenu.helpSupport}
-                </a>
+                </Link>
               </div>
 
               <div className="my-1.5 h-px bg-[var(--theme-border-default)]" />
@@ -629,8 +629,8 @@ export function AuthPanel({
         >
           <Bug size={16} />
         </button>
-        <a
-          href="mailto:support@branchmind.app"
+        <Link
+          href="/help"
           aria-label={copy.accountMenu.helpSupport}
           title={copy.accountMenu.helpSupport}
           data-testid="help-support-anonymous-link"
@@ -641,7 +641,7 @@ export function AuthPanel({
           }
         >
           <HelpCircle size={16} />
-        </a>
+        </Link>
         <Link
           href={signInHref}
           data-testid="account-sign-in-button"

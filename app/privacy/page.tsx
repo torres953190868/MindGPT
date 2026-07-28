@@ -5,6 +5,7 @@ import { ResponsiveHeader } from "@/components/ResponsiveHeader";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description: "BranchMind beta privacy policy.",
+  alternates: { canonical: "/privacy" },
 };
 
 const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim();

@@ -3,7 +3,8 @@ import type { MetadataRoute } from "next";
 const appOrigin = (process.env.APP_ORIGIN ?? "https://branchmind.app").replace(/\/+$/, "");
 
 const publicRoutes: Array<{ path: string; priority: number }> = [
-  { path: "", priority: 1 },
+  { path: "/help", priority: 0.7 },
+  { path: "/reader", priority: 0.7 },
   { path: "/privacy", priority: 0.3 },
   { path: "/terms", priority: 0.3 },
   { path: "/auth/sign-in", priority: 0.6 },
