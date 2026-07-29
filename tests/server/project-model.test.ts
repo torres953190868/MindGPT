@@ -303,8 +303,11 @@ describe("project model helpers", () => {
     });
   });
 
-  it("manually updates node titles and syncs the root project title", () => {
-    const project = createRootProject("Graph search", rootReply);
+  it("syncs the root project title while it matches the previous root title", () => {
+    const project = {
+      ...createRootProject("Graph search", rootReply),
+      title: "Root concept",
+    };
     const rootId = project.rootNodeId;
     const updated = updateNodeTitle(project, rootId, "Manual root title");
 
@@ -313,8 +316,22 @@ describe("project model helpers", () => {
       title: "Manual root title",
       titleManuallyEdited: true,
     });
-    expect(project.title).toBe("Graph search");
+    expect(project.title).toBe("Root concept");
     expect(project.nodes[rootId].titleManuallyEdited).toBe(false);
+  });
+
+  it("keeps a renamed project title when the root node title changes", () => {
+    const project = createRootProject("Graph search", rootReply);
+    const rootId = project.rootNodeId;
+    const updated = updateNodeTitle(project, rootId, "Manual root title");
+
+    expect(updated?.title).toBe("Graph search");
+    expect(updated?.nodes[rootId]).toMatchObject({
+      title: "Manual root title",
+      titleManuallyEdited: true,
+    });
+    expect(project.title).toBe("Graph search");
+    expect(project.nodes[rootId].title).toBe("Root concept");
   });
 
   it("updates project notes without mutating the original project", () => {
@@ -357,7 +374,7 @@ describe("project model helpers", () => {
     }
   });
 
-  it("preserves manually edited titles when regenerating", () => {
+  it("keeps the project title when regenerating a manually titled root node", () => {
     vi.useFakeTimers();
 
     try {
@@ -379,7 +396,10 @@ describe("project model helpers", () => {
         },
       });
 
-      expect(regenerated?.project.title).toBe("Manual root title");
+      // The project was named after the original prompt and never mirrored the
+      // root node title, so neither the manual node title nor the new
+      // instruction may override it.
+      expect(regenerated?.project.title).toBe("Original prompt");
       expect(regenerated?.node).toMatchObject({
         title: "Manual root title",
         titleManuallyEdited: true,
@@ -389,6 +409,67 @@ describe("project model helpers", () => {
         "Edited prompt",
         "Regenerated content",
       ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("protects a manually renamed project title when regenerating the root", () => {
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      const project = createRootProject("Original prompt", rootReply);
+      const rootId = project.rootNodeId;
+      const [userMessage, assistantMessage] = project.nodes[rootId].messages;
+      const renamed = setProjectTitle(project, "My custom project")!;
+
+      vi.setSystemTime(new Date("2026-01-01T00:00:01.000Z"));
+      const regenerated = regenerateNode(renamed, rootId, {
+        instruction: "Edited prompt",
+        userMessageId: userMessage.id,
+        assistantMessageId: assistantMessage.id,
+        reply: {
+          title: "Regenerated title",
+          summary: "Regenerated summary",
+          content: "Regenerated content",
+        },
+      });
+
+      expect(regenerated?.project.title).toBe("My custom project");
+      expect(regenerated?.node.title).toBe("Regenerated title");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("follows the root node title while the project title mirrors it", () => {
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      const project = {
+        ...createRootProject("Original prompt", rootReply),
+        title: "Root concept",
+      };
+      const rootId = project.rootNodeId;
+      const [userMessage, assistantMessage] = project.nodes[rootId].messages;
+      const titled = updateNodeTitle(project, rootId, "Manual root title")!;
+      expect(titled.title).toBe("Manual root title");
+
+      vi.setSystemTime(new Date("2026-01-01T00:00:01.000Z"));
+      const regenerated = regenerateNode(titled, rootId, {
+        instruction: "Edited prompt",
+        userMessageId: userMessage.id,
+        assistantMessageId: assistantMessage.id,
+        reply: {
+          title: "AI replacement title",
+          summary: "Regenerated summary",
+          content: "Regenerated content",
+        },
+      });
+
+      expect(regenerated?.project.title).toBe("Manual root title");
     } finally {
       vi.useRealTimers();
     }

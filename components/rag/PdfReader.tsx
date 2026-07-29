@@ -36,6 +36,10 @@ import {
 } from "@/components/workspace/WorkspaceResizeHandle";
 import { useLanguage } from "@/components/language/LanguageProvider";
 import { formatRequestReference, readJsonApi } from "@/lib/client/api";
+import {
+  getRagRequestErrorMessage,
+  getRagServiceErrorMessage,
+} from "@/lib/client/rag-errors";
 
 type DocumentStatus =
   | "queued"
@@ -761,7 +765,7 @@ export function PdfReader() {
       })
       .catch((loadError: unknown) => {
         if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : "Load failed.");
+          setError(getRagRequestErrorMessage(loadError, "Load failed.", copy.reader));
           setDocumentsReady(true);
         }
       });
@@ -769,7 +773,7 @@ export function PdfReader() {
     return () => {
       cancelled = true;
     };
-  }, [loadDocuments]);
+  }, [copy.reader, loadDocuments]);
 
   useEffect(() => {
     if (!renamingDocumentId) return;
@@ -885,9 +889,10 @@ export function PdfReader() {
       chunkId: chunkParamRef.current,
       updateUrl: requestedDocument !== documentParam,
     }).catch((loadError: unknown) => {
-      setError(loadError instanceof Error ? loadError.message : "Load failed.");
+      setError(getRagRequestErrorMessage(loadError, "Load failed.", copy.reader));
     });
   }, [
+    copy.reader,
     documentParam,
     documents,
     documentsReady,
@@ -933,7 +938,7 @@ export function PdfReader() {
         })
         .catch((loadError: unknown) => {
           if (isCurrentReaderAction(actionId, selectedId)) {
-            setError(loadError instanceof Error ? loadError.message : "Load failed.");
+            setError(getRagRequestErrorMessage(loadError, "Load failed.", copy.reader));
           }
         });
       return;
@@ -951,12 +956,13 @@ export function PdfReader() {
         loadExtractedText: hasExtractedPages(details),
       }).catch((loadError: unknown) => {
         if (isCurrentReaderAction(actionId, selectedId)) {
-          setError(loadError instanceof Error ? loadError.message : "Page failed to load.");
+          setError(getRagRequestErrorMessage(loadError, "Page failed to load.", copy.reader));
         }
       });
     }
   }, [
     chunkParam,
+    copy.reader,
     details,
     documentParam,
     documentsReady,
@@ -1121,9 +1127,11 @@ export function PdfReader() {
         .catch((pollError: unknown) => {
           if (!cancelled && selectedIdRef.current === selectedId) {
             setError(
-              pollError instanceof Error
-                ? pollError.message
-                : "PDF status failed to refresh.",
+              getRagRequestErrorMessage(
+                pollError,
+                "PDF status failed to refresh.",
+                copy.reader,
+              ),
             );
           }
         });
@@ -1134,6 +1142,7 @@ export function PdfReader() {
       window.clearInterval(interval);
     };
   }, [
+    copy.reader,
     loadDocuments,
     selectedDocument,
     selectedDocument?.status,
@@ -1179,9 +1188,7 @@ export function PdfReader() {
       await selectDocument(uploadedId, { updateUrl: true });
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (uploadError) {
-      setError(
-        uploadError instanceof Error ? uploadError.message : "Upload failed.",
-      );
+      setError(getRagRequestErrorMessage(uploadError, "Upload failed.", copy.reader));
       if (uploadedId) {
         await selectDocument(uploadedId, { pageNumber }).catch(() => undefined);
       }
@@ -1247,7 +1254,7 @@ export function PdfReader() {
       setRenamingDocumentId(null);
       setRenameValue("");
     } catch (renameError) {
-      setError(renameError instanceof Error ? renameError.message : "Rename failed.");
+      setError(getRagRequestErrorMessage(renameError, "Rename failed.", copy.reader));
     } finally {
       setRenameSaving(false);
     }
@@ -1278,7 +1285,7 @@ export function PdfReader() {
         }
       }
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : "Delete failed.");
+      setError(getRagRequestErrorMessage(deleteError, "Delete failed.", copy.reader));
     } finally {
       setDeletingDocumentId(null);
     }
@@ -1298,7 +1305,7 @@ export function PdfReader() {
         chunkId: sourceChunkIdRef.current,
       });
     } catch (indexError) {
-      setError(indexError instanceof Error ? indexError.message : "Index failed.");
+      setError(getRagRequestErrorMessage(indexError, "Index failed.", copy.reader));
       await selectDocument(selectedId, { pageNumber }).catch(() => undefined);
     } finally {
       setIndexing(false);
@@ -1328,7 +1335,7 @@ export function PdfReader() {
       }
     } catch (pageError) {
       if (isCurrentReaderAction(actionId, selectedId)) {
-        setError(pageError instanceof Error ? pageError.message : "Page failed to load.");
+        setError(getRagRequestErrorMessage(pageError, "Page failed to load.", copy.reader));
       }
     }
   }
@@ -1355,7 +1362,7 @@ export function PdfReader() {
       }
     } catch (pageError) {
       if (isCurrentReaderAction(actionId, selectedId)) {
-        setError(pageError instanceof Error ? pageError.message : "Page failed to load.");
+        setError(getRagRequestErrorMessage(pageError, "Page failed to load.", copy.reader));
       }
     }
   }
@@ -1380,9 +1387,7 @@ export function PdfReader() {
       setAskResult(result);
     } catch (askRequestError) {
       setAskError(
-        askRequestError instanceof Error
-          ? askRequestError.message
-          : "Ask PDF failed.",
+        getRagRequestErrorMessage(askRequestError, "Ask PDF failed.", copy.reader),
       );
     } finally {
       setAskLoading(false);
@@ -1588,9 +1593,11 @@ export function PdfReader() {
                         selectDocument(document.id, { updateUrl: true }).catch(
                           (loadError: unknown) => {
                             setError(
-                              loadError instanceof Error
-                                ? loadError.message
-                                : copy.settings.failedUpdate,
+                              getRagRequestErrorMessage(
+                                loadError,
+                                copy.settings.failedUpdate,
+                                copy.reader,
+                              ),
                             );
                           },
                         )
@@ -1805,7 +1812,10 @@ export function PdfReader() {
           <div className="mx-4 mt-3 flex items-start gap-2 rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-bold text-danger-700">
             <AlertCircle size={17} className="mt-0.5 shrink-0" />
             <div className="min-w-0">
-              <p>{selectedDocument.errorMessage}</p>
+              <p>
+                {getRagServiceErrorMessage(selectedDocument.errorCode, copy.reader) ??
+                  selectedDocument.errorMessage}
+              </p>
               {selectedDocumentErrorReference && (
                 <p className="mt-1 font-mono text-xs text-danger-600">
                   {selectedDocumentErrorReference}

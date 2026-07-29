@@ -3386,7 +3386,12 @@ test("selected conversation text is attached as BranchMind context", async ({ pa
 });
 
 test("edits a root node title from the node detail header", async ({ page }, testInfo) => {
-  const sourceProject = makeWorkspaceProject(`title-edit-${makeSeed()}`);
+  // The project title still matches the root node title, so editing the root
+  // title keeps the auto-derived project title in sync.
+  const sourceProject = {
+    ...makeWorkspaceProject(`title-edit-${makeSeed()}`),
+    title: "Seeded root node",
+  };
   const editedTitle = "Manual root title from detail";
   let projectIdToDelete: string | null = null;
 
@@ -3445,12 +3450,22 @@ test("deletes a child node from the node detail header", async ({ page }) => {
     const deleteButton = page.getByTestId("delete-node-button");
     await expect(deleteButton).toBeVisible();
 
+    // Deleting a node asks for confirmation first; cancelling keeps the node.
+    await deleteButton.click();
+    await expect(page.getByTestId("delete-node-dialog")).toBeVisible();
+    await page.getByTestId("cancel-delete-node-button").click();
+    await expect(page.getByTestId("delete-node-dialog")).toHaveCount(0);
+    await expect(
+      page.locator(`[data-testid="branch-node-card"][data-node-id="${childNode.id}"]`),
+    ).toHaveCount(1);
+
     const deleteResponsePromise = page.waitForResponse(
       (response) =>
         response.url().includes(`/api/projects/${project.id}/nodes/${childNode.id}`) &&
         response.request().method() === "DELETE",
     );
     await deleteButton.click();
+    await page.getByTestId("confirm-delete-node-button").click();
     const deleteResponse = await deleteResponsePromise;
     expect(deleteResponse.status()).toBe(200);
 

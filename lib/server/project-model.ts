@@ -298,10 +298,21 @@ export function regenerateNode(
     messages: nextMessages,
     updatedAt: timestamp,
   };
-  const nextProjectTitle =
-    targets.isLatestAssistant && nodeId === project.rootNodeId && nextNode.titleManuallyEdited
-      ? nextNode.title
-      : targets.isLatestAssistant && instruction && nodeId === project.rootNodeId
+  const isRootRegenerate =
+    targets.isLatestAssistant && nodeId === project.rootNodeId;
+  // Re-derive the project title only while it still mirrors an automatic
+  // source — the root node title or the prompt being edited. A manually
+  // renamed project keeps its own title.
+  const editedPromptTitle = isRootRegenerate
+    ? node.messages[targets.userMessageIndex]?.content.trim()
+    : undefined;
+  const nextProjectTitle = !isRootRegenerate
+    ? project.title
+    : nextNode.titleManuallyEdited
+      ? project.title === node.title
+        ? nextNode.title
+        : project.title
+      : instruction && project.title === editedPromptTitle
         ? instruction
         : project.title;
 
@@ -332,9 +343,15 @@ export function updateNodeTitle(project: Project, nodeId: string, title: string)
     updatedAt: timestamp,
   };
 
+  // Only sync the project title while it is still auto-derived from the root
+  // node (i.e. it equals the root node's previous title). A manually renamed
+  // project keeps its own title.
+  const shouldSyncProjectTitle =
+    nodeId === project.rootNodeId && project.title === node.title;
+
   return {
     ...project,
-    title: nodeId === project.rootNodeId ? nextTitle : project.title,
+    title: shouldSyncProjectTitle ? nextTitle : project.title,
     nodes: {
       ...project.nodes,
       [nodeId]: nextNode,

@@ -192,6 +192,19 @@ class ApiRequestError extends Error {
   }
 }
 
+function getThrownErrorCode(error: unknown) {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" ? code : null;
+}
+
+function getAiMessageLimitFromError(error: unknown) {
+  const details = (error as { details?: unknown } | null)?.details;
+  const limit = (details as { limit?: unknown } | null)?.limit;
+  return typeof limit === "number" && Number.isInteger(limit) && limit > 0
+    ? limit
+    : null;
+}
+
 function getErrorMessage(error: unknown) {
   if (
     error instanceof ApiRequestError &&
@@ -199,6 +212,15 @@ function getErrorMessage(error: unknown) {
       error.message === "You need to sign in to do that.")
   ) {
     return getStoredLanguageCopy().auth.authRequired;
+  }
+  // Streamed AI generation failures carry this code from the SSE/non-OK error
+  // path (lib/client/node-streaming), which throws its own ApiRequestError
+  // class — match on the code structurally instead of instanceof.
+  if (getThrownErrorCode(error) === "AI_MESSAGE_LIMIT_REACHED") {
+    const limit = getAiMessageLimitFromError(error);
+    if (limit !== null) {
+      return getStoredLanguageCopy().workspace.aiMessageLimitReached(limit);
+    }
   }
   return error instanceof Error ? error.message : "Request failed.";
 }
@@ -1779,9 +1801,14 @@ export const useBranchMindStore = create<BranchMindState>((set, get) => ({
       titleManuallyEdited: true,
       updatedAt: timestamp,
     };
+    // Only sync the project title while it is still auto-derived from the root
+    // node (i.e. it equals the root node's previous title). A manually renamed
+    // project keeps its own title.
+    const shouldSyncProjectTitle =
+      nodeId === project.rootNodeId && project.title === node.title;
     const optimisticProject = {
       ...project,
-      title: nodeId === project.rootNodeId ? trimmed : project.title,
+      title: shouldSyncProjectTitle ? trimmed : project.title,
       nodes: {
         ...project.nodes,
         [nodeId]: optimisticNode,

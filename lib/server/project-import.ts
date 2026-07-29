@@ -245,6 +245,31 @@ export function remapProjectForImport(
   };
 }
 
+export function uniquifyImportedProjectTitles(
+  projects: Project[],
+  existingTitles: readonly string[],
+  copySuffix: (index?: number) => string,
+): Project[] {
+  const takenTitles = new Set(existingTitles);
+
+  return projects.map((project) => {
+    if (!takenTitles.has(project.title)) {
+      takenTitles.add(project.title);
+      return project;
+    }
+
+    let index = 1;
+    let title = `${project.title}${copySuffix()}`;
+    while (takenTitles.has(title)) {
+      index += 1;
+      title = `${project.title}${copySuffix(index)}`;
+    }
+
+    takenTitles.add(title);
+    return { ...project, title };
+  });
+}
+
 export function prepareProjectImport(
   payload: unknown,
   options: ProjectImportOptions = {},

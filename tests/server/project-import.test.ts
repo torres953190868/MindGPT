@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { prepareProjectImport } from "@/lib/server/project-import";
+import { LANGUAGE_COPY } from "@/lib/language-copy";
+import { prepareProjectImport, uniquifyImportedProjectTitles } from "@/lib/server/project-import";
+import type { Project } from "@/lib/types";
 
 describe("project import", () => {
   it("defaults missing legacy project notes to an empty string", () => {
@@ -155,5 +157,75 @@ describe("project import", () => {
     });
 
     expect(result.projects[0].nodes[result.projects[0].rootNodeId].titleManuallyEdited).toBe(true);
+  });
+});
+
+describe("uniquifyImportedProjectTitles", () => {
+  const zhCopySuffix = LANGUAGE_COPY.zh.projects.copySuffix;
+  const enCopySuffix = LANGUAGE_COPY.en.projects.copySuffix;
+
+  function createProject(title: string): Project {
+    return {
+      id: `project-${title}`,
+      title,
+      notes: "",
+      rootNodeId: "root",
+      nodes: {},
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+  }
+
+  it("keeps titles that do not conflict with existing projects", () => {
+    const projects = uniquifyImportedProjectTitles(
+      [createProject("New project")],
+      ["Existing project"],
+      zhCopySuffix,
+    );
+
+    expect(projects.map((project) => project.title)).toEqual(["New project"]);
+  });
+
+  it("appends a localized copy suffix when the title already exists", () => {
+    const projects = uniquifyImportedProjectTitles(
+      [createProject("研究计划")],
+      ["研究计划"],
+      zhCopySuffix,
+    );
+
+    expect(projects[0].title).toBe("研究计划（副本）");
+  });
+
+  it("adds a sequence number when a copy with the same name exists", () => {
+    const projects = uniquifyImportedProjectTitles(
+      [createProject("研究计划")],
+      ["研究计划", "研究计划（副本）"],
+      zhCopySuffix,
+    );
+
+    expect(projects[0].title).toBe("研究计划（副本 2）");
+  });
+
+  it("uses the english copy suffix for the english locale", () => {
+    const projects = uniquifyImportedProjectTitles(
+      [createProject("Research plan")],
+      ["Research plan", "Research plan (Copy)", "Research plan (Copy 2)"],
+      enCopySuffix,
+    );
+
+    expect(projects[0].title).toBe("Research plan (Copy 3)");
+  });
+
+  it("deduplicates titles within the same import batch", () => {
+    const projects = uniquifyImportedProjectTitles(
+      [createProject("研究计划"), createProject("研究计划")],
+      [],
+      zhCopySuffix,
+    );
+
+    expect(projects.map((project) => project.title)).toEqual([
+      "研究计划",
+      "研究计划（副本）",
+    ]);
   });
 });

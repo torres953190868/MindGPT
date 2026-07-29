@@ -15,6 +15,7 @@ const getSupabaseAdminClientMock = vi.hoisted(() => vi.fn());
 const signOutMock = vi.hoisted(() => vi.fn());
 const createSupabaseCookieClientMock = vi.hoisted(() => vi.fn());
 const getRagRepositoryMock = vi.hoisted(() => vi.fn());
+const getTodayAiMessageUsageMock = vi.hoisted(() => vi.fn());
 const projectsStoreMock = vi.hoisted(() => ({
   readProjectsForSession: vi.fn(),
   updateProjects: vi.fn(),
@@ -92,6 +93,10 @@ vi.mock("@/lib/supabase/server", () => ({
 
 vi.mock("@/lib/server/rag/store", () => ({
   getRagRepository: getRagRepositoryMock,
+}));
+
+vi.mock("@/lib/server/ai-usage", () => ({
+  getTodayAiMessageUsage: getTodayAiMessageUsageMock,
 }));
 
 vi.mock("@/lib/server/projects-store", () => projectsStoreMock);
@@ -240,6 +245,63 @@ describe("PATCH /api/account", () => {
         windowMs: 60_000,
       }),
     );
+  });
+});
+
+function createGetRequest() {
+  return new NextRequest("https://branchmind.example/api/account", {
+    method: "GET",
+  });
+}
+
+describe("GET /api/account", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    getOptionalSupabaseUserMock.mockReset();
+    getSupabaseAccountPlanInfoMock.mockReset();
+    getTodayAiMessageUsageMock.mockReset();
+    hasSupabaseServerConfigMock.mockReturnValue(true);
+    getSupabaseAdminClientMock.mockImplementation(() => createSupabaseAdminClientMock());
+    getOptionalSupabaseUserMock.mockResolvedValue({
+      id: "user_test",
+      email: "learner@example.com",
+    });
+    getSupabaseAccountPlanInfoMock.mockResolvedValue({
+      plan: "free",
+      displayName: "Learner",
+      languagePreference: "zh",
+      subscriptionStatus: "inactive",
+      limits: {
+        projects: 5,
+        nodes: 100,
+        documents: 3,
+        aiMessages: 50,
+      },
+    });
+    getTodayAiMessageUsageMock.mockResolvedValue(7);
+  });
+
+  it("returns today's real AI message usage for the signed-in user", async () => {
+    const { GET } = await import("@/app/api/account/route");
+
+    const response = await GET(createGetRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(getTodayAiMessageUsageMock).toHaveBeenCalledWith("user_test");
+    expect(body.usage.aiMessages).toEqual({ used: 7, limit: 50 });
+  });
+
+  it("shows zero AI usage when daily tracking is unavailable", async () => {
+    // getTodayAiMessageUsage fails open to 0 when the usage table is missing.
+    getTodayAiMessageUsageMock.mockResolvedValue(0);
+    const { GET } = await import("@/app/api/account/route");
+
+    const response = await GET(createGetRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.usage.aiMessages).toEqual({ used: 0, limit: 50 });
   });
 });
 

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FolderOpen, Loader2, MessageSquare, FileText, Network } from "lucide-react";
 import type { AccountDto } from "@/app/api/account/route";
 import type { AccountUsageDto } from "@/app/api/account/usage/route";
 import { useLanguage } from "@/components/language/LanguageProvider";
+import { useAuthStore } from "@/store/useAuthStore";
 
 type UsageTone = {
   icon: string;
@@ -67,28 +68,38 @@ function UsageCard({
 
 export default function UsageSettingsPage() {
   const { copy } = useLanguage();
-  const [account, setAccount] = useState<AccountDto | null>(null);
+  const setAccountCache = useAuthStore((state) => state.setAccountCache);
+  const [account, setAccount] = useState<AccountDto | null>(
+    () => useAuthStore.getState().account,
+  );
   const [history, setHistory] = useState<AccountUsageDto["history"]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(
+    () => useAuthStore.getState().account === null,
+  );
+  const [historyLoading, setHistoryLoading] = useState(true);
+
+  const loadUsage = useCallback(async () => {
+    try {
+      const [accountRes, historyRes] = await Promise.all([
+        fetch("/api/account"),
+        fetch("/api/account/usage"),
+      ]);
+      const accountData = (await accountRes.json().catch(() => null)) as AccountDto | null;
+      const historyData = (await historyRes.json().catch(() => null)) as AccountUsageDto | null;
+      if (accountRes.ok && accountData) {
+        setAccount(accountData);
+        setAccountCache(accountData);
+      }
+      if (historyRes.ok) setHistory(historyData?.history ?? []);
+    } finally {
+      setLoading(false);
+      setHistoryLoading(false);
+    }
+  }, [setAccountCache]);
 
   useEffect(() => {
-    async function load() {
-      setLoading(true);
-      try {
-        const [accountRes, historyRes] = await Promise.all([
-          fetch("/api/account"),
-          fetch("/api/account/usage"),
-        ]);
-        const accountData = (await accountRes.json().catch(() => null)) as AccountDto | null;
-        const historyData = (await historyRes.json().catch(() => null)) as AccountUsageDto | null;
-        if (accountRes.ok) setAccount(accountData);
-        if (historyRes.ok) setHistory(historyData?.history ?? []);
-      } finally {
-        setLoading(false);
-      }
-    }
-    void load();
-  }, []);
+    void loadUsage();
+  }, [loadUsage]);
 
   if (loading) {
     return (
@@ -137,7 +148,11 @@ export default function UsageSettingsPage() {
         <h2 className="text-base font-extrabold text-neutral-900">{copy.settings.usageHistory}</h2>
         <p className="mt-0.5 text-sm font-semibold text-neutral-600">{copy.settings.usageHistoryDescription}</p>
 
-        {history.length === 0 ? (
+        {historyLoading ? (
+          <div className="mt-4 flex items-center justify-center rounded-lg bg-surface-muted py-8">
+            <Loader2 size={18} className="animate-spin text-neutral-500" />
+          </div>
+        ) : history.length === 0 ? (
           <div className="mt-4 rounded-lg bg-surface-muted py-8 text-center">
             <p className="text-sm font-semibold text-neutral-500">{copy.settings.usageNoHistory}</p>
           </div>

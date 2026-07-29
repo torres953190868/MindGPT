@@ -325,6 +325,7 @@ Supabase migrations are in `supabase/migrations/` and must be applied before usi
 - `20260526010000_branchmind_rename_team_plan_to_max.sql`
 - `20260526020000_branchmind_language_preference.sql`
 - `20260630000000_branchmind_plan_model_access.sql`
+- `20260729000000_branchmind_daily_ai_usage.sql`
 
 **PDF/RAG**
 

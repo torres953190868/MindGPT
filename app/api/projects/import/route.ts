@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
+import { getBranchMindLanguage, LANGUAGE_COOKIE_NAME } from "@/lib/language";
 import { getBranchMindAuthContext } from "@/lib/server/auth";
 import { jsonWithSession, safeErrorWithSession } from "@/lib/server/http";
 import { importProjectsForOwner } from "@/lib/server/projects-service";
@@ -40,7 +41,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await importProjectsForOwner(principal.id, payload);
+    const language = getBranchMindLanguage(request.cookies.get(LANGUAGE_COOKIE_NAME)?.value);
+    const result = await importProjectsForOwner(principal.id, payload, { language });
     return jsonWithSession(result, session);
   } catch (error) {
     return safeErrorWithSession(error, fallbackSession);

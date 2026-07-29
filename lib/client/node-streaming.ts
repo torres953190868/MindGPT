@@ -254,7 +254,8 @@ export function createRegeneratingNodeProject(
         targets.isLatestAssistant &&
         instruction &&
         nodeId === project.rootNodeId &&
-        !node.titleManuallyEdited
+        !node.titleManuallyEdited &&
+        project.title === node.messages[targets.userMessageIndex]?.content.trim()
           ? instruction
           : project.title,
       nodes: {

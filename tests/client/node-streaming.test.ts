@@ -114,13 +114,24 @@ describe("node streaming helpers", () => {
 
     expect(result?.assistantMessageId).toBe("assistant_b");
     expect(result?.node.title).toBe("Original node title");
-    expect(result?.project.title).toBe("Edited second prompt");
+    // The project title was renamed manually, so it no longer follows the prompt.
+    expect(result?.project.title).toBe("Original project");
     expect(result?.node.messages.map((message) => message.content)).toEqual([
       "First prompt",
       "First answer",
       "Edited second prompt",
       "",
     ]);
+  });
+
+  it("follows the edited prompt while the project title is derived from it", () => {
+    const project = { ...makeProject(), title: "Second prompt" };
+    const result = createRegeneratingNodeProject(project, "node_streaming", {
+      instruction: "Edited second prompt",
+      userMessageId: "user_b",
+    });
+
+    expect(result?.project.title).toBe("Edited second prompt");
   });
 
   it("returns null when retrying an assistant reply outside the latest turn", () => {

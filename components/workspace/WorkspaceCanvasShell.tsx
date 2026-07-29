@@ -19,7 +19,7 @@ import {
 } from "react";
 import { AuthPanel } from "@/components/AuthPanel";
 import { useLanguage } from "@/components/language/LanguageProvider";
-import { getNodeConversationMessages } from "@/lib/graph";
+import { collectDescendantIds, getNodeConversationMessages } from "@/lib/graph";
 import type {
   ChatAttachment,
   ChatModelSelection,
@@ -375,6 +375,9 @@ export function WorkspaceCanvasShell({
     usesMobileDrawers && mobileDrawerView === "notes";
   const isAnyMobileDrawerOpen = usesMobileDrawers && mobileDrawerView !== "none";
   const selectedNode = selectedNodeId ? project.nodes[selectedNodeId] ?? null : null;
+  const selectedNodeDescendantCount = selectedNode
+    ? collectDescendantIds(project, selectedNode.id).length - 1
+    : 0;
   const selectedConversationMessages = useMemo(
     () =>
       selectedNode
@@ -1184,6 +1187,7 @@ export function WorkspaceCanvasShell({
               onUpdateNodeTitle={onUpdateNodeTitle}
               onToggleNode={onToggleNode}
               onDeleteNode={onDeleteNode}
+              deleteDescendantCount={selectedNodeDescendantCount}
               isCreating={isSelectedNodeCreating}
               streamingMessageId={streamingMessageId}
               isNotesOpen={isProjectNotesSidePanelOpen || isProjectNotesMobileViewOpen}

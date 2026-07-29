@@ -15,11 +15,12 @@ import {
   getHtmlLanguage,
   LANGUAGE_COOKIE_NAME,
   LANGUAGE_STORAGE_KEY,
+  resolveAccountLanguage,
   type BranchMindLanguage,
 } from "@/lib/language";
+import { patchAccountLanguage } from "@/lib/client/language-preference";
 import { LANGUAGE_COPY, type LanguageCopy } from "@/lib/language-copy";
 import { useAuthStore } from "@/store/useAuthStore";
-import type { AccountDto } from "@/app/api/account/route";
 
 type LanguageSaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -42,17 +43,6 @@ function persistLanguage(language: BranchMindLanguage) {
   } catch {
     /* Local storage can be unavailable in private or locked-down contexts. */
   }
-}
-
-async function patchAccountLanguage(language: BranchMindLanguage) {
-  const response = await fetch("/api/account", {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ languagePreference: language }),
-  });
-  const data = (await response.json().catch(() => null)) as AccountDto | null;
-  if (!response.ok || !data) throw new Error("Language preference could not be saved.");
-  return data;
 }
 
 export function LanguageProvider({
@@ -85,11 +75,26 @@ export function LanguageProvider({
   }, [ensureSessionLoaded, initialLanguage]);
 
   useEffect(() => {
-    if (!account) return;
-    const accountLanguage = getBranchMindLanguage(account.languagePreference);
-    setLanguageState(accountLanguage);
-    persistLanguage(accountLanguage);
-  }, [account]);
+    // Only supabase accounts carry a real preference; local and guest accounts
+    // always report the default and must not override the local choice.
+    if (!account || account.authMode !== "supabase") return;
+
+    let storedLanguage: string | null = null;
+    try {
+      storedLanguage = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    } catch {
+      storedLanguage = null;
+    }
+
+    const resolution = resolveAccountLanguage(account.languagePreference, storedLanguage);
+    if (resolution.shouldSyncAccount) {
+      void patchAccountLanguage(resolution.language)
+        .then(setAccountCache)
+        .catch(() => undefined);
+    }
+    setLanguageState(resolution.language);
+    persistLanguage(resolution.language);
+  }, [account, setAccountCache]);
 
   useEffect(() => {
     function handleStorage(event: StorageEvent) {

@@ -145,6 +145,7 @@ const zhCopy = {
     ],
     noBillingRequired: "无需账单",
     noInvoices: "暂无发票。",
+    perMonth: "/月",
     planActive: "方案已启用",
     prioritySupport: "优先支持",
     proBody: "Pro 解锁无限项目和节点，并提供 10 倍每日 AI 消息额度。",
@@ -337,6 +338,7 @@ const zhCopy = {
     allProjects: "全部项目",
     branchMindHome: "BranchMind 首页",
     cancelProjectName: (title: string) => `取消编辑项目名称：${title}`,
+    copySuffix: (index?: number) => (index && index > 1 ? `（副本 ${index}）` : "（副本）"),
     createProject: "创建项目",
     createProjectStatus: "正在创建项目。",
     deleteBody: (title: string) => `这会从 BranchMind 永久删除“${title}”。如果需要备份，请先导出 JSON。`,
@@ -410,6 +412,8 @@ const zhCopy = {
     selectPdf: "选择 PDF",
     selectPdfAsk: "选择一份 PDF 后即可提问。",
     selectPdfReading: "选择一份 PDF 开始阅读",
+    serviceNotReady: "文档服务尚未完成初始化，请稍后重试或联系管理员。",
+    serviceUnavailable: "文档服务暂时不可用，请稍后重试。",
     title: "PDF 阅读器",
     toc: "目录",
     uploadPdf: "上传 PDF",
@@ -508,6 +512,7 @@ const zhCopy = {
   },
   workspace: {
     addLatestAiReply: "添加最新 AI 回复",
+    aiMessageLimitReached: (limit: number) => `今天的 AI 消息额度（${limit} 条）已用完，明天再来吧。`,
     askBranchMind: "询问 BranchMind",
     askBranchMindSelection: "询问 BranchMind 关于选中文本",
     backToChat: "返回聊天",
@@ -529,6 +534,11 @@ const zhCopy = {
     copyRoleMessage: (role: string) => `复制${role === "user" ? "用户" : "助手"}消息`,
     createWorkspace: "创建你的工作区。",
     deleteNode: "删除节点",
+    deleteNodeBody: (title: string, descendantCount: number) =>
+      descendantCount > 0
+        ? `这会永久删除节点“${title}”及其全部 ${descendantCount} 个子节点。`
+        : `这会永久删除节点“${title}”。`,
+    deleteNodePrompt: "删除节点？",
     editNodeTitle: "编辑节点标题",
     editUserMessage: "编辑用户消息",
     expandChildrenFor: (title: string) => `展开 ${title} 的子节点`,
@@ -746,6 +756,7 @@ export const LANGUAGE_COPY = {
       ],
       noBillingRequired: "No billing required",
       noInvoices: "No invoices yet.",
+      perMonth: "/month",
       planActive: "Plan active",
       prioritySupport: "Priority support",
       proBody: "Pro unlocks unlimited projects and nodes, plus 10x the daily AI messages.",
@@ -938,6 +949,7 @@ export const LANGUAGE_COPY = {
       allProjects: "All projects",
       branchMindHome: "BranchMind home",
       cancelProjectName: (title: string) => `Cancel project name edit for ${title}`,
+      copySuffix: (index?: number) => (index && index > 1 ? ` (Copy ${index})` : " (Copy)"),
       createProject: "Create project",
       createProjectStatus: "Creating project…",
       deleteBody: (title: string) => `This permanently removes "${title}" from BranchMind. Export JSON first if you need a copy.`,
@@ -1011,6 +1023,8 @@ export const LANGUAGE_COPY = {
       selectPdf: "Select a PDF",
       selectPdfAsk: "Select a PDF to ask questions.",
       selectPdfReading: "Select a PDF to start reading.",
+      serviceNotReady: "The document service isn't fully set up yet. Please try again later or contact an administrator.",
+      serviceUnavailable: "The document service is temporarily unavailable. Please try again later.",
       title: "PDF Reader",
       toc: "Contents",
       uploadPdf: "Upload PDF",
@@ -1109,6 +1123,7 @@ export const LANGUAGE_COPY = {
     },
     workspace: {
       addLatestAiReply: "Add latest AI reply",
+      aiMessageLimitReached: (limit: number) => `You've used all ${limit} AI messages for today. Come back tomorrow.`,
       askBranchMind: "Ask BranchMind",
       askBranchMindSelection: "Ask BranchMind about selected text",
       backToChat: "Back to chat",
@@ -1130,6 +1145,11 @@ export const LANGUAGE_COPY = {
       copyRoleMessage: (role: string) => `Copy ${role} message`,
       createWorkspace: "Creating your project…",
       deleteNode: "Delete node",
+      deleteNodeBody: (title: string, descendantCount: number) =>
+        descendantCount > 0
+          ? `This permanently deletes "${title}" and its ${descendantCount} child ${descendantCount === 1 ? "node" : "nodes"}.`
+          : `This permanently deletes "${title}".`,
+      deleteNodePrompt: "Delete node?",
       editNodeTitle: "Edit node title",
       editUserMessage: "Edit user message",
       expandChildrenFor: (title: string) => `Expand children for ${title}`,

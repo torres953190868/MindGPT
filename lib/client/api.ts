@@ -2,6 +2,7 @@ type ApiErrorObject = {
   code?: unknown;
   message?: unknown;
   requestId?: unknown;
+  details?: unknown;
 };
 
 const GENERIC_ERROR_MESSAGES = new Set([
@@ -11,6 +12,7 @@ const GENERIC_ERROR_MESSAGES = new Set([
 
 export class ApiRequestError extends Error {
   code: string | null;
+  details: unknown;
   requestId: string | null;
   status: number;
 
@@ -18,6 +20,7 @@ export class ApiRequestError extends Error {
     message: string,
     options: {
       code?: string | null;
+      details?: unknown;
       requestId?: string | null;
       status: number;
     },
@@ -25,6 +28,7 @@ export class ApiRequestError extends Error {
     super(message);
     this.name = "ApiRequestError";
     this.code = options.code ?? null;
+    this.details = options.details ?? null;
     this.requestId = options.requestId ?? null;
     this.status = options.status;
   }
@@ -74,6 +78,7 @@ export function getApiErrorMeta(payload: unknown) {
   const error = getErrorObject(payload);
   return {
     code: typeof error?.code === "string" ? error.code : null,
+    details: error?.details ?? null,
     requestId: typeof error?.requestId === "string" ? error.requestId : null,
   };
 }

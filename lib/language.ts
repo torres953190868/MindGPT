@@ -36,3 +36,31 @@ export function getBranchMindLanguage(value: unknown): BranchMindLanguage {
 export function getHtmlLanguage(language: BranchMindLanguage) {
   return BRANCHMIND_LANGUAGES.find((item) => item.id === language)?.htmlLang ?? "zh-CN";
 }
+
+export type AccountLanguageResolution = {
+  language: BranchMindLanguage;
+  shouldSyncAccount: boolean;
+};
+
+// The language stored in this browser is the user's latest choice here, so it
+// wins over a stale account preference (e.g. when a save raced a page unload)
+// and the account is re-synced in the background. With nothing stored, the
+// account preference applies.
+export function resolveAccountLanguage(
+  accountLanguagePreference: unknown,
+  storedLocalLanguage: unknown,
+): AccountLanguageResolution {
+  const localLanguage = isBranchMindLanguage(storedLocalLanguage)
+    ? storedLocalLanguage
+    : null;
+  if (!localLanguage) {
+    return {
+      language: getBranchMindLanguage(accountLanguagePreference),
+      shouldSyncAccount: false,
+    };
+  }
+  const accountLanguage = getBranchMindLanguage(accountLanguagePreference);
+  return localLanguage === accountLanguage
+    ? { language: accountLanguage, shouldSyncAccount: false }
+    : { language: localLanguage, shouldSyncAccount: true };
+}

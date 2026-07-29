@@ -77,6 +77,13 @@ const languagePreferenceMigration = readFileSync(
   ),
   "utf8",
 );
+const dailyAiUsageMigration = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/20260729000000_branchmind_daily_ai_usage.sql",
+  ),
+  "utf8",
+);
 
 describe("Supabase foundation migration", () => {
   it("creates the beta persistence and distributed rate-limit tables", () => {
@@ -190,6 +197,30 @@ describe("Supabase foundation migration", () => {
     expect(geminiLlmMigration).toContain("gemini-3.5-flash");
     expect(geminiLlmMigration).toContain(
       "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+    );
+  });
+
+  it("tracks daily AI message usage with an atomic increment function", () => {
+    expect(dailyAiUsageMigration).toContain(
+      "create table if not exists public.branchmind_daily_ai_usage",
+    );
+    expect(dailyAiUsageMigration).toContain("primary key (user_id, usage_date)");
+    expect(dailyAiUsageMigration).toContain(
+      "alter table public.branchmind_daily_ai_usage enable row level security",
+    );
+    expect(dailyAiUsageMigration).toContain(
+      "revoke all on public.branchmind_daily_ai_usage from anon, authenticated",
+    );
+    expect(dailyAiUsageMigration).toContain(
+      'create policy "Users can view own daily AI usage"',
+    );
+    expect(dailyAiUsageMigration).toContain(
+      "create or replace function public.increment_daily_ai_usage(p_user_id uuid)",
+    );
+    expect(dailyAiUsageMigration).toContain("security definer set search_path = public");
+    expect(dailyAiUsageMigration).toContain("on conflict (user_id, usage_date)");
+    expect(dailyAiUsageMigration).toContain(
+      "revoke all on function public.increment_daily_ai_usage(uuid) from anon, authenticated",
     );
   });
 });

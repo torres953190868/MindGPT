@@ -18,7 +18,9 @@ import {
   updateNodeTitle,
   updateNodePosition,
 } from "@/lib/server/project-model";
-import { prepareProjectImport } from "@/lib/server/project-import";
+import { prepareProjectImport, uniquifyImportedProjectTitles } from "@/lib/server/project-import";
+import { getBranchMindLanguage, type BranchMindLanguage } from "@/lib/language";
+import { LANGUAGE_COPY } from "@/lib/language-copy";
 import {
   getProjectsRepository,
   projectBelongsToSession,
@@ -610,7 +612,11 @@ export async function prepareRegenerateNodeContext(
   };
 }
 
-export async function importProjectsForOwner(ownerId: string, payload: unknown) {
+export async function importProjectsForOwner(
+  ownerId: string,
+  payload: unknown,
+  options: { language?: BranchMindLanguage } = {},
+) {
   const result = prepareProjectImport(payload, { ownerSessionId: ownerId });
   if (result.projects.length === 0) {
     throw new HttpError("Choose a BranchMind project JSON export.", {
@@ -620,7 +626,11 @@ export async function importProjectsForOwner(ownerId: string, payload: unknown) 
     });
   }
 
-  for (const project of result.projects) {
+  const { copySuffix } = LANGUAGE_COPY[getBranchMindLanguage(options.language)].projects;
+  const existingTitles = (await listProjects(ownerId)).map((project) => project.title);
+  const projects = uniquifyImportedProjectTitles(result.projects, existingTitles, copySuffix);
+
+  for (const project of projects) {
     await getProjectsRepository().saveProject(withProjectOwner(project, ownerId));
   }
 

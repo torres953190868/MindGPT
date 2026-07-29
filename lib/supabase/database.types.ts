@@ -483,6 +483,34 @@ export type Database = {
           },
         ];
       };
+      branchmind_daily_ai_usage: {
+        Row: {
+          user_id: string;
+          usage_date: string;
+          message_count: number;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          usage_date?: string;
+          message_count?: number;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          usage_date?: string;
+          message_count?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "branchmind_daily_ai_usage_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       branchmind_plan_limits: {
         Row: {
           plan: string;
@@ -723,7 +751,12 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      increment_daily_ai_usage: {
+        Args: { p_user_id: string };
+        Returns: number;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

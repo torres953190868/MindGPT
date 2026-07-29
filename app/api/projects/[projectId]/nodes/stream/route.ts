@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getBranchMindAuthContext } from "@/lib/server/auth";
 import { getAccountPlanForModelAccess } from "@/lib/server/account-plan";
+import { trackDailyAiMessageUsage } from "@/lib/server/ai-usage";
 import { streamDeepSeekReply } from "@/lib/server/deepseek-streaming";
 import {
   getSafeErrorMessage,
@@ -90,6 +91,10 @@ export async function POST(request: NextRequest, context: NodesStreamRouteContex
         { requestId },
       );
     }
+
+    // Counts one AI message per request and enforces the plan's daily limit
+    // before streaming starts. Fails open when usage tracking is unavailable.
+    await trackDailyAiMessageUsage(principal);
 
     const userPlan = await getAccountPlanForModelAccess(principal);
     const contextData = await prepareChildContext(

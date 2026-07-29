@@ -38,24 +38,12 @@ import {
 } from "lucide-react";
 import { AuthPanel } from "@/components/AuthPanel";
 import { useLanguage } from "@/components/language/LanguageProvider";
+import { createProjectDateFormatter, formatProjectDate } from "@/lib/project-date";
 import { downloadProjectJson, importProjectJsonFile } from "@/lib/project-export";
 import { useBranchMindStore } from "@/store/useBranchMindStore";
 
-const projectDateFormatter = new Intl.DateTimeFormat("en-US", {
-  day: "numeric",
-  month: "short",
-  timeZone: "UTC",
-  year: "numeric",
-});
-
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
-}
-
-function formatProjectDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unknown";
-  return projectDateFormatter.format(date);
 }
 
 function getProjectUpdatedTime(updatedAt: string) {
@@ -64,7 +52,8 @@ function getProjectUpdatedTime(updatedAt: string) {
 }
 
 export function ProjectCardList() {
-  const { copy } = useLanguage();
+  const { copy, language } = useLanguage();
+  const projectDateFormatter = useMemo(() => createProjectDateFormatter(language), [language]);
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
@@ -818,7 +807,7 @@ export function ProjectCardList() {
                       <div className="mt-3 flex items-center justify-between gap-3 border-t border-neutral-100 pt-3">
                         <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-semibold text-neutral-700">
                           <Clock3 size={13} className="shrink-0 text-neutral-500" />
-                          <span className="truncate">{formatProjectDate(project.updatedAt)}</span>
+                          <span className="truncate">{formatProjectDate(project.updatedAt, projectDateFormatter)}</span>
                         </span>
                         <div
                           className="flex shrink-0 items-center gap-1"
@@ -1015,7 +1004,7 @@ export function ProjectCardList() {
                           <td className="px-4 py-4">
                             <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-neutral-700">
                               <Clock3 size={13} className="text-neutral-500" />
-                              {formatProjectDate(project.updatedAt)}
+                              {formatProjectDate(project.updatedAt, projectDateFormatter)}
                             </span>
                           </td>
                           <td className="px-4 py-4">

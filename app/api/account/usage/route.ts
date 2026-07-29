@@ -1,8 +1,9 @@
 import type { NextRequest } from "next/server";
 import { getOptionalSupabaseUser } from "@/lib/server/auth";
+import { listDailyAiMessageUsage } from "@/lib/server/ai-usage";
 import { jsonWithSession, safeErrorWithSession } from "@/lib/server/http";
 import { getExistingSessionId, getOrCreateSession } from "@/lib/server/session";
-import { hasSupabaseServerConfig, getSupabaseAdminClient } from "@/lib/supabase/server";
+import { hasSupabaseServerConfig } from "@/lib/supabase/server";
 
 const READ_ONLY_LOCAL_SESSION = { id: "", isNew: false };
 
@@ -32,29 +33,21 @@ export async function GET(request: NextRequest) {
         return jsonWithSession({ history: [] }, fallbackSession);
       }
 
-      const supabase = getSupabaseAdminClient();
-
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const since = thirtyDaysAgo.toISOString().slice(0, 10);
 
-      const { data, error } = await supabase
-        .from("branchmind_user_usage")
-        .select("date, project_count, node_count, document_count, ai_message_count")
-        .eq("user_id", user.id)
-        .gte("date", since)
-        .order("date", { ascending: false });
+      // Only AI messages are tracked per day so far; the other counters stay
+      // at zero until they get their own daily tracking. Fails open to an
+      // empty history when the usage table is not migrated yet.
+      const entries = await listDailyAiMessageUsage(user.id, since);
 
-      if (error) {
-        return jsonWithSession({ history: [] }, fallbackSession);
-      }
-
-      const history: UsageHistoryItem[] = (data ?? []).map((row) => ({
-        date: row.date,
-        projectCount: row.project_count,
-        nodeCount: row.node_count,
-        documentCount: row.document_count,
-        aiMessageCount: row.ai_message_count,
+      const history: UsageHistoryItem[] = entries.map((entry) => ({
+        date: entry.date,
+        projectCount: 0,
+        nodeCount: 0,
+        documentCount: 0,
+        aiMessageCount: entry.messageCount,
       }));
 
       return jsonWithSession({ history }, fallbackSession);

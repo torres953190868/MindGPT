@@ -11,6 +11,7 @@ import {
   PLAN_LIMITS_DISABLED,
   getSupabaseAccountPlanInfo,
 } from "@/lib/server/account-plan";
+import { getTodayAiMessageUsage } from "@/lib/server/ai-usage";
 import { BUG_REPORT_ATTACHMENT_BUCKET } from "@/lib/server/bug-reports";
 import { checkRateLimitAsync } from "@/lib/server/rate-limit";
 import { createRequestId } from "@/lib/server/request";
@@ -128,6 +129,9 @@ async function getSupabaseAccountData(user: SupabaseAccountUser): Promise<Accoun
     .select("*", { count: "exact", head: true })
     .eq("user_id", userId);
 
+  // Best-effort: returns 0 when the daily usage table is not migrated yet.
+  const aiMessagesUsed = await getTodayAiMessageUsage(userId);
+
   return {
     email,
     accountName,
@@ -141,7 +145,7 @@ async function getSupabaseAccountData(user: SupabaseAccountUser): Promise<Accoun
       projects: { used: projectCount ?? 0, limit: planInfo.limits.projects },
       nodes: { used: nodeCount, limit: planInfo.limits.nodes },
       documents: { used: documentCount ?? 0, limit: planInfo.limits.documents },
-      aiMessages: { used: 0, limit: planInfo.limits.aiMessages },
+      aiMessages: { used: aiMessagesUsed, limit: planInfo.limits.aiMessages },
     },
   };
 }
@@ -302,7 +306,8 @@ function accountDeletionFailed(step: string, requestId: string, error: unknown):
 // FK cascade notes (see supabase/migrations):
 // - branchmind_nodes / branchmind_messages cascade from branchmind_projects.
 // - document_pages / document_sections / document_chunks cascade from documents.
-// - branchmind_user_plans / branchmind_user_usage cascade from auth.users.
+// - branchmind_user_plans / branchmind_user_usage / branchmind_daily_ai_usage
+//   cascade from auth.users.
 // - branchmind_bug_reports would only SET NULL reporter_user_id, so its rows
 //   (and screenshot files) are deleted explicitly instead.
 async function deleteSupabaseAccountData(userId: string, requestId: string) {

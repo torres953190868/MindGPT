@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, Check, Crown, Loader2, ShieldCheck, Sparkles, Zap } from "lucide-react";
 import type { AccountDto } from "@/app/api/account/route";
 import { useLanguage } from "@/components/language/LanguageProvider";
+import { useAuthStore } from "@/store/useAuthStore";
 
 const PLANS = [
   {
@@ -38,23 +39,31 @@ const PLANS = [
 
 export default function BillingSettingsPage() {
   const { copy, language } = useLanguage();
-  const [account, setAccount] = useState<AccountDto | null>(null);
-  const [loading, setLoading] = useState(true);
+  const setAccountCache = useAuthStore((state) => state.setAccountCache);
+  const [account, setAccount] = useState<AccountDto | null>(
+    () => useAuthStore.getState().account,
+  );
+  const [loading, setLoading] = useState(
+    () => useAuthStore.getState().account === null,
+  );
   const [upgradeMessage, setUpgradeMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      try {
-        const res = await fetch("/api/account");
-        const data = (await res.json().catch(() => null)) as AccountDto | null;
-        if (res.ok) setAccount(data);
-      } finally {
-        setLoading(false);
+  const loadAccount = useCallback(async () => {
+    try {
+      const res = await fetch("/api/account");
+      const data = (await res.json().catch(() => null)) as AccountDto | null;
+      if (res.ok && data) {
+        setAccount(data);
+        setAccountCache(data);
       }
+    } finally {
+      setLoading(false);
     }
-    void load();
-  }, []);
+  }, [setAccountCache]);
+
+  useEffect(() => {
+    void loadAccount();
+  }, [loadAccount]);
 
   function handleUpgrade(planKey: string) {
     if (planKey === "pro") {
@@ -86,6 +95,7 @@ export default function BillingSettingsPage() {
     if (plan.key === "pro") {
       return {
         ...plan,
+        period: copy.billing.perMonth,
         description: copy.billing.proDescription,
         eyebrow: copy.billing.proEyebrow,
         features: copy.billing.proFeatures,
@@ -94,6 +104,7 @@ export default function BillingSettingsPage() {
     }
     return {
       ...plan,
+      period: copy.billing.perMonth,
       description: copy.billing.maxDescription,
       eyebrow: copy.billing.maxEyebrow,
       features: copy.billing.maxFeatures,

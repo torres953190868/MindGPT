@@ -130,6 +130,7 @@ type NodeDetailPanelProps = {
   onUpdateNodeTitle: (nodeId: string, title: string) => Promise<boolean>;
   onToggleNode: (nodeId: string) => void;
   onDeleteNode: (nodeId: string) => void;
+  deleteDescendantCount?: number;
   isCreating: boolean;
   streamingMessageId?: string | null;
   isNotesOpen: boolean;
@@ -293,6 +294,7 @@ export function NodeDetailPanel({
   onUpdateNodeTitle,
   onToggleNode,
   onDeleteNode,
+  deleteDescendantCount = 0,
   isCreating,
   streamingMessageId,
   isNotesOpen,
@@ -313,6 +315,8 @@ export function NodeDetailPanel({
   const titleId = `${panelId}-title`;
   const errorId = `${panelId}-error`;
   const statusId = `${panelId}-status`;
+  const deleteDialogTitleId = `${panelId}-delete-dialog-title`;
+  const deleteDialogDescriptionId = `${panelId}-delete-dialog-description`;
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"continue" | "branch">("continue");
   const [selectedSourceText, setSelectedSourceText] = useState("");
@@ -322,6 +326,7 @@ export function NodeDetailPanel({
   const [editingValue, setEditingValue] = useState("");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [isCheckingInitialSubmit, setIsCheckingInitialSubmit] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [titleEditValue, setTitleEditValue] = useState("");
   const [composerHeight, setComposerHeight] = useState<number | null>(null);
   const [headerHeight, setHeaderHeight] = useState<number | null>(null);
@@ -338,6 +343,7 @@ export function NodeDetailPanel({
   const resetComposerAttachments = composerControls.resetAttachments;
   const messagesRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const deleteCancelButtonRef = useRef<HTMLButtonElement>(null);
   const copyTimeoutRef = useRef<number | null>(null);
   const headerResizePointerStartedAtRef = useRef(-Infinity);
   const composerResizePointerStartedAtRef = useRef(-Infinity);
@@ -497,6 +503,7 @@ export function NodeDetailPanel({
     setEditingValue("");
     setIsEditingTitle(false);
     setTitleEditValue("");
+    setIsDeleteDialogOpen(false);
     clearHeaderHighlightedAction();
     clearModeHighlightedAction();
   }, [
@@ -512,6 +519,18 @@ export function NodeDetailPanel({
     titleInputRef.current?.focus();
     titleInputRef.current?.select();
   }, [isEditingTitle]);
+
+  useEffect(() => {
+    if (!isDeleteDialogOpen) return;
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") setIsDeleteDialogOpen(false);
+    }
+
+    deleteCancelButtonRef.current?.focus();
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isDeleteDialogOpen]);
 
   useEffect(() => {
     if (!selectionAction) return undefined;
@@ -740,6 +759,12 @@ export function NodeDetailPanel({
     void onRetryAssistantMessage(node.id, message.id, composerControls.modelSelection, skill);
   }
 
+  function handleConfirmDeleteNode() {
+    if (!node) return;
+    setIsDeleteDialogOpen(false);
+    onDeleteNode(node.id);
+  }
+
   function getPanelMaxResizeHeight() {
     const panelHeight = panelRef.current?.clientHeight ?? 0;
     return panelHeight > 0 ? Math.floor(panelHeight * 0.5) : Number.MAX_SAFE_INTEGER;
@@ -925,6 +950,65 @@ export function NodeDetailPanel({
       className="node-detail-panel-surface grid h-full min-h-0 w-full overflow-visible rounded-lg border border-neutral-200 bg-white p-4 shadow-sm lg:rounded-none lg:border-0 lg:bg-white lg:shadow-none"
       style={panelStyle}
     >
+      {isDeleteDialogOpen && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-neutral-950/45 px-4 py-6 backdrop-blur-sm"
+          data-testid="delete-node-dialog-backdrop"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setIsDeleteDialogOpen(false);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={deleteDialogTitleId}
+            aria-describedby={deleteDialogDescriptionId}
+            data-testid="delete-node-dialog"
+            className="w-full max-w-md rounded-xl border border-danger-200 bg-white p-5 text-left shadow-2xl"
+          >
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-danger-50 text-danger-500">
+                <Trash2 size={19} />
+              </span>
+              <div className="min-w-0">
+                <h2
+                  id={deleteDialogTitleId}
+                  className="text-lg font-extrabold text-neutral-900"
+                >
+                  {copy.workspace.deleteNodePrompt}
+                </h2>
+                <p
+                  id={deleteDialogDescriptionId}
+                  className="mt-2 text-sm font-semibold leading-6 text-neutral-700"
+                >
+                  {copy.workspace.deleteNodeBody(node.title, deleteDescendantCount)}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                ref={deleteCancelButtonRef}
+                type="button"
+                onClick={() => setIsDeleteDialogOpen(false)}
+                data-testid="cancel-delete-node-button"
+                className="inline-flex min-h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-extrabold text-neutral-700 transition hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-brand-200"
+              >
+                {copy.common.cancel}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteNode}
+                data-testid="confirm-delete-node-button"
+                className="inline-flex min-h-10 items-center justify-center rounded-md bg-danger-500 px-4 text-sm font-extrabold text-white transition hover:bg-danger-600 focus:outline-none focus:ring-2 focus:ring-danger-200"
+              >
+                {copy.common.delete}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       <div className="node-detail-header-region relative min-h-0 shrink-0 overflow-hidden border-b border-neutral-200 pb-3 sm:pb-4">
         <section className="node-detail-header min-h-0 space-y-3 overflow-y-auto">
           <div className="flex items-start justify-between gap-3">
@@ -1032,7 +1116,7 @@ export function NodeDetailPanel({
                   <button
                     type="button"
                     disabled={isCreating}
-                    onClick={() => onDeleteNode(node.id)}
+                    onClick={() => setIsDeleteDialogOpen(true)}
                     aria-label={copy.workspace.deleteNode}
                     data-testid="delete-node-button"
                     data-highlighted={headerHighlight.getDataHighlighted("delete", {

@@ -352,6 +352,137 @@ describe("useBranchMindStore node deletion", () => {
   });
 });
 
+describe("useBranchMindStore node title updates", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    const localStorage = new MemoryStorage();
+    vi.stubGlobal("window", {
+      localStorage,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    });
+    vi.stubGlobal("document", {
+      addEventListener: vi.fn(),
+      visibilityState: "visible",
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function makeTitleUpdateFetchMock(
+    project: Project,
+    capturePatchResolve: (resolve: (response: Response) => void) => void,
+  ) {
+    const rootId = project.rootNodeId;
+    return vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === "/api/projects" && !init?.method) {
+        return Promise.resolve(Response.json({ projects: [project] }));
+      }
+      if (url === `/api/projects/${project.id}/nodes/${rootId}` && init?.method === "PATCH") {
+        return new Promise<Response>((resolve) => {
+          capturePatchResolve(resolve);
+        });
+      }
+      return Promise.reject(new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`));
+    });
+  }
+
+  it("keeps a manually renamed project title when the root node title changes", async () => {
+    const project = makeRegenerateProject();
+    const rootId = project.rootNodeId;
+    const serverProject: Project = {
+      ...project,
+      nodes: {
+        ...project.nodes,
+        [rootId]: {
+          ...project.nodes[rootId],
+          title: "Renamed root",
+          titleManuallyEdited: true,
+        },
+      },
+    };
+    let resolvePatch: (response: Response) => void = () => {};
+    const fetchMock = makeTitleUpdateFetchMock(project, (resolve) => {
+      resolvePatch = resolve;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+    useBranchMindStore.getState().selectProject(project.id);
+
+    const update = useBranchMindStore.getState().updateNodeTitle(rootId, "Renamed root");
+
+    const optimisticProject = useBranchMindStore
+      .getState()
+      .projects.find((item) => item.id === project.id);
+    expect(optimisticProject?.title).toBe("Regenerate test project");
+    expect(optimisticProject?.nodes[rootId].title).toBe("Renamed root");
+
+    resolvePatch(Response.json({ project: serverProject }));
+    await expect(update).resolves.toBe(true);
+
+    const savedProject = useBranchMindStore
+      .getState()
+      .projects.find((item) => item.id === project.id);
+    expect(savedProject?.title).toBe("Regenerate test project");
+    expect(savedProject?.nodes[rootId].title).toBe("Renamed root");
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/projects/${project.id}/nodes/${rootId}`,
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ title: "Renamed root" }),
+      }),
+    );
+  });
+
+  it("syncs the project title while it matches the previous root title", async () => {
+    const project: Project = { ...makeRegenerateProject(), title: "Root" };
+    const rootId = project.rootNodeId;
+    const serverProject: Project = {
+      ...project,
+      title: "Renamed root",
+      nodes: {
+        ...project.nodes,
+        [rootId]: {
+          ...project.nodes[rootId],
+          title: "Renamed root",
+          titleManuallyEdited: true,
+        },
+      },
+    };
+    let resolvePatch: (response: Response) => void = () => {};
+    const fetchMock = makeTitleUpdateFetchMock(project, (resolve) => {
+      resolvePatch = resolve;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+    useBranchMindStore.getState().selectProject(project.id);
+
+    const update = useBranchMindStore.getState().updateNodeTitle(rootId, "Renamed root");
+
+    const optimisticProject = useBranchMindStore
+      .getState()
+      .projects.find((item) => item.id === project.id);
+    expect(optimisticProject?.title).toBe("Renamed root");
+    expect(optimisticProject?.nodes[rootId].title).toBe("Renamed root");
+
+    resolvePatch(Response.json({ project: serverProject }));
+    await expect(update).resolves.toBe(true);
+
+    const savedProject = useBranchMindStore
+      .getState()
+      .projects.find((item) => item.id === project.id);
+    expect(savedProject?.title).toBe("Renamed root");
+    expect(savedProject?.nodes[rootId].title).toBe("Renamed root");
+  });
+});
+
 describe("useBranchMindStore node collapse", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -538,7 +669,8 @@ describe("useBranchMindStore regenerate", () => {
     expect(started).toBe(true);
 
     const draft = useBranchMindStore.getState().projects[0];
-    expect(draft.title).toBe("Edited second prompt");
+    // The project title was renamed manually, so the optimistic draft keeps it.
+    expect(draft.title).toBe("Regenerate test project");
     expect(
       draft.nodes[project.rootNodeId].messages.map((message) => message.content),
     ).toEqual(["First prompt", "First answer", "Edited second prompt", ""]);

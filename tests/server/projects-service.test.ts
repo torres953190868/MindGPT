@@ -568,7 +568,32 @@ describe("updateNodeForOwner", () => {
     updateNodePositionForOwnerMock.mockResolvedValue(null);
   });
 
-  it("manually updates root node titles and syncs the project title", async () => {
+  it("keeps a renamed project title when the root node title changes", async () => {
+    const result = await updateNodeForOwner(
+      "owner_regenerate",
+      "project_regenerate",
+      "node_regenerate",
+      { title: "  Manual root title  " },
+    );
+
+    expect(result.title).toBe("Regenerate project");
+    expect(result.nodes.node_regenerate).toMatchObject({
+      title: "Manual root title",
+      titleManuallyEdited: true,
+    });
+    expect(saveProjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerSessionId: "owner_regenerate",
+        title: "Regenerate project",
+      }),
+    );
+  });
+
+  it("syncs the project title when it still matches the previous root title", async () => {
+    readProjectsMock.mockResolvedValue([
+      { ...makeProject(), title: "Regenerate node" },
+    ]);
+
     const result = await updateNodeForOwner(
       "owner_regenerate",
       "project_regenerate",
