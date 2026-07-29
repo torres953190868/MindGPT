@@ -77,8 +77,11 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
     }
   }, [project, quickBranchNodeId]);
 
+  // Only an in-flight sync should render the node as still generating. A
+  // failed sync surfaces the retry banner instead; treating it as blocking
+  // would leave the thinking timer running forever.
   const isProjectSyncBlocking =
-    pendingProjectSync !== null && pendingProjectSync.status !== "synced";
+    pendingProjectSync !== null && pendingProjectSync.status === "syncing";
   const pendingSyncNodeId = isProjectSyncBlocking ? pendingProjectSync.nodeId : null;
   const effectiveCreatingNodeId = creatingNodeId ?? pendingSyncNodeId;
   const effectiveStreamingNodeId = streamingNodeId ?? pendingSyncNodeId;

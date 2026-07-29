@@ -304,6 +304,18 @@ function getChildOrder(project: Project, node: MindNode) {
   return index >= 0 ? index : 0;
 }
 
+/**
+ * PostgREST returns timestamptz values in its own ISO variant
+ * ("2026-07-28T16:19:23.52+00:00") while clients generate timestamps with
+ * Date.prototype.toISOString() ("2026-07-28T16:19:23.520Z"). Normalize
+ * database timestamps to the canonical JS ISO format so string comparisons
+ * (e.g. optimistic-concurrency checks) behave consistently across backends.
+ */
+function normalizeRowTimestamp(value: string) {
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? value : new Date(parsed).toISOString();
+}
+
 export function composeProjectsFromRows(
   projectRows: ProjectRow[],
   nodeRows: NodeRow[],
@@ -313,17 +325,18 @@ export function composeProjectsFromRows(
 
   for (const messageRow of messageRows) {
     const messages = messagesByNode.get(messageRow.node_id) ?? [];
+    const createdAt = normalizeRowTimestamp(messageRow.created_at);
     messages.push({
       id: messageRow.id,
       role: messageRow.role,
       content: messageRow.content,
       attachments: normalizeChatAttachments((messageRow as Partial<MessageRow>).attachments, {
-        fallbackCreatedAt: messageRow.created_at,
+        fallbackCreatedAt: createdAt,
       }),
       citations: normalizeChatCitations(
         (messageRow as Partial<MessageRow> & { citations?: unknown }).citations,
       ),
-      createdAt: messageRow.created_at,
+      createdAt,
     });
     messagesByNode.set(messageRow.node_id, messages);
   }
@@ -362,8 +375,8 @@ export function composeProjectsFromRows(
         position: { x: nodeRow.position_x, y: nodeRow.position_y },
         branchType: nodeRow.branch_type,
         collapsed: nodeRow.collapsed,
-        createdAt: nodeRow.created_at,
-        updatedAt: nodeRow.updated_at,
+        createdAt: normalizeRowTimestamp(nodeRow.created_at),
+        updatedAt: normalizeRowTimestamp(nodeRow.updated_at),
       };
     }
 
@@ -379,8 +392,8 @@ export function composeProjectsFromRows(
       notes: projectRow.notes ?? "",
       rootNodeId: projectRow.root_node_id,
       nodes,
-      createdAt: projectRow.created_at,
-      updatedAt: projectRow.updated_at,
+      createdAt: normalizeRowTimestamp(projectRow.created_at),
+      updatedAt: normalizeRowTimestamp(projectRow.updated_at),
     };
   });
 }

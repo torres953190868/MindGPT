@@ -433,6 +433,17 @@ export async function populateBlankNodeForOwner(
   };
 }
 
+function isSameTimestamp(left: string, right: string) {
+  if (left === right) return true;
+
+  // Timestamps may arrive in different ISO 8601 variants (e.g. a client-held
+  // value from an in-memory DTO vs. a database round-trip). Compare the
+  // instants they represent instead of the raw strings.
+  const leftMs = Date.parse(left);
+  const rightMs = Date.parse(right);
+  return !Number.isNaN(leftMs) && !Number.isNaN(rightMs) && leftMs === rightMs;
+}
+
 export async function regenerateNodeForOwner(
   ownerId: string,
   projectId: string,
@@ -445,7 +456,7 @@ export async function regenerateNodeForOwner(
 
   if (
     update.expectedNodeUpdatedAt &&
-    node.updatedAt !== update.expectedNodeUpdatedAt
+    !isSameTimestamp(node.updatedAt, update.expectedNodeUpdatedAt)
   ) {
     throw new HttpError(
       "This conversation was updated in another window. Reload and try again.",

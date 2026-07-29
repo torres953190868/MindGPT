@@ -193,6 +193,13 @@ class ApiRequestError extends Error {
 }
 
 function getErrorMessage(error: unknown) {
+  if (
+    error instanceof ApiRequestError &&
+    (error.code === "AUTH_REQUIRED" ||
+      error.message === "You need to sign in to do that.")
+  ) {
+    return getStoredLanguageCopy().auth.authRequired;
+  }
   return error instanceof Error ? error.message : "Request failed.";
 }
 
@@ -231,7 +238,7 @@ function isNodeConflictError(error: unknown) {
   return candidate?.status === 409 || candidate?.code === "NODE_CONFLICT";
 }
 
-function getNodeConflictErrorMessage() {
+function getStoredLanguageCopy() {
   let storedLanguage: string | null = null;
   try {
     storedLanguage =
@@ -242,8 +249,11 @@ function getNodeConflictErrorMessage() {
     storedLanguage = null;
   }
 
-  return LANGUAGE_COPY[getBranchMindLanguage(storedLanguage)].workspace
-    .regenerateConflict;
+  return LANGUAGE_COPY[getBranchMindLanguage(storedLanguage)];
+}
+
+function getNodeConflictErrorMessage() {
+  return getStoredLanguageCopy().workspace.regenerateConflict;
 }
 
 type RegenerateRollback = {

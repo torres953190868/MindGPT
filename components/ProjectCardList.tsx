@@ -823,11 +823,11 @@ export function ProjectCardList() {
                         <div
                           className="flex shrink-0 items-center gap-1"
                           role="group"
-                          aria-label={`${project.title} actions`}
+                          aria-label={copy.projects.projectActions(project.title)}
                         >
                           <Link
                             href={`/workspace/${project.id}`}
-                            aria-label={`Open ${project.title}`}
+                            aria-label={copy.projects.openProject(project.title)}
                             data-project-id={project.id}
                             data-testid="open-project-link"
                             className="grid h-9 w-9 place-items-center rounded-md text-neutral-700 transition hover:bg-success-50 hover:text-success-700 focus:outline-none focus:ring-2 focus:ring-success-200"
@@ -837,7 +837,7 @@ export function ProjectCardList() {
                           <button
                             type="button"
                             onClick={() => downloadProjectJson(project)}
-                            aria-label={`Export ${project.title} as JSON`}
+                            aria-label={copy.projects.exportProjectJson(project.title)}
                             data-project-id={project.id}
                             data-testid="export-project-json-button"
                             className="grid h-9 w-9 place-items-center rounded-md text-neutral-700 transition hover:bg-brand-50 hover:text-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-200"
@@ -880,16 +880,16 @@ export function ProjectCardList() {
                   <thead className="border-b border-neutral-200 bg-neutral-50 text-xs font-extrabold uppercase tracking-wide text-neutral-700">
                     <tr>
                       <th scope="col" className="px-4 py-3">
-                        Name
+                        {copy.projects.tableName}
                       </th>
                       <th scope="col" className="w-28 px-4 py-3">
-                        Nodes
+                        {copy.projects.tableNodes}
                       </th>
                       <th scope="col" className="w-48 px-4 py-3">
-                        Updated
+                        {copy.projects.tableUpdated}
                       </th>
                       <th scope="col" className="w-40 px-4 py-3 text-right">
-                        Actions
+                        {copy.projects.tableActions}
                       </th>
                     </tr>
                   </thead>
@@ -906,7 +906,7 @@ export function ProjectCardList() {
                           key={project.id}
                           role="link"
                           tabIndex={0}
-                          aria-label={`Open ${project.title}`}
+                          aria-label={copy.projects.openProject(project.title)}
                           onClick={(event) => handleProjectRowClick(event, project.id)}
                           onKeyDown={(event) => handleProjectRowKeyDown(event, project.id)}
                           data-project-id={project.id}
@@ -1022,11 +1022,11 @@ export function ProjectCardList() {
                             <div
                               className="flex items-center justify-end gap-1"
                               role="group"
-                              aria-label={`${project.title} actions`}
+                              aria-label={copy.projects.projectActions(project.title)}
                             >
                               <Link
                                 href={`/workspace/${project.id}`}
-                                aria-label={`Open ${project.title}`}
+                                aria-label={copy.projects.openProject(project.title)}
                                 data-project-row-action="true"
                                 data-project-id={project.id}
                                 data-testid="open-project-link"
@@ -1037,7 +1037,7 @@ export function ProjectCardList() {
                               <button
                                 type="button"
                                 onClick={() => downloadProjectJson(project)}
-                                aria-label={`Export ${project.title} as JSON`}
+                                aria-label={copy.projects.exportProjectJson(project.title)}
                                 data-project-row-action="true"
                                 data-project-id={project.id}
                                 data-testid="export-project-json-button"

@@ -404,6 +404,28 @@ describe("regenerateNodeForOwner", () => {
     expect(saveProjectMock).toHaveBeenCalled();
   });
 
+  it("accepts an expected version in an equivalent timestamp format", async () => {
+    // Clients may hold the in-memory ISO variant ("...00.000Z") while the
+    // stored value round-tripped through PostgREST ("...00+00:00"), or vice
+    // versa. Both describe the same instant and must not conflict.
+    const result = await regenerateNodeForOwner(
+      "owner_regenerate",
+      "project_regenerate",
+      "node_regenerate",
+      {
+        assistantMessageId: "assistant_b",
+        expectedNodeUpdatedAt: "2026-01-01T00:00:00+00:00",
+        reply,
+      },
+    );
+
+    expect(result.node.messages.at(-1)).toMatchObject({
+      id: "assistant_b",
+      content: "Regenerated answer",
+    });
+    expect(saveProjectMock).toHaveBeenCalled();
+  });
+
   it("rejects regeneration when the node changed during generation", async () => {
     await expect(
       regenerateNodeForOwner(

@@ -39,10 +39,16 @@ function SettingsCard({
 export default function AccountSettingsPage() {
   const { copy } = useLanguage();
   const setAccountCache = useAuthStore((state) => state.setAccountCache);
-  const [account, setAccount] = useState<AccountDto | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [account, setAccount] = useState<AccountDto | null>(
+    () => useAuthStore.getState().account,
+  );
+  const [loading, setLoading] = useState(
+    () => useAuthStore.getState().account === null,
+  );
   const [savingName, setSavingName] = useState(false);
-  const [displayName, setDisplayName] = useState("");
+  const [displayName, setDisplayName] = useState(
+    () => useAuthStore.getState().account?.displayName ?? "",
+  );
   const [nameMessage, setNameMessage] = useState<string | null>(null);
 
   const [newPassword, setNewPassword] = useState("");
@@ -51,7 +57,6 @@ export default function AccountSettingsPage() {
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
 
   const loadAccount = useCallback(async () => {
-    setLoading(true);
     try {
       const res = await fetch("/api/account");
       const data = (await res.json().catch(() => null)) as AccountDto | null;

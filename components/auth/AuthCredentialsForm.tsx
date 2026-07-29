@@ -24,8 +24,18 @@ export type AuthApiResult = {
   ok?: boolean;
   next?: string;
   url?: string;
-  error?: string | { message?: string };
+  error?: string | { code?: string; message?: string };
 };
+
+class AuthApiError extends Error {
+  code: string | null;
+
+  constructor(message: string, code: string | null) {
+    super(message);
+    this.name = "AuthApiError";
+    this.code = code;
+  }
+}
 
 type AuthCredentialsFormProps = {
   mode: AuthMode;
@@ -40,13 +50,16 @@ type AuthCredentialsFormProps = {
 function getApiError(data: unknown, fallback: string) {
   if (data && typeof data === "object") {
     const error = (data as AuthApiResult).error;
-    if (typeof error === "string") return error;
+    if (typeof error === "string") return new AuthApiError(error, null);
     if (error && typeof error === "object" && typeof error.message === "string") {
-      return error.message;
+      return new AuthApiError(
+        error.message,
+        typeof error.code === "string" ? error.code : null,
+      );
     }
   }
 
-  return fallback;
+  return new AuthApiError(fallback, null);
 }
 
 async function postJson(
@@ -60,7 +73,7 @@ async function postJson(
     body: JSON.stringify(body),
   });
   const data = (await response.json().catch(() => null)) as AuthApiResult | null;
-  if (!response.ok) throw new Error(getApiError(data, fallbackError));
+  if (!response.ok) throw getApiError(data, fallbackError);
   return data ?? {};
 }
 
@@ -126,6 +139,15 @@ export function AuthCredentialsForm({
 
   const alternateMode: Extract<AuthMode, "sign-in" | "sign-up"> =
     mode === "sign-up" ? "sign-in" : "sign-up";
+
+  function getLocalizedAuthError(authError: unknown, fallback: string) {
+    if (authError instanceof AuthApiError) {
+      if (authError.code === "SIGN_IN_FAILED") return copy.auth.signInFailed;
+      if (authError.code === "ACCOUNT_NAME_TAKEN") return copy.auth.accountNameTaken;
+      if (authError.code === "SIGN_UP_FAILED") return copy.auth.signUpFailed;
+    }
+    return authError instanceof Error ? authError.message : fallback;
+  }
   const alternateHref = useMemo(() => {
     const params = new URLSearchParams({ next: nextPath });
     return mode === "sign-up"
@@ -228,7 +250,7 @@ export function AuthCredentialsForm({
       setConfirmPassword("");
       await onSuccess(result);
     } catch (authError) {
-      setError(authError instanceof Error ? authError.message : copy.auth.authFailed);
+      setError(getLocalizedAuthError(authError, copy.auth.authFailed));
     } finally {
       setIsSubmitting(false);
     }

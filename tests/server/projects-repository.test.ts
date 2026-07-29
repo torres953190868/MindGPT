@@ -135,6 +135,49 @@ describe("projects repository row mapping", () => {
       project.nodes[project.rootNodeId].messages[1].citations,
     );
   });
+
+  it("normalizes PostgREST timestamptz strings to canonical ISO format", () => {
+    const project = makeProject();
+    const { projectRow, nodeRows, messageRows } = projectToRows(project);
+    // PostgREST renders timestamptz without zero-padded fractions and with a
+    // numeric offset, e.g. "2026-01-01T00:00:00+00:00".
+    const postgrestTimestamp = "2026-01-01T00:00:00+00:00";
+
+    const [composed] = composeProjectsFromRows(
+      [{
+        ...projectRow,
+        notes: projectRow.notes ?? "",
+        created_at: postgrestTimestamp,
+        updated_at: postgrestTimestamp,
+      }],
+      nodeRows.map((nodeRow) => ({
+        ...nodeRow,
+        parent_id: nodeRow.parent_id ?? null,
+        title_manually_edited: nodeRow.title_manually_edited ?? false,
+        summary: nodeRow.summary ?? "",
+        position_x: nodeRow.position_x ?? 0,
+        position_y: nodeRow.position_y ?? 0,
+        collapsed: nodeRow.collapsed ?? false,
+        child_order: nodeRow.child_order ?? 0,
+        created_at: postgrestTimestamp,
+        updated_at: postgrestTimestamp,
+      })),
+      messageRows.map((messageRow) => ({
+        ...messageRow,
+        attachments: messageRow.attachments ?? [],
+        citations: messageRow.citations ?? [],
+        sort_order: messageRow.sort_order ?? 0,
+        created_at: postgrestTimestamp,
+      })),
+    );
+
+    expect(composed.createdAt).toBe(timestamp);
+    expect(composed.updatedAt).toBe(timestamp);
+    const rootNode = composed.nodes[composed.rootNodeId];
+    expect(rootNode.createdAt).toBe(timestamp);
+    expect(rootNode.updatedAt).toBe(timestamp);
+    expect(rootNode.messages[0].createdAt).toBe(timestamp);
+  });
 });
 
 type MockedCall = { fn: string; args: Record<string, unknown> };
