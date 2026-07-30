@@ -49,7 +49,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             </Link>
             <h1 className="text-2xl font-black tracking-normal text-[#25222b] sm:text-3xl">BranchMind Admin</h1>
             <p className="mt-1.5 text-sm font-semibold text-[#7b717f]">
-              Models, routing, and user-reported bugs.
+              Users, analytics, models, routing, and user-reported bugs.
             </p>
           </div>
           <div className="inline-flex w-fit items-center gap-2 rounded-full border border-[#d6e4dc] bg-[#edf3ef] px-3.5 py-2 text-xs font-black text-[#2f6651] shadow-[0_8px_24px_rgba(35,31,26,0.05)]">

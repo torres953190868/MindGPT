@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bug, Gauge, Settings2 } from "lucide-react";
+import { Bug, ChartColumn, Gauge, Settings2, Users } from "lucide-react";
 
 const navItems = [
   { href: "/admin", label: "Overview", shortLabel: "Home", icon: Gauge },
+  { href: "/admin/users", label: "Users", shortLabel: "Users", icon: Users },
+  { href: "/admin/analytics", label: "Analytics", shortLabel: "Stats", icon: ChartColumn },
   { href: "/admin/models", label: "Models", shortLabel: "Models", icon: Settings2 },
   { href: "/admin/bugs", label: "Bug reports", shortLabel: "Bugs", icon: Bug },
 ];
@@ -15,7 +17,7 @@ export function AdminNav() {
 
   return (
     <nav aria-label="Admin" className="w-full lg:w-60 lg:shrink-0">
-      <div className="grid grid-cols-3 gap-1 rounded-lg border border-[#e4ddd4] bg-[#fffdf9]/90 p-1 shadow-[0_10px_30px_rgba(35,31,26,0.06)] lg:sticky lg:top-8 lg:block lg:space-y-1 lg:p-1.5">
+      <div className="grid grid-cols-5 gap-1 rounded-lg border border-[#e4ddd4] bg-[#fffdf9]/90 p-1 shadow-[0_10px_30px_rgba(35,31,26,0.06)] lg:sticky lg:top-8 lg:block lg:space-y-1 lg:p-1.5">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
 

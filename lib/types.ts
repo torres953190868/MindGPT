@@ -129,6 +129,80 @@ export type AdminBugReportDto = BugReportDto & {
   updatedAt: string;
 };
 
+export type AdminUserDto = {
+  userId: string;
+  accountName: string | null;
+  email: string | null;
+  plan: "free" | "pro" | "max";
+  subscriptionStatus: string | null;
+  displayName: string | null;
+  createdAt: string;
+  lastSignInAt: string | null;
+  aiMessagesToday: number;
+  aiMessages30d: number;
+  projectCount: number;
+  documentCount: number;
+};
+
+export type AdminAnalyticsDailyPoint = {
+  date: string;
+  count: number;
+};
+
+export type AdminAnalyticsActivityDay = {
+  date: string;
+  activeUsers: number;
+  messages: number;
+};
+
+export type AdminAnalyticsTopUser = {
+  userId: string;
+  accountName: string | null;
+  messages: number;
+};
+
+export type AdminAnalyticsPlanDistribution = {
+  free: number;
+  pro: number;
+  max: number;
+};
+
+export type AdminAnalyticsBranchSplit = {
+  continueCount: number;
+  branchCount: number;
+  continueShare: number;
+  branchShare: number;
+};
+
+export type AdminAnalyticsDto = {
+  rangeDays: 7 | 30;
+  generatedAt: string;
+  totals: {
+    users: number;
+    projects: number;
+    nodes: number;
+    userMessages: number;
+    documents: number;
+  };
+  growth: {
+    signups: AdminAnalyticsDailyPoint[];
+    planDistribution: AdminAnalyticsPlanDistribution;
+    subscriptionStatusCounts: Record<string, number>;
+  };
+  activity: {
+    dau: number;
+    wau: number;
+    dailyActive: AdminAnalyticsActivityDay[];
+    topUsers: AdminAnalyticsTopUser[];
+  };
+  features: {
+    branchSplit: AdminAnalyticsBranchSplit;
+    dailyProjects: AdminAnalyticsDailyPoint[];
+    dailyNodes: AdminAnalyticsDailyPoint[];
+    dailyDocuments: AdminAnalyticsDailyPoint[];
+  };
+};
+
 export type ChatMessage = {
   id: string;
   role: ChatRole;

@@ -164,6 +164,7 @@ Copy `.env.example` to `.env.local` and fill in the providers you intend to use.
 - `app/workspace/[projectId]/page.tsx` is the main workspace.
 - Components live under `components/workspace/` and include the React Flow canvas (`MindMap.tsx`), node cards (`BranchNodeCard.tsx`), detail panel (`NodeDetailPanel.tsx`), sidebar (`WorkspaceSidebar.tsx`), and notes editor (`ProjectNotesPanel.tsx`, `ProjectNotesEditor.tsx`).
 - `components/rag/PdfReader.tsx` is the PDF reader + RAG query UI at `/reader`.
+- `components/admin/` holds the admin console UI at `/admin` (overview, users, analytics, models/routing, bug reports), guarded by `app/admin/layout.tsx`.
 - `components/theme/` and `components/language/` handle theme and language preferences via cookies + localStorage.
 
 ### Backend / API Routes
@@ -178,7 +179,7 @@ All persistence goes through API routes under `app/api/`:
 - `/api/chat` and `/api/chat/models` — chat completions and model catalog.
 - `/api/auth/*` — sign-in, sign-up, logout, session, password, Google OAuth.
 - `/api/account*` — account and usage; `/api/account` supports DELETE for account deletion.
-- `/api/admin/*` — admin summary, LLM config, bug reports.
+- `/api/admin/*` — admin summary, users (list, password reset), analytics, LLM config, bug reports.
 - `/api/bug-reports` — public bug report submission.
 - `/api/documents/*` and `/api/queues/rag-document-processing` — PDF/RAG lifecycle.
 - `/api/health` — health check for uptime probes.
