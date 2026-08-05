@@ -466,11 +466,19 @@ type PipelineContext = {
   runtimeMode: "inline" | "queued";
   accountPlan: string | null;
   stepCounter: { value: number };
+  // Blocking validation feedback from the previous pass. It is supplied to
+  // the regenerated graph so a repair is an informed correction, not merely
+  // a second attempt at the same prompt.
+  repairFeedback?: StructuredWarning[];
 };
 
 async function executePipeline(ctx: PipelineContext): Promise<CurriculumRunResult> {
   const { deps, run, emitEvent, checkpoints, resumeStage } = ctx;
   const { runService, budget } = deps;
+  // A repair may use up the source-selection budget in the first pass. Keep
+  // successfully fetched evidence available so the repaired graph cannot be
+  // rebuilt with an empty `sources` array solely because the budget is spent.
+  let repairFallbackFetchedSources: SourceCandidate[] = [];
 
   // Determine the first stage to execute. If resuming, skip completed stages.
   let startIndex = 0;
@@ -515,7 +523,11 @@ async function executePipeline(ctx: PipelineContext): Promise<CurriculumRunResul
         stageResult = await runSearchingStage(ctx);
         break;
       case "fetching_sources":
-        stageResult = await runFetchingSourcesStage(ctx, checkpoints.searching?.selectedSources ?? []);
+        stageResult = await runFetchingSourcesStage(
+          ctx,
+          checkpoints.searching?.selectedSources ?? [],
+          repairFallbackFetchedSources,
+        );
         break;
       case "extracting_concepts":
         stageResult = await runExtractingConceptsStage(ctx, checkpoints);
@@ -545,6 +557,10 @@ async function executePipeline(ctx: PipelineContext): Promise<CurriculumRunResul
           repairLoops += 1;
           deps.budget.consumeRepair();
           await emitEvent({ type: "stage_started", stage: "repairing" });
+          repairFallbackFetchedSources = checkpoints.fetching_sources?.fetchedSources ?? repairFallbackFetchedSources;
+          ctx.repairFeedback = validationStage.validation.warnings.filter(
+            (warning) => warning.severity === "blocking",
+          );
           // Clear downstream checkpoints so those stages re-run with feedback.
           for (const clearStage of DOWNSTREAM_STAGES[repairTarget]) {
             delete checkpoints[clearStage as keyof RunnerCheckpoints];
@@ -607,6 +623,14 @@ function pickRepairTarget(warnings: StructuredWarning[]): string | null {
     codes.has("PREREQUISITE_ORDER") ||
     codes.has("ORPHANED_CORE_NODE") ||
     codes.has("UNREACHABLE_CORE_NODE")
+  ) {
+    return "building_graph";
+  }
+  if (
+    codes.has("DUPLICATE_CLIENT_ID") ||
+    codes.has("DUPLICATE_NODE_TITLE") ||
+    codes.has("DUPLICATE_ORDER_INDEX") ||
+    codes.has("SCHEMA_ERROR")
   ) {
     return "building_graph";
   }
@@ -754,6 +778,7 @@ async function runSearchingStage(ctx: PipelineContext): Promise<RunnerCheckpoint
 async function runFetchingSourcesStage(
   ctx: PipelineContext,
   selectedSources: SourceCandidate[],
+  fallbackFetchedSources: SourceCandidate[] = [],
 ): Promise<RunnerCheckpoints["fetching_sources"]> {
   const { deps } = ctx;
   const { safeWebFetcher, budget } = deps;
@@ -798,6 +823,16 @@ async function runFetchingSourcesStage(
     source.fetched = true;
     source.pageContent = result.data.page.content;
     fetchedSources.push(source);
+  }
+
+  if (fetchedSources.length === 0 && fallbackFetchedSources.length > 0) {
+    return {
+      fetchedSources: fallbackFetchedSources,
+      failedFetches,
+      // Excerpts were already buffered during the original fetch; avoiding a
+      // duplicate flush also keeps source-chunk persistence idempotent.
+      bufferedExcerpts: [],
+    };
   }
 
   return { fetchedSources, failedFetches, bufferedExcerpts };
@@ -893,7 +928,7 @@ async function runBuildingGraphStage(
           content: buildSkeletonUserPrompt({
             request,
             intake,
-            concepts: extraction,
+          concepts: extraction,
             sources: fetching.fetchedSources.map((source) => ({
               id: source.id,
               title: source.title,
@@ -901,6 +936,7 @@ async function runBuildingGraphStage(
               qualityScore: source.qualityScore,
               url: source.url,
             })),
+            repairFeedback: ctx.repairFeedback,
           }),
         },
       ],
@@ -917,7 +953,14 @@ async function runBuildingGraphStage(
   const allNodes: CurriculumNode[] = [];
 
   for (const moduleSkeleton of skeletonAction.modules) {
-    const moduleNodes = await synthesizeModuleNodes(ctx, skeletonAction, moduleSkeleton, extraction, fetching.fetchedSources);
+    const moduleNodes = await synthesizeModuleNodes(
+      ctx,
+      skeletonAction,
+      moduleSkeleton,
+      extraction,
+      fetching.fetchedSources,
+      allNodes.map((node) => ({ clientId: node.clientId, title: node.title })),
+    );
     const courseModule: CurriculumModule = {
       clientId: moduleSkeleton.clientId,
       title: moduleSkeleton.title,
@@ -995,6 +1038,7 @@ async function synthesizeModuleNodes(
   moduleSkeleton: { clientId: string; title: string; description: string; orderIndex: number; required: boolean },
   extraction: ConceptExtraction,
   sources: SourceCandidate[],
+  existingNodes: Array<Pick<CurriculumNode, "clientId" | "title">>,
 ): Promise<CurriculumNode[]> {
   const { accountPlan, request } = ctx;
   const maxRetries = ctx.deps.budget.limits.maxRetriesPerStage ?? 0;
@@ -1023,6 +1067,8 @@ async function synthesizeModuleNodes(
                   qualityScore: source.qualityScore,
                   url: source.url,
                 })),
+                existingNodes,
+                repairFeedback: ctx.repairFeedback,
               }),
             },
           ],

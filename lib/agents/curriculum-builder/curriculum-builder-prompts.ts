@@ -11,6 +11,7 @@
 
 import type {
   CurriculumBuildRequest,
+  CurriculumNode,
   CurriculumSource,
   StructuredWarning,
 } from "@/lib/curriculum/curriculum-types";
@@ -242,7 +243,6 @@ export function buildSkeletonUserPrompt(input: {
         .map((warning) => `- [${warning.code}] ${warning.message}`)
         .join("\n")}\n`
     : "";
-
   return `${CURRICULUM_STAGE_MARKERS.skeleton}
 请基于已提取的知识点生成课程骨架（只输出模块级字段，不要输出节点）。
 
@@ -273,6 +273,7 @@ export function buildModuleNodesUserPrompt(input: {
   moduleClientId: string;
   concepts: ConceptExtraction;
   sources: Array<Pick<CurriculumSource, "id" | "title" | "sourceType" | "qualityScore" | "url">>;
+  existingNodes?: Array<Pick<CurriculumNode, "clientId" | "title">>;
   repairFeedback?: StructuredWarning[];
 }): string {
   const courseModule = input.skeleton.modules.find(
@@ -289,6 +290,11 @@ export function buildModuleNodesUserPrompt(input: {
         .map((warning) => `- [${warning.code}] ${warning.message}`)
         .join("\n")}\n`
     : "";
+  const existingNodes = input.existingNodes?.length
+    ? `\n【已生成的节点；不得复用其 clientId 或标题】\n${input.existingNodes
+        .map((node) => `- ${node.clientId}：${node.title}`)
+        .join("\n")}\n`
+    : "";
 
   return `${CURRICULUM_STAGE_MARKERS.moduleNodes(input.moduleClientId)}
 请为课程「${input.skeleton.title}」的模块「${courseModule?.title ?? input.moduleClientId}」生成节点。
@@ -301,6 +307,7 @@ clientId：${input.moduleClientId}
 【标准化目标】
 ${formatIntake(input.intake)}
 ${repair}
+${existingNodes}
 【候选知识点】
 ${concepts}
 
@@ -309,7 +316,7 @@ ${formatSourcesDigest(input.sources)}
 
 要求：
 - 只输出本模块的 nodes，每个节点包含 clientId / title / summary / nodeType / importance / difficulty / estimatedMinutes / learningObjectives / completionCriteria / prerequisiteClientIds / sourceIds / tags / orderIndex。
-- clientId 在整门课程内唯一；模块内 orderIndex 从 0 递增。
+- clientId 在整门课程内唯一，且必须以当前模块 clientId「${input.moduleClientId}-」开头；模块内 orderIndex 从 0 递增。
 - 每个节点必须有学习目标和完成标准；core 节点必须有至少一个 sourceId。
 - prerequisiteClientIds 引用本课程中其他节点的 clientId；前置节点必须在学习顺序上早于本节点，不得形成循环。
 - 节点粒度一致：估算时长合理（estimatedMinutes 为正整数）。`;

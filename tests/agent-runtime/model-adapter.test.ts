@@ -152,6 +152,7 @@ describe("LlmModelAdapter", () => {
     expect(body.messages[0].role).toBe("system");
     expect(body.messages[0].content).toContain("You write curricula.");
     expect(body.messages[0].content).toContain(JSON_ACTION_CONTRACT_PROMPT);
+    expect(body.messages[0].content).toContain('"properties":{"kind"');
   });
 
   it("retries invalid output with the error fed back, then succeeds", async () => {

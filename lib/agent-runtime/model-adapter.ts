@@ -112,10 +112,15 @@ function delay(ms: number) {
 }
 
 function buildMessages<T>(request: AgentModelActionRequest<T>) {
+  // The business prompt names the required fields, but some providers still
+  // return a convenient-looking JSON shape (for example an array of query
+  // strings) unless they receive the exact structure. Supplying the derived
+  // JSON Schema makes the runtime validator's contract visible to the model.
+  const actionSchema = JSON.stringify(z.toJSONSchema(request.actionSchema));
   return [
     {
       role: "system",
-      content: `${request.systemPrompt.trim()}\n\n${JSON_ACTION_CONTRACT_PROMPT}`,
+      content: `${request.systemPrompt.trim()}\n\n${JSON_ACTION_CONTRACT_PROMPT}\nRequired JSON Schema:\n${actionSchema}`,
     },
     ...request.contextMessages,
   ];
