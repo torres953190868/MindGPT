@@ -77,6 +77,17 @@ describe("createRun", () => {
     expect(first.run.status).toBe("queued");
     expect(first.run.userId).toBe(OWNER);
     expect(first.run.budget).toEqual(CURRICULUM_AGENT_BUDGET);
+    expect(first.run.usage).toEqual({
+      agentSteps: 0,
+      searchQueries: 0,
+      fetchedPages: 0,
+      repairLoops: 0,
+      sources: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      runtimeMs: 0,
+    });
     expect(first.run.startedAt).toBeTruthy();
 
     // A client retry with the same key replays the existing run instead of

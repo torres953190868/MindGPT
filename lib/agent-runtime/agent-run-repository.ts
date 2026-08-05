@@ -252,6 +252,20 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function createInitialRunUsage(): AgentRunUsage {
+  return {
+    agentSteps: 0,
+    searchQueries: 0,
+    fetchedPages: 0,
+    repairLoops: 0,
+    sources: 0,
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    runtimeMs: 0,
+  };
+}
+
 function normalizeRunOutput(value: unknown): AgentRunOutput | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const candidate = value as Partial<AgentRunOutput>;
@@ -286,7 +300,7 @@ function buildRunRow(input: CreateAgentRunRecord, timestamp: string): AgentRunRo
     input_json: input.input ?? {},
     output_json: { checkpoints: {} },
     budget_json: input.budget,
-    usage_json: null,
+    usage_json: createInitialRunUsage(),
     error_code: null,
     error_message: null,
     started_at: timestamp,
@@ -810,7 +824,7 @@ class SupabaseAgentRunRepository implements AgentRunRepository {
       input_json: toJson(row.input_json),
       output_json: null,
       budget_json: toJson(row.budget_json),
-      usage_json: null,
+      usage_json: toJson(row.usage_json),
     };
     const { data, error } = await getSupabaseAdminClient()
       .from("agent_runs")
