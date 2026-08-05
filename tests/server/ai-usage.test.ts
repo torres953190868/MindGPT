@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpError } from "@/lib/server/http";
 
@@ -17,6 +20,7 @@ vi.mock("@/lib/server/account-plan", () => ({
 import {
   getTodayAiMessageUsage,
   incrementDailyAiMessageUsage,
+  incrementDailyAgentUsage,
   listDailyAiMessageUsage,
   trackDailyAiMessageUsage,
 } from "@/lib/server/ai-usage";
@@ -67,6 +71,8 @@ describe("daily AI usage tracking", () => {
 
   afterEach(() => {
     warnSpy.mockRestore();
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
   });
 
   describe("trackDailyAiMessageUsage", () => {
@@ -286,6 +292,28 @@ describe("daily AI usage tracking", () => {
         listDailyAiMessageUsage("user_test", "2026-06-29"),
       ).resolves.toEqual([]);
       expect(getSupabaseAdminClientMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("incrementDailyAgentUsage", () => {
+    it("accumulates file-backed agent tokens and runs for a mocked day", async () => {
+      const dataDir = await mkdtemp(path.join(tmpdir(), "branchmind-ai-usage-"));
+      vi.stubEnv("BRANCHMIND_AI_USAGE_BACKEND", "file");
+      vi.stubEnv("BRANCHMIND_AI_USAGE_DATA_DIR", dataDir);
+      vi.useFakeTimers({ now: new Date("2026-07-29T12:00:00.000Z") });
+
+      await Promise.all([
+        incrementDailyAgentUsage({ userId: "user_test", tokens: 192, runsCount: 1 }),
+        incrementDailyAgentUsage({ userId: "user_test", tokens: 64, runsCount: 1 }),
+      ]);
+
+      await expect(listDailyAiMessageUsage("user_test", "2026-07-29")).resolves.toEqual([{
+        date: "2026-07-29",
+        messageCount: 0,
+        agentTokensTotal: 256,
+        agentRunsCount: 2,
+      }]);
+      await rm(dataDir, { recursive: true, force: true });
     });
   });
 });

@@ -239,12 +239,13 @@ export async function getWorkspaceDocumentContextsForOwner(
         documentId,
         fileName: document.fileName,
         title: document.title,
-        snippets: retrieved.map(({ chunk }) => ({
-          chunkId: chunk.id,
-          pageStart: chunk.pageStart,
-          pageEnd: chunk.pageEnd,
-          headingPath: chunk.headingPath,
-          content: compactText(chunk.content, MAX_WORKSPACE_SNIPPET_LENGTH),
+        snippets: retrieved.map((item) => ({
+          chunkId: item.chunk.id,
+          pageStart: item.chunk.pageStart,
+          pageEnd: item.chunk.pageEnd,
+          headingPath: item.chunk.headingPath,
+          content: compactText(item.chunk.content, MAX_WORKSPACE_SNIPPET_LENGTH),
+          score: item.score,
         })),
       };
     }),

@@ -41,6 +41,11 @@ const TASK_LABELS: Record<LlmRouteTask, string> = {
   node_generation: "Node generation",
   branch_chat: "Branch chat",
   pdf_qa: "PDF Q&A",
+  curriculum_research: "Curriculum research",
+  curriculum_synthesis: "Curriculum synthesis",
+  curriculum_validation: "Curriculum validation",
+  tutor_chat: "Tutor chat",
+  tutor_assessment: "Tutor assessment",
 };
 
 const emptyProviderForm: ProviderForm = {

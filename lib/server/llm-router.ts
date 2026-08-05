@@ -29,6 +29,11 @@ export const LLM_ROUTE_TASKS: LlmRouteTask[] = [
   "node_generation",
   "branch_chat",
   "pdf_qa",
+  "curriculum_research",
+  "curriculum_synthesis",
+  "curriculum_validation",
+  "tutor_chat",
+  "tutor_assessment",
 ];
 
 export type LlmRuntimeProvider = LlmProviderConfig & {
@@ -191,6 +196,47 @@ function getStaticRoutes(): LlmRouteConfig[] {
       task: "pdf_qa",
       defaultProviderId: pdfProviderId,
       defaultModel: getStaticProviderDefaultModel(pdfProviderId, process.env.LLM_MODEL),
+      fallbackProviderId,
+      fallbackModel: getStaticProviderDefaultModel(fallbackProviderId),
+    },
+    // Dual-agent tasks (spec §13): first version routes everything through
+    // the default AI provider with the existing fallback rules. Admins can
+    // later split these onto dedicated models via the Supabase route table.
+    {
+      task: "curriculum_research",
+      defaultProviderId: chatProviderId,
+      defaultModel: getStaticProviderDefaultModel(chatProviderId),
+      fallbackProviderId,
+      fallbackModel: getStaticProviderDefaultModel(fallbackProviderId),
+    },
+    {
+      task: "curriculum_synthesis",
+      defaultProviderId: chatProviderId,
+      defaultModel: getStaticProviderDefaultModel(chatProviderId),
+      fallbackProviderId,
+      fallbackModel: getStaticProviderDefaultModel(fallbackProviderId),
+    },
+    {
+      // Production may configure a different (ideally independent) model for
+      // cross-review of generated curricula; the first version does not
+      // require a separate provider.
+      task: "curriculum_validation",
+      defaultProviderId: chatProviderId,
+      defaultModel: getStaticProviderDefaultModel(chatProviderId),
+      fallbackProviderId,
+      fallbackModel: getStaticProviderDefaultModel(fallbackProviderId),
+    },
+    {
+      task: "tutor_chat",
+      defaultProviderId: chatProviderId,
+      defaultModel: getStaticProviderDefaultModel(chatProviderId),
+      fallbackProviderId,
+      fallbackModel: getStaticProviderDefaultModel(fallbackProviderId),
+    },
+    {
+      task: "tutor_assessment",
+      defaultProviderId: chatProviderId,
+      defaultModel: getStaticProviderDefaultModel(chatProviderId),
       fallbackProviderId,
       fallbackModel: getStaticProviderDefaultModel(fallbackProviderId),
     },

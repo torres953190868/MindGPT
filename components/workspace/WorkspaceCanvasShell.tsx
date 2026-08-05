@@ -141,6 +141,7 @@ type WorkspaceCanvasShellProps = {
   projectNotesConfig?: ProjectNotesConfig;
   canvasIntro?: ReactNode;
   mobileNavigationMode?: "tabs" | "drawers";
+  showCurriculumLink?: boolean;
 };
 
 type SidePanelResizeBoundsOptions = {
@@ -333,6 +334,7 @@ export function WorkspaceCanvasShell({
   projectNotesConfig,
   canvasIntro,
   mobileNavigationMode = "tabs",
+  showCurriculumLink = false,
 }: WorkspaceCanvasShellProps) {
   const { copy } = useLanguage();
   const workspaceGridRef = useRef<HTMLDivElement | null>(null);
@@ -1093,6 +1095,7 @@ export function WorkspaceCanvasShell({
               selectedNodeId={selectedNodeId}
               onSelectNode={handleSelectNodeFromOutline}
               onCollapse={handleCloseWorkspaceSidebar}
+              showCurriculumLink={showCurriculumLink}
             />
           </div>
         )}

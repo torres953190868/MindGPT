@@ -41,9 +41,12 @@ The product also includes a selectable-text PDF reader and a RAG (retrieval-augm
 app/              # Next.js App Router pages and API routes
 components/       # React components, grouped by feature
 lib/              # Shared business logic and server helpers
+  agent-runtime/  # Dual-agent runtime: model adapter, run service + dual-backend repository, budget, errors, stream events
   client/         # Browser-side helpers (API client, streaming, pending sync)
   server/         # Server-only modules (auth, projects, AI, RAG, rate limit, validation)
   server/rag/     # PDF/RAG pipeline modules
+  research/       # Research layer (dual-agent refactor): web search provider abstraction (mock/Tavily/disabled), SSRF-safe web fetcher (mock/HTTP), source normalizer + quality scoring, SourceContentService for curriculum source chunks
+  curriculum/     # Curriculum domain model: draft schemas, graph + validation services, dual-backend repository + service
   supabase/       # Supabase browser/server clients and generated DB types
 store/            # Zustand stores
 tests/            # Vitest tests (mirrors lib/ structure)
@@ -182,6 +185,7 @@ All persistence goes through API routes under `app/api/`:
 - `/api/admin/*` — admin summary, users (list, password reset), analytics, LLM config, bug reports.
 - `/api/bug-reports` — public bug report submission.
 - `/api/documents/*` and `/api/queues/rag-document-processing` — PDF/RAG lifecycle.
+- `/api/curricula*` — curriculum CRUD, draft versions, and publish (all gated behind `ENABLE_CURRICULUM_AGENT`, 404 when off).
 - `/api/health` — health check for uptime probes.
 
 ### Server Abstractions

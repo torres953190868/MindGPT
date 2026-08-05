@@ -24,6 +24,9 @@ export default defineConfig({
       ]
     : [["list"], ["html", { open: "never", outputFolder: "playwright-report" }]],
   outputDir: "test-results",
+  // The dev server cold-compiles routes on first hit in full runs, so the
+  // default 5s expect timeout is too tight.
+  expect: { timeout: 15_000 },
   use: {
     baseURL,
     launchOptions: {
@@ -53,6 +56,9 @@ export default defineConfig({
           BRANCHMIND_PROJECTS_BACKEND:
             process.env.BRANCHMIND_PROJECTS_BACKEND ?? "file",
           BRANCHMIND_RAG_BACKEND: process.env.BRANCHMIND_RAG_BACKEND ?? "file",
+          BRANCHMIND_CURRICULUM_BACKEND: process.env.BRANCHMIND_CURRICULUM_BACKEND ?? "file",
+          ENABLE_CURRICULUM_AGENT: process.env.ENABLE_CURRICULUM_AGENT ?? "true",
+          ENABLE_TUTOR_AGENT: process.env.ENABLE_TUTOR_AGENT ?? "true",
           DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY ?? "playwright-mock-key",
           DEEPSEEK_MOCK_STREAM_DELAY_MS:
             process.env.DEEPSEEK_MOCK_STREAM_DELAY_MS ?? "500",

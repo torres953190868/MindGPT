@@ -1,4 +1,20 @@
 import type { BranchType, BugReportStatus, ChatRole, LlmRouteTask } from "@/lib/types";
+import type {
+  AgentRunStatus,
+  AgentStepType,
+  AgentType,
+} from "@/lib/agent-runtime/agent-run-types";
+import type {
+  CurriculumEdgeType,
+  CurriculumExerciseType,
+  CurriculumImportance,
+  CurriculumNodeType,
+  CurriculumSourceType,
+  CurriculumStatus,
+  CurriculumSupportType,
+  CurriculumVersionStatus,
+} from "@/lib/curriculum/curriculum-types";
+import type { LearningAssessmentType } from "@/lib/learning/learning-types";
 
 export type Json =
   | string
@@ -488,18 +504,24 @@ export type Database = {
           user_id: string;
           usage_date: string;
           message_count: number;
+          agent_tokens_total: number;
+          agent_runs_count: number;
           updated_at: string;
         };
         Insert: {
           user_id: string;
           usage_date?: string;
           message_count?: number;
+          agent_tokens_total?: number;
+          agent_runs_count?: number;
           updated_at?: string;
         };
         Update: {
           user_id?: string;
           usage_date?: string;
           message_count?: number;
+          agent_tokens_total?: number;
+          agent_runs_count?: number;
           updated_at?: string;
         };
         Relationships: [
@@ -749,12 +771,893 @@ export type Database = {
           },
         ];
       };
+      curricula: {
+        Row: {
+          id: string;
+          owner_user_id: string;
+          project_id: string | null;
+          title: string;
+          subject: string;
+          learning_goal: string;
+          status: CurriculumStatus;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          owner_user_id: string;
+          project_id?: string | null;
+          title: string;
+          subject: string;
+          learning_goal: string;
+          status?: CurriculumStatus;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          owner_user_id?: string;
+          project_id?: string | null;
+          title?: string;
+          subject?: string;
+          learning_goal?: string;
+          status?: CurriculumStatus;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      curriculum_versions: {
+        Row: {
+          id: string;
+          curriculum_id: string;
+          agent_run_id: string | null;
+          version_number: number;
+          version_label: string;
+          status: CurriculumVersionStatus;
+          audience: string;
+          assumptions_json: Json;
+          exclusions_json: Json;
+          conflicts_json: Json;
+          estimated_weeks: number | null;
+          estimated_hours: number | null;
+          build_request_json: Json | null;
+          validation_json: Json | null;
+          created_by: string | null;
+          created_at: string;
+          published_at: string | null;
+        };
+        Insert: {
+          id: string;
+          curriculum_id: string;
+          agent_run_id?: string | null;
+          version_number: number;
+          version_label: string;
+          status?: CurriculumVersionStatus;
+          audience: string;
+          assumptions_json?: Json;
+          exclusions_json?: Json;
+          conflicts_json?: Json;
+          estimated_weeks?: number | null;
+          estimated_hours?: number | null;
+          build_request_json?: Json | null;
+          validation_json?: Json | null;
+          created_by?: string | null;
+          created_at?: string;
+          published_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          curriculum_id?: string;
+          agent_run_id?: string | null;
+          version_number?: number;
+          version_label?: string;
+          status?: CurriculumVersionStatus;
+          audience?: string;
+          assumptions_json?: Json;
+          exclusions_json?: Json;
+          conflicts_json?: Json;
+          estimated_weeks?: number | null;
+          estimated_hours?: number | null;
+          build_request_json?: Json | null;
+          validation_json?: Json | null;
+          created_by?: string | null;
+          created_at?: string;
+          published_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "curriculum_versions_curriculum_id_fkey";
+            columns: ["curriculum_id"];
+            referencedRelation: "curricula";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      curriculum_modules: {
+        Row: {
+          id: string;
+          curriculum_version_id: string;
+          title: string;
+          description: string;
+          order_index: number;
+          required: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          curriculum_version_id: string;
+          title: string;
+          description?: string;
+          order_index?: number;
+          required?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          curriculum_version_id?: string;
+          title?: string;
+          description?: string;
+          order_index?: number;
+          required?: boolean;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "curriculum_modules_curriculum_version_id_fkey";
+            columns: ["curriculum_version_id"];
+            referencedRelation: "curriculum_versions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      curriculum_nodes: {
+        Row: {
+          id: string;
+          curriculum_version_id: string;
+          module_id: string;
+          title: string;
+          summary: string;
+          node_type: CurriculumNodeType;
+          importance: CurriculumImportance;
+          difficulty: number;
+          estimated_minutes: number;
+          learning_objectives_json: Json;
+          completion_criteria_json: Json;
+          tags_json: Json;
+          order_index: number;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          curriculum_version_id: string;
+          module_id: string;
+          title: string;
+          summary?: string;
+          node_type: CurriculumNodeType;
+          importance: CurriculumImportance;
+          difficulty: number;
+          estimated_minutes: number;
+          learning_objectives_json?: Json;
+          completion_criteria_json?: Json;
+          tags_json?: Json;
+          order_index?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          curriculum_version_id?: string;
+          module_id?: string;
+          title?: string;
+          summary?: string;
+          node_type?: CurriculumNodeType;
+          importance?: CurriculumImportance;
+          difficulty?: number;
+          estimated_minutes?: number;
+          learning_objectives_json?: Json;
+          completion_criteria_json?: Json;
+          tags_json?: Json;
+          order_index?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "curriculum_nodes_curriculum_version_id_fkey";
+            columns: ["curriculum_version_id"];
+            referencedRelation: "curriculum_versions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "curriculum_nodes_module_id_fkey";
+            columns: ["module_id"];
+            referencedRelation: "curriculum_modules";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      curriculum_edges: {
+        Row: {
+          id: string;
+          curriculum_version_id: string;
+          from_node_id: string;
+          to_node_id: string;
+          edge_type: CurriculumEdgeType;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          curriculum_version_id: string;
+          from_node_id: string;
+          to_node_id: string;
+          edge_type: CurriculumEdgeType;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          curriculum_version_id?: string;
+          from_node_id?: string;
+          to_node_id?: string;
+          edge_type?: CurriculumEdgeType;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "curriculum_edges_curriculum_version_id_fkey";
+            columns: ["curriculum_version_id"];
+            referencedRelation: "curriculum_versions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "curriculum_edges_from_node_id_fkey";
+            columns: ["from_node_id"];
+            referencedRelation: "curriculum_nodes";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "curriculum_edges_to_node_id_fkey";
+            columns: ["to_node_id"];
+            referencedRelation: "curriculum_nodes";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      curriculum_sources: {
+        Row: {
+          id: string;
+          curriculum_version_id: string;
+          url: string;
+          canonical_url: string;
+          title: string;
+          publisher: string | null;
+          source_type: CurriculumSourceType;
+          retrieved_at: string;
+          published_at: string | null;
+          quality_score: number;
+          content_hash: string | null;
+          metadata_json: Json;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          curriculum_version_id: string;
+          url: string;
+          canonical_url: string;
+          title: string;
+          publisher?: string | null;
+          source_type: CurriculumSourceType;
+          retrieved_at: string;
+          published_at?: string | null;
+          quality_score: number;
+          content_hash?: string | null;
+          metadata_json?: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          curriculum_version_id?: string;
+          url?: string;
+          canonical_url?: string;
+          title?: string;
+          publisher?: string | null;
+          source_type?: CurriculumSourceType;
+          retrieved_at?: string;
+          published_at?: string | null;
+          quality_score?: number;
+          content_hash?: string | null;
+          metadata_json?: Json;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "curriculum_sources_curriculum_version_id_fkey";
+            columns: ["curriculum_version_id"];
+            referencedRelation: "curriculum_versions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      curriculum_node_sources: {
+        Row: {
+          node_id: string;
+          source_id: string;
+          support_type: CurriculumSupportType;
+          note: string | null;
+          created_at: string;
+        };
+        Insert: {
+          node_id: string;
+          source_id: string;
+          support_type?: CurriculumSupportType;
+          note?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          node_id?: string;
+          source_id?: string;
+          support_type?: CurriculumSupportType;
+          note?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "curriculum_node_sources_node_id_fkey";
+            columns: ["node_id"];
+            referencedRelation: "curriculum_nodes";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "curriculum_node_sources_source_id_fkey";
+            columns: ["source_id"];
+            referencedRelation: "curriculum_sources";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      curriculum_exercises: {
+        Row: {
+          id: string;
+          curriculum_version_id: string;
+          node_id: string;
+          exercise_type: CurriculumExerciseType;
+          prompt_json: Json;
+          rubric_json: Json;
+          answer_json: Json | null;
+          order_index: number;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          curriculum_version_id: string;
+          node_id: string;
+          exercise_type: CurriculumExerciseType;
+          prompt_json?: Json;
+          rubric_json?: Json;
+          answer_json?: Json | null;
+          order_index?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          curriculum_version_id?: string;
+          node_id?: string;
+          exercise_type?: CurriculumExerciseType;
+          prompt_json?: Json;
+          rubric_json?: Json;
+          answer_json?: Json | null;
+          order_index?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "curriculum_exercises_curriculum_version_id_fkey";
+            columns: ["curriculum_version_id"];
+            referencedRelation: "curriculum_versions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "curriculum_exercises_node_id_fkey";
+            columns: ["node_id"];
+            referencedRelation: "curriculum_nodes";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      curriculum_source_chunks: {
+        Row: {
+          id: string;
+          source_id: string;
+          chunk_index: number;
+          excerpt: string;
+          embedding: number[] | string | null;
+          token_count: number;
+          content_hash: string;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          source_id: string;
+          chunk_index: number;
+          excerpt: string;
+          embedding?: number[] | null;
+          token_count: number;
+          content_hash: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          source_id?: string;
+          chunk_index?: number;
+          excerpt?: string;
+          embedding?: number[] | null;
+          token_count?: number;
+          content_hash?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "curriculum_source_chunks_source_id_fkey";
+            columns: ["source_id"];
+            referencedRelation: "curriculum_sources";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      agent_runs: {
+        Row: {
+          id: string;
+          agent_type: AgentType;
+          user_id: string;
+          project_id: string | null;
+          curriculum_id: string | null;
+          curriculum_version_id: string | null;
+          enrollment_id: string | null;
+          idempotency_key: string;
+          status: AgentRunStatus;
+          current_stage: string | null;
+          resume_from_stage: string | null;
+          model_provider: string | null;
+          model_id: string | null;
+          input_json: Json;
+          output_json: Json | null;
+          budget_json: Json;
+          usage_json: Json | null;
+          error_code: string | null;
+          error_message: string | null;
+          started_at: string;
+          finished_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          agent_type: AgentType;
+          user_id: string;
+          project_id?: string | null;
+          curriculum_id?: string | null;
+          curriculum_version_id?: string | null;
+          enrollment_id?: string | null;
+          idempotency_key: string;
+          status?: AgentRunStatus;
+          current_stage?: string | null;
+          resume_from_stage?: string | null;
+          model_provider?: string | null;
+          model_id?: string | null;
+          input_json?: Json;
+          output_json?: Json | null;
+          budget_json?: Json;
+          usage_json?: Json | null;
+          error_code?: string | null;
+          error_message?: string | null;
+          started_at?: string;
+          finished_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          agent_type?: AgentType;
+          user_id?: string;
+          project_id?: string | null;
+          curriculum_id?: string | null;
+          curriculum_version_id?: string | null;
+          enrollment_id?: string | null;
+          idempotency_key?: string;
+          status?: AgentRunStatus;
+          current_stage?: string | null;
+          resume_from_stage?: string | null;
+          model_provider?: string | null;
+          model_id?: string | null;
+          input_json?: Json;
+          output_json?: Json | null;
+          budget_json?: Json;
+          usage_json?: Json | null;
+          error_code?: string | null;
+          error_message?: string | null;
+          started_at?: string;
+          finished_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "agent_runs_curriculum_id_fkey";
+            columns: ["curriculum_id"];
+            referencedRelation: "curricula";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "agent_runs_curriculum_version_id_fkey";
+            columns: ["curriculum_version_id"];
+            referencedRelation: "curriculum_versions";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      agent_steps: {
+        Row: {
+          id: string;
+          run_id: string;
+          step_number: number;
+          stage: string;
+          step_type: AgentStepType;
+          tool_name: string | null;
+          input_json: Json;
+          output_json: Json | null;
+          status: string;
+          duration_ms: number;
+          usage_json: Json | null;
+          error_json: Json | null;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          run_id: string;
+          step_number: number;
+          stage: string;
+          step_type: AgentStepType;
+          tool_name?: string | null;
+          input_json?: Json;
+          output_json?: Json | null;
+          status: string;
+          duration_ms?: number;
+          usage_json?: Json | null;
+          error_json?: Json | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          run_id?: string;
+          step_number?: number;
+          stage?: string;
+          step_type?: AgentStepType;
+          tool_name?: string | null;
+          input_json?: Json;
+          output_json?: Json | null;
+          status?: string;
+          duration_ms?: number;
+          usage_json?: Json | null;
+          error_json?: Json | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "agent_steps_run_id_fkey";
+            columns: ["run_id"];
+            referencedRelation: "agent_runs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      agent_run_events: {
+        Row: {
+          id: string;
+          run_id: string;
+          seq: number;
+          event_json: Json;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          run_id: string;
+          seq: number;
+          event_json: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          run_id?: string;
+          seq?: number;
+          event_json?: Json;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "agent_run_events_run_id_fkey";
+            columns: ["run_id"];
+            referencedRelation: "agent_runs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      learning_enrollments: {
+        Row: {
+          id: string;
+          user_id: string;
+          curriculum_id: string;
+          curriculum_version_id: string;
+          status: "active" | "completed" | "paused";
+          current_node_id: string | null;
+          started_at: string;
+          completed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          user_id: string;
+          curriculum_id: string;
+          curriculum_version_id: string;
+          status?: "active" | "completed" | "paused";
+          current_node_id?: string | null;
+          started_at?: string;
+          completed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          curriculum_id?: string;
+          curriculum_version_id?: string;
+          status?: "active" | "completed" | "paused";
+          current_node_id?: string | null;
+          started_at?: string;
+          completed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      learning_node_progress: {
+        Row: {
+          id: string;
+          enrollment_id: string;
+          node_id: string;
+          status: "locked" | "available" | "in_progress" | "needs_review" | "completed";
+          mastery_score: number;
+          attempt_count: number;
+          last_evidence_json: Json | null;
+          last_assessed_at: string | null;
+          next_review_at: string | null;
+          started_at: string | null;
+          completed_at: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          enrollment_id: string;
+          node_id: string;
+          status?: "locked" | "available" | "in_progress" | "needs_review" | "completed";
+          mastery_score?: number;
+          attempt_count?: number;
+          last_evidence_json?: Json | null;
+          last_assessed_at?: string | null;
+          next_review_at?: string | null;
+          started_at?: string | null;
+          completed_at?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          enrollment_id?: string;
+          node_id?: string;
+          status?: "locked" | "available" | "in_progress" | "needs_review" | "completed";
+          mastery_score?: number;
+          attempt_count?: number;
+          last_evidence_json?: Json | null;
+          last_assessed_at?: string | null;
+          next_review_at?: string | null;
+          started_at?: string | null;
+          completed_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      learning_sessions: {
+        Row: {
+          id: string;
+          enrollment_id: string;
+          node_id: string | null;
+          skill_id: string | null;
+          status: "active" | "ended" | "abandoned";
+          started_at: string;
+          ended_at: string | null;
+          summary: string;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          enrollment_id: string;
+          node_id?: string | null;
+          skill_id?: string | null;
+          status?: "active" | "ended" | "abandoned";
+          started_at?: string;
+          ended_at?: string | null;
+          summary?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          enrollment_id?: string;
+          node_id?: string | null;
+          skill_id?: string | null;
+          status?: "active" | "ended" | "abandoned";
+          started_at?: string;
+          ended_at?: string | null;
+          summary?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      learning_messages: {
+        Row: {
+          id: string;
+          session_id: string;
+          enrollment_id: string;
+          role: "user" | "assistant" | "system_event";
+          blocks_json: Json;
+          agent_run_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          session_id: string;
+          enrollment_id: string;
+          role: "user" | "assistant" | "system_event";
+          blocks_json?: Json;
+          agent_run_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          session_id?: string;
+          enrollment_id?: string;
+          role?: "user" | "assistant" | "system_event";
+          blocks_json?: Json;
+          agent_run_id?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      learning_assessments: {
+        Row: {
+          id: string;
+          session_id: string;
+          enrollment_id: string;
+          node_id: string;
+          exercise_id: string | null;
+          assessment_type: LearningAssessmentType;
+          prompt_json: Json;
+          answer_json: Json | null;
+          rubric_json: Json;
+          score: number;
+          evidence_json: Json;
+          answer_hash: string;
+          agent_run_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          session_id: string;
+          enrollment_id: string;
+          node_id: string;
+          exercise_id?: string | null;
+          assessment_type: LearningAssessmentType;
+          prompt_json?: Json;
+          answer_json?: Json | null;
+          rubric_json?: Json;
+          score: number;
+          evidence_json?: Json;
+          answer_hash: string;
+          agent_run_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          session_id?: string;
+          enrollment_id?: string;
+          node_id?: string;
+          exercise_id?: string | null;
+          assessment_type?: LearningAssessmentType;
+          prompt_json?: Json;
+          answer_json?: Json;
+          rubric_json?: Json;
+          score?: number;
+          evidence_json?: Json;
+          answer_hash?: string;
+          agent_run_id?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      idempotency_keys: {
+        Row: {
+          id: string;
+          user_id: string;
+          endpoint: string;
+          key: string;
+          response_json: Json | null;
+          status_code: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          user_id: string;
+          endpoint: string;
+          key: string;
+          response_json?: Json | null;
+          status_code?: number | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          endpoint?: string;
+          key?: string;
+          response_json?: Json | null;
+          status_code?: number | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      security_events: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          run_id: string | null;
+          rule: string;
+          domain: string | null;
+          content_hash: string;
+          metadata_json: Json;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          user_id?: string | null;
+          run_id?: string | null;
+          rule: string;
+          domain?: string | null;
+          content_hash: string;
+          metadata_json?: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string | null;
+          run_id?: string | null;
+          rule?: string;
+          domain?: string | null;
+          content_hash?: string;
+          metadata_json?: Json;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
       increment_daily_ai_usage: {
         Args: { p_user_id: string };
         Returns: number;
+      };
+      increment_daily_agent_usage: {
+        Args: { p_user_id: string; p_tokens: number; p_runs_count: number };
+        Returns: undefined;
+      };
+      allocate_curriculum_version_number: {
+        Args: { p_curriculum_id: string };
+        Returns: number;
+      };
+      publish_curriculum_version: {
+        Args: { p_curriculum_id: string; p_version_id: string };
+        Returns: undefined;
       };
     };
     Enums: Record<string, never>;

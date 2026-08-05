@@ -36,6 +36,9 @@ export type ChatDocumentContext = {
     pageEnd: number;
     headingPath: string[];
     content: string;
+    // Retrieval score (vector + keyword), present when produced by the
+    // server-side retrieval pipeline; optional for client-built fixtures.
+    score?: number;
   }>;
 };
 
@@ -63,7 +66,17 @@ export type ChatSkill = {
   version: string;
 };
 
-export type LlmRouteTask = "node_generation" | "branch_chat" | "pdf_qa";
+export type LlmRouteTask =
+  | "node_generation"
+  | "branch_chat"
+  | "pdf_qa"
+  // Dual-agent learning system tasks (spec §13); first version routes all of
+  // them through the default AI provider + existing fallback rules.
+  | "curriculum_research"
+  | "curriculum_synthesis"
+  | "curriculum_validation"
+  | "tutor_chat"
+  | "tutor_assessment";
 
 export type LlmProviderConfig = {
   providerId: string;
