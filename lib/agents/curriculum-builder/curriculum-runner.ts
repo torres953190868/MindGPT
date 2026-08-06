@@ -30,6 +30,7 @@ import {
   createRun,
   finishRun,
   getRun,
+  invalidateCheckpoints,
   isRunCancelled,
   listRunEvents,
   listRunSteps,
@@ -72,6 +73,7 @@ import {
 } from "@/lib/agents/curriculum-builder/tools/get-existing-curriculum-tool";
 import { executeWebSearchTool } from "@/lib/agents/curriculum-builder/tools/web-search-tool";
 import {
+  CURRICULUM_LIMITS,
   type CurriculumBuildRequest,
   type CurriculumDraft,
   type CurriculumModule,
@@ -141,6 +143,7 @@ export type CurriculumRunService = {
   startRun: typeof startRun;
   completeStep: typeof completeStep;
   checkpointStage: typeof checkpointStage;
+  invalidateCheckpoints: typeof invalidateCheckpoints;
   finishRun: typeof finishRun;
   appendEvent: typeof appendEvent;
   isRunCancelled: typeof isRunCancelled;
@@ -173,6 +176,7 @@ export type CurriculumRunnerOptions = {
   initialEventSeq?: number;
   initialStepNumber?: number;
   accountPlan?: string | null;
+  initialRepairLoops?: number;
   /** Queue workers stop after a checkpoint and publish a fresh continuation. */
   maxStagesPerInvocation?: number;
 };
@@ -278,6 +282,7 @@ export async function runCurriculumBuilder(
   let checkpoints: RunnerCheckpoints = {};
   let initialSeq = options.initialEventSeq ?? 0;
   let stepNumber = options.initialStepNumber ?? 1;
+  let initialRepairLoops = options.initialRepairLoops ?? 0;
 
   if (options.runId) {
     const existing = await runService.getRun(options.ownerId, options.runId);
@@ -297,6 +302,9 @@ export async function runCurriculumBuilder(
     if (options.initialEventSeq === undefined) {
       const events = await runService.listRunEvents(run.id);
       initialSeq = events.reduce((max, event) => Math.max(max, event.seq), 0);
+      initialRepairLoops = events.filter(
+        (event) => event.event.type === "stage_started" && event.event.stage === "repairing",
+      ).length;
     }
     if (options.initialStepNumber === undefined) {
       const steps = await runService.listRunSteps(run.id);
@@ -342,6 +350,7 @@ export async function runCurriculumBuilder(
       emitEvent,
       runtimeMode: options.runtimeMode ?? "inline",
       accountPlan: options.accountPlan ?? null,
+      initialRepairLoops,
       stepCounter: { value: stepNumber },
       maxStagesPerInvocation: options.maxStagesPerInvocation,
     });
@@ -441,6 +450,7 @@ function buildDefaultRunService(): CurriculumRunService {
     startRun,
     completeStep,
     checkpointStage,
+    invalidateCheckpoints,
     finishRun,
     appendEvent,
     isRunCancelled,
@@ -467,6 +477,7 @@ type PipelineContext = {
   emitEvent: (eventInput: CurriculumStreamEventInput) => Promise<void>;
   runtimeMode: "inline" | "queued";
   accountPlan: string | null;
+  initialRepairLoops: number;
   stepCounter: { value: number };
   // Blocking validation feedback from the previous pass. It is supplied to
   // the regenerated graph so a repair is an informed correction, not merely
@@ -490,7 +501,7 @@ async function executePipeline(ctx: PipelineContext): Promise<CurriculumRunResul
     if (idx >= 0) startIndex = idx;
   }
 
-  let repairLoops = 0;
+  let repairLoops = ctx.initialRepairLoops;
   let i = startIndex;
   let completedStages = 0;
 
@@ -506,10 +517,24 @@ async function executePipeline(ctx: PipelineContext): Promise<CurriculumRunResul
       });
     }
 
-    // Skip if already checkpointed and not in a repair loop.
-    if (checkpoints[stage as keyof RunnerCheckpoints] && repairLoops === 0) {
+    // Skip completed stages when resuming, except a failed validation. A
+    // validation checkpoint with `valid: false` is repair feedback, never a
+    // completed result; queued workers must re-run it after rebuilding the
+    // graph rather than proceeding to saving_draft with the stale failure.
+    const existingCheckpoint = checkpoints[stage as keyof RunnerCheckpoints];
+    const isFailedValidation =
+      stage === "validating" &&
+      Boolean(
+        existingCheckpoint &&
+          !(existingCheckpoint as { validation?: CurriculumValidationResult }).validation?.valid,
+      );
+    if (existingCheckpoint && repairLoops === 0 && !isFailedValidation) {
       i += 1;
       continue;
+    }
+    if (isFailedValidation) {
+      delete checkpoints.validating;
+      await runService.invalidateCheckpoints(run.id, ["validating", "saving_draft"]);
     }
 
     budget.assertWithinRuntime(ctx.runtimeMode);
@@ -570,6 +595,7 @@ async function executePipeline(ctx: PipelineContext): Promise<CurriculumRunResul
           for (const clearStage of DOWNSTREAM_STAGES[repairTarget]) {
             delete checkpoints[clearStage as keyof RunnerCheckpoints];
           }
+          await runService.invalidateCheckpoints(run.id, DOWNSTREAM_STAGES[repairTarget]);
           const targetIndex = STAGE_ORDER.indexOf(repairTarget as CurriculumRunStage);
           if (targetIndex >= 0) {
             i = targetIndex;
@@ -959,6 +985,17 @@ async function runBuildingGraphStage(
     "building_graph",
   );
 
+  // A very short learning budget cannot support a sprawling outline. Keeping
+  // it to two modules also keeps a queued graph-building invocation bounded:
+  // each module requires a separate structured model call.
+  const requestedHours = (request.constraints?.durationWeeks ?? 0) * (request.constraints?.hoursPerWeek ?? 0);
+  if (requestedHours > 0 && requestedHours <= 8 && skeletonAction.modules.length > 2) {
+    skeletonAction.modules = skeletonAction.modules.slice(0, 2).map((courseModule, orderIndex) => ({
+      ...courseModule,
+      orderIndex,
+    }));
+  }
+
   // 2. Synthesize nodes per module with bounded retries per module.
   const modules: CurriculumModule[] = [];
   const nodeByClientId = new Map<string, CurriculumNode>();
@@ -1008,6 +1045,13 @@ async function runBuildingGraphStage(
 
   // 5. Resolve orderIndex globally if missing or duplicate.
   normalizeNodeOrder(allNodes, modules);
+  // A node title is part of the reader-facing curriculum outline, but the
+  // deterministic validator also requires it to be unique across modules.
+  // Models commonly reuse generic labels such as "示例" or "练习" while
+  // generating modules independently. Namespace only colliding labels with
+  // their module title before validation so they remain meaningful to readers
+  // without turning an otherwise valid graph into a failed run.
+  normalizeDuplicateNodeTitles(modules);
 
   const draft: CurriculumDraft = {
     title: skeletonAction.title,
@@ -1112,6 +1156,39 @@ function normalizeNodeOrder(allNodes: CurriculumNode[], modules: CurriculumModul
       globalIndex += 1;
     }
   }
+}
+
+function normalizeDuplicateNodeTitles(modules: CurriculumModule[]): void {
+  const occurrences = new Map<string, number>();
+  for (const courseModule of modules) {
+    for (const node of courseModule.nodes) {
+      occurrences.set(node.title, (occurrences.get(node.title) ?? 0) + 1);
+    }
+  }
+
+  const usedTitles = new Set<string>();
+  for (const courseModule of modules) {
+    for (const node of courseModule.nodes) {
+      if ((occurrences.get(node.title) ?? 0) < 2) {
+        usedTitles.add(node.title);
+        continue;
+      }
+
+      const baseTitle = `${courseModule.title}：${node.title}`;
+      let suffix = 1;
+      let candidate = truncateTitle(baseTitle, "");
+      while (usedTitles.has(candidate)) {
+        suffix += 1;
+        candidate = truncateTitle(baseTitle, ` (${suffix})`);
+      }
+      node.title = candidate;
+      usedTitles.add(candidate);
+    }
+  }
+}
+
+function truncateTitle(baseTitle: string, suffix: string): string {
+  return `${baseTitle.slice(0, CURRICULUM_LIMITS.maxTitleLength - suffix.length)}${suffix}`;
 }
 
 async function runValidatingStage(

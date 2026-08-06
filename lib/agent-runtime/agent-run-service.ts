@@ -107,6 +107,15 @@ export async function checkpointStage(
   return run;
 }
 
+// Removes stale stage artifacts before a repair loop. This is durable so a
+// queued worker that resumes in a later invocation cannot mistake an invalid
+// validation checkpoint for a completed stage.
+export async function invalidateCheckpoints(runId: string, stages: string[]): Promise<AgentRunDto> {
+  const run = await getAgentRunRepository().invalidateCheckpoints(runId, stages);
+  if (!run) runNotFound(runId);
+  return run;
+}
+
 // Terminal transition (any non-terminal -> succeeded/failed/cancelled). A
 // re-finish with the same terminal status replays the run (covers the
 // cancel-API vs runner safe-point race); a different terminal status is 409.

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ProjectCardList } from "@/components/ProjectCardList";
+import { isCurriculumAgentEnabled } from "@/lib/server/feature-flags";
 
 export const metadata: Metadata = {
   title: "Projects",
@@ -13,7 +14,7 @@ export default function ProjectsPage() {
       data-testid="projects-page"
       className="branchmind-projects-surface min-h-[100svh] p-2 text-neutral-900 sm:p-3 lg:p-4"
     >
-      <ProjectCardList />
+      <ProjectCardList showCurriculumLink={isCurriculumAgentEnabled()} />
     </main>
   );
 }

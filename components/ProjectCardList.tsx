@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Brain,
+  BookOpen,
   ChevronDown,
   Check,
   Clock3,
@@ -51,7 +52,7 @@ function getProjectUpdatedTime(updatedAt: string) {
   return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
 }
 
-export function ProjectCardList() {
+export function ProjectCardList({ showCurriculumLink = false }: { showCurriculumLink?: boolean }) {
   const { copy, language } = useLanguage();
   const projectDateFormatter = useMemo(() => createProjectDateFormatter(language), [language]);
   const router = useRouter();
@@ -442,6 +443,16 @@ export function ProjectCardList() {
             <Folder size={16} />
             {copy.common.projects}
           </Link>
+          {showCurriculumLink && (
+            <Link
+              href="/curricula"
+              data-testid="projects-navigation-curricula-link"
+              className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
+            >
+              <BookOpen size={16} />
+              {copy.common.curricula}
+            </Link>
+          )}
           <button
             type="button"
             onClick={openRecentProject}

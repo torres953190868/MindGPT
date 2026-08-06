@@ -162,6 +162,7 @@ export type AgentRunRepository = {
     artifacts: unknown,
     completedAt: string,
   ) => Promise<AgentRunDto | null>;
+  invalidateCheckpoints: (runId: string, stages: string[]) => Promise<AgentRunDto | null>;
   appendEvent: (event: CurriculumStreamEvent) => Promise<AppendEventResult>;
   listEventsAfter: (runId: string, afterSeq: number) => Promise<AgentRunEventDto[]>;
   countRunsByUserAndTypeSince: (
@@ -599,6 +600,17 @@ const fileRepository: AgentRunRepository = {
     });
   },
 
+  invalidateCheckpoints: async (runId, stages) => {
+    return mutateAgentRunData((data) => {
+      const row = findRun(data, runId);
+      if (!row) return null;
+      const output = row.output_json ?? { checkpoints: {} };
+      for (const stage of stages) delete output.checkpoints[stage];
+      row.output_json = output;
+      return toAgentRunDto(row);
+    });
+  },
+
   appendEvent: async (event) => {
     return mutateAgentRunData((data): AppendEventResult => {
       const row = findRun(data, event.runId);
@@ -705,7 +717,17 @@ function normalizeRowTimestamp(value: string) {
 }
 
 function toJson(value: unknown): Json {
-  return value as Json;
+  // Web-page text can contain malformed UTF-16 (usually a lone surrogate
+  // copied from a remote document). PostgREST rejects that as an unsupported
+  // Unicode escape while writing jsonb, so normalize it at the persistence
+  // boundary rather than losing an entire agent checkpoint.
+  return JSON.parse(
+    JSON.stringify(value, (_key, item: unknown) =>
+      typeof item === "string"
+        ? item.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD")
+        : item,
+    ),
+  ) as Json;
 }
 
 function fromJsonObject(value: Json): Record<string, unknown> {
@@ -1066,6 +1088,27 @@ class SupabaseAgentRunRepository implements AgentRunRepository {
       .select()
       .maybeSingle();
     assertNoError(error, "checkpoint agent run");
+    return data ? toAgentRunDto(fromDbRunRow(data)) : null;
+  }
+
+  async invalidateCheckpoints(runId: string, stages: string[]) {
+    const current = await this.readRunById(runId);
+    if (!current) return null;
+    const checkpoints = { ...(current.output_json?.checkpoints ?? {}) };
+    for (const stage of stages) delete checkpoints[stage];
+    const output: AgentRunOutput = {
+      checkpoints,
+      ...(current.output_json?.result !== undefined
+        ? { result: current.output_json.result }
+        : {}),
+    };
+    const { data, error } = await getSupabaseAdminClient()
+      .from("agent_runs")
+      .update({ output_json: toJson(output) })
+      .eq("id", runId)
+      .select()
+      .maybeSingle();
+    assertNoError(error, "invalidate agent run checkpoints");
     return data ? toAgentRunDto(fromDbRunRow(data)) : null;
   }
 

@@ -281,6 +281,41 @@ describe("CurriculumBuilderAgent runner", () => {
     expect(events.some((event) => event.type === "stage_started" && event.stage === "repairing")).toBe(true);
   });
 
+  it("namespaces colliding node titles before deterministic validation", async () => {
+    const curriculum = await createCurriculumForOwner(ownerId, {
+      title: "标题去重",
+      learningGoal: "验证跨模块同名节点",
+    });
+    const request = buildRequest("标题去重");
+    const script = buildMockCurriculumScript(request);
+    const firstNodeAction = findScriptEntry(script, (action) =>
+      Array.isArray(action.nodes) && action.nodes.some((node) => (node as { clientId?: string }).clientId === "n-1-1"),
+    ).action as { nodes: Array<{ clientId?: string; title: string }> };
+    const duplicateTitle = firstNodeAction.nodes.find((node) => node.clientId === "n-1-1")!.title;
+    const secondNodeAction = findScriptEntry(script, (action) =>
+      Array.isArray(action.nodes) && action.nodes.some((node) => (node as { clientId?: string }).clientId === "n-2-1"),
+    ).action as { nodes: Array<{ clientId?: string; title: string }> };
+    secondNodeAction.nodes = secondNodeAction.nodes.map((node) =>
+      node.clientId === "n-2-1" ? { ...node, title: duplicateTitle } : node,
+    );
+
+    const events: CurriculumStreamEvent[] = [];
+    const result = await runCurriculumBuilder({
+      ownerId,
+      curriculumId: curriculum.id,
+      request,
+      idempotencyKey: `gen-title-dedupe-${Date.now()}`,
+      emit: (event) => events.push(event),
+      deps: { modelAdapter: new MockModelAdapter(script) },
+    });
+
+    expect(result.status).toBe("succeeded");
+    expect(events.some((event) => event.type === "stage_started" && event.stage === "repairing")).toBe(false);
+    const version = await getVersionForOwner(ownerId, curriculum.id, result.curriculumVersionId!);
+    const titles = version.draft.modules.flatMap((module) => module.nodes.map((node) => node.title));
+    expect(new Set(titles).size).toBe(titles.length);
+  });
+
   it("fails when the step budget is exhausted and keeps checkpoints", async () => {
     const curriculum = await createCurriculumForOwner(ownerId, {
       title: "预算测试",

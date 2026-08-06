@@ -11,16 +11,16 @@ async function createAndPublishCurriculum(
   await page.goto("/curricula");
   await expect(page.getByTestId("curriculum-list-page")).toBeVisible();
 
-  await page.getByLabel(/课程名称|curriculum title/i).fill(input.title);
+  await page.getByTestId("open-curriculum-create-button").click();
+  await expect(page).toHaveURL(/\/curricula\/new$/);
+
+  await page.getByLabel(/主题|subject/i).fill(input.subject);
   await page.getByLabel(/学习目标|learning goal/i).fill(input.goal);
-  await page.getByRole("button", { name: /创建|create/i }).click();
-  await expect(page).toHaveURL(/\/curricula\/[^/]+$/);
+  await page.getByTestId("curriculum-generate-button").click();
+  await expect(page).toHaveURL(/\/curricula\/(?!new$)[^/]+$/);
 
   const curriculumId = new URL(page.url()).pathname.split("/").pop();
   if (!curriculumId) throw new Error("Curriculum id missing from URL.");
-  await page.getByLabel(/主题|subject/i).last().fill(input.subject);
-  await page.getByLabel(/学习目标|learning goal/i).last().fill(input.goal);
-  await page.getByTestId("curriculum-generate-button").click();
   await expect(page.getByTestId("curriculum-version-preview")).toContainText(/版本|version/i, { timeout: 90_000 });
 
   await page.getByRole("button", { name: /发布|publish/i }).first().click();
@@ -45,16 +45,15 @@ test.describe("curriculum agent flow", () => {
     await page.goto("/curricula");
     await expect(page.getByTestId("curriculum-list-page")).toBeVisible();
 
-    await page.getByLabel(/课程名称|curriculum title/i).fill("E2E Testing Curriculum");
-    await page.getByLabel(/学习目标|learning goal/i).fill("Understand reliable automated testing.");
-    await page.getByRole("button", { name: /创建|create/i }).click();
-    await expect(page).toHaveURL(/\/curricula\/[^/]+$/);
+    await page.getByTestId("open-curriculum-create-button").click();
+    await expect(page).toHaveURL(/\/curricula\/new$/);
+    await page.getByLabel(/主题|subject/i).fill("Software Testing");
+    await page.getByLabel(/学习目标|learning goal/i).fill("Explain and apply unit testing.");
+    await page.getByTestId("curriculum-generate-button").click();
+    await expect(page).toHaveURL(/\/curricula\/(?!new$)[^/]+$/);
 
     const curriculumId = new URL(page.url()).pathname.split("/").pop();
     if (!curriculumId) throw new Error("Curriculum id missing from URL.");
-    await page.getByLabel(/主题|subject/i).last().fill("Software Testing");
-    await page.getByLabel(/学习目标|learning goal/i).last().fill("Explain and apply unit testing.");
-    await page.getByTestId("curriculum-generate-button").click();
     await expect(page.getByTestId("curriculum-version-preview")).toContainText(/版本|version/i, { timeout: 90_000 });
 
     const publishButton = page.getByRole("button", { name: /发布|publish/i }).first();

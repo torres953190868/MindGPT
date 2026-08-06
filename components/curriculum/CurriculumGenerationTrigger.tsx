@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Sparkles } from "lucide-react";
 import { useLanguage } from "@/components/language/LanguageProvider";
 import { useCurriculumGenerationStore } from "@/store/useCurriculumGenerationStore";
+import { createCurriculum } from "@/lib/client/curriculum-api";
 import type { CurriculumBuildRequest } from "@/lib/curriculum/curriculum-types";
 import {
   getCurriculumGenerationQuota,
@@ -16,10 +17,11 @@ import {
 } from "./curriculum-form-helpers";
 
 export type CurriculumGenerationTriggerProps = {
-  curriculumId: string;
+  curriculumId?: string | null;
+  onCurriculumCreated?: (curriculumId: string) => void;
 };
 
-export function CurriculumGenerationTrigger({ curriculumId }: CurriculumGenerationTriggerProps) {
+export function CurriculumGenerationTrigger({ curriculumId = null, onCurriculumCreated }: CurriculumGenerationTriggerProps) {
   const { copy } = useLanguage();
   const state = useCurriculumGenerationStore();
   const reconnectIfNeeded = useCurriculumGenerationStore((store) => store.reconnectIfNeeded);
@@ -38,8 +40,11 @@ export function CurriculumGenerationTrigger({ curriculumId }: CurriculumGenerati
   const [includeProjects, setIncludeProjects] = useState(false);
   const [quota, setQuota] = useState<CurriculumGenerationQuota | null>(null);
   const [quotaError, setQuotaError] = useState(false);
+  const [creationError, setCreationError] = useState<string | null>(null);
+  const [isCreatingCurriculum, setIsCreatingCurriculum] = useState(false);
 
   useEffect(() => {
+    if (!curriculumId) return;
     void reconnectIfNeeded(curriculumId);
     return () => {
       // Intentionally not resetting the store on unmount so that background
@@ -64,6 +69,7 @@ export function CurriculumGenerationTrigger({ curriculumId }: CurriculumGenerati
   }, []);
 
   const isBusy =
+    isCreatingCurriculum ||
     state.status === "streaming" ||
     state.status === "reconnecting" ||
     state.status === "polling" ||
@@ -90,7 +96,28 @@ export function CurriculumGenerationTrigger({ curriculumId }: CurriculumGenerati
       includeProjects,
     });
 
-    await state.startGeneration(curriculumId, request);
+    setCreationError(null);
+    setIsCreatingCurriculum(true);
+
+    try {
+      let generationCurriculumId = curriculumId;
+      if (!generationCurriculumId) {
+        const result = await createCurriculum({
+          title: trimmedSubject,
+          subject: trimmedSubject,
+          learningGoal: trimmedGoal,
+        });
+        generationCurriculumId = result.curriculum.id;
+      }
+
+      const generation = state.startGeneration(generationCurriculumId, request);
+      onCurriculumCreated?.(generationCurriculumId);
+      await generation;
+    } catch (createError) {
+      setCreationError(createError instanceof Error ? createError.message : copy.curriculumList.createError);
+    } finally {
+      setIsCreatingCurriculum(false);
+    }
   }
 
   return (
@@ -259,6 +286,8 @@ export function CurriculumGenerationTrigger({ curriculumId }: CurriculumGenerati
         </p>
         {isCurriculumGenerationQuotaExhausted(quota) && <p className="font-bold text-danger-700">{copySection.quotaExhausted}</p>}
       </div>
+
+      {creationError && <p role="alert" className="rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-xs font-bold text-danger-700">{creationError}</p>}
 
       <button
         type="submit"

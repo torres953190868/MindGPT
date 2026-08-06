@@ -26,7 +26,6 @@ type WorkspaceSidebarProps = {
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
   onCollapse: () => void;
-  showCurriculumLink?: boolean;
 };
 
 type OutlineRow = {
@@ -34,7 +33,7 @@ type OutlineRow = {
   depth: number;
 };
 
-type SidebarNavItem = "outline" | "projects" | "curricula";
+type SidebarNavItem = "outline" | "projects";
 
 function getSidebarNavButtonClass(highlighted: boolean) {
   return `workspace-sidebar-nav-link inline-flex h-11 items-center justify-center gap-2 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 ${
@@ -132,7 +131,6 @@ export function WorkspaceSidebar({
   selectedNodeId,
   onSelectNode,
   onCollapse,
-  showCurriculumLink = false,
 }: WorkspaceSidebarProps) {
   const { copy } = useLanguage();
   const [query, setQuery] = useState("");
@@ -156,7 +154,6 @@ export function WorkspaceSidebar({
   const hasMatches = outlineRows.length > 0;
   const isOutlineNavHighlighted = navHighlight.isHighlighted("outline");
   const isProjectsNavHighlighted = navHighlight.isHighlighted("projects");
-  const isCurriculaNavHighlighted = navHighlight.isHighlighted("curricula");
 
   useEffect(() => {
     if (previousProjectId.current === project.id) return;
@@ -245,7 +242,7 @@ export function WorkspaceSidebar({
       <nav
         aria-label={copy.workspace.views}
         onMouseLeave={navHighlight.clearHighlightedAction}
-        className={`grid gap-2 text-sm font-black ${showCurriculumLink ? "grid-cols-3" : "grid-cols-2"}`}
+        className="grid grid-cols-2 gap-2 text-sm font-black"
       >
         <button
           type="button"
@@ -267,18 +264,6 @@ export function WorkspaceSidebar({
           <Folder size={16} />
           {copy.common.projects}
         </Link>
-        {showCurriculumLink && (
-          <Link
-            href="/curricula"
-            data-testid="workspace-sidebar-curricula-link"
-            data-highlighted={navHighlight.getDataHighlighted("curricula")}
-            {...navHighlight.getHoverHandlers("curricula")}
-            className={getSidebarNavButtonClass(isCurriculaNavHighlighted)}
-          >
-            <Sprout size={16} />
-            {copy.common.curricula}
-          </Link>
-        )}
       </nav>
 
       <nav

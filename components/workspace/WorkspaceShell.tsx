@@ -10,10 +10,9 @@ import type { InlineNodeComposerData } from "./BranchNodeCard";
 
 type WorkspaceShellProps = {
   projectId: string;
-  showCurriculumLink?: boolean;
 };
 
-export function WorkspaceShell({ projectId, showCurriculumLink = false }: WorkspaceShellProps) {
+export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
   const { copy } = useLanguage();
   const hydrate = useBranchMindStore((state) => state.hydrate);
   const hydrated = useBranchMindStore((state) => state.hydrated);
@@ -246,7 +245,6 @@ export function WorkspaceShell({ projectId, showCurriculumLink = false }: Worksp
         onUpdateProjectNotes: updateProjectNotes,
       }}
       mobileNavigationMode="drawers"
-      showCurriculumLink={showCurriculumLink}
     />
   );
 }
