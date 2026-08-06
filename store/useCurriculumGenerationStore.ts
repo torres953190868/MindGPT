@@ -320,9 +320,16 @@ export const useCurriculumGenerationStore = create<CurriculumGenerationStore>((s
     let runId: string | null = null;
 
     try {
-      const { response } = await generateCurriculum(curriculumId, request, {
+      const { response, runId: queuedRunId } = await generateCurriculum(curriculumId, request, {
         signal: abortController.signal,
       });
+
+      if (queuedRunId) {
+        set({ runId: queuedRunId, status: "polling", isConnected: false });
+        writeStoredRun(curriculumId, queuedRunId, 0);
+        startPolling(curriculumId, queuedRunId, get, set);
+        return;
+      }
 
       const { events } = await readCurriculumStreamEvents(
         response,

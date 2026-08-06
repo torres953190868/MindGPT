@@ -114,7 +114,7 @@ import { buildIntakeUserPrompt, buildModuleNodesUserPrompt, buildResearchPlanUse
 
 export type CurriculumRunResult = {
   runId: string;
-  status: "succeeded" | "failed" | "cancelled";
+  status: "succeeded" | "failed" | "cancelled" | "continuing";
   curriculumVersionId?: string;
   validation?: CurriculumValidationResult;
   errorCode?: string;
@@ -173,6 +173,8 @@ export type CurriculumRunnerOptions = {
   initialEventSeq?: number;
   initialStepNumber?: number;
   accountPlan?: string | null;
+  /** Queue workers stop after a checkpoint and publish a fresh continuation. */
+  maxStagesPerInvocation?: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -278,11 +280,10 @@ export async function runCurriculumBuilder(
   let stepNumber = options.initialStepNumber ?? 1;
 
   if (options.runId) {
-    const resumed = await runService.resumeRun(
-      options.ownerId,
-      options.runId,
-      options.idempotencyKey,
-    );
+    const existing = await runService.getRun(options.ownerId, options.runId);
+    const resumed = existing.status === "queued" || existing.status === "running"
+      ? { run: existing, resumeFromStage: existing.resumeFromStage, checkpoints: existing.output?.checkpoints ?? {} }
+      : await runService.resumeRun(options.ownerId, options.runId, options.idempotencyKey);
     run = resumed.run;
     resumeStage = (resumed.resumeFromStage as CurriculumRunStage | null) ?? run.resumeFromStage as CurriculumRunStage | null;
     // Persisted checkpoints are wrapped per stage as { artifacts, completedAt };
@@ -316,7 +317,7 @@ export async function runCurriculumBuilder(
     run = created.run;
   }
 
-  run = await runService.startRun(run.id);
+  if (run.status === "queued") run = await runService.startRun(run.id);
 
   const sequencer = new AgentEventSequencer(run.id, { initialSeq });
 
@@ -326,7 +327,7 @@ export async function runCurriculumBuilder(
     options.emit?.(event);
   }
 
-  await emitEvent({ type: "run_started" });
+  if (initialSeq === 0) await emitEvent({ type: "run_started" });
 
   try {
     const result = await executePipeline({
@@ -342,6 +343,7 @@ export async function runCurriculumBuilder(
       runtimeMode: options.runtimeMode ?? "inline",
       accountPlan: options.accountPlan ?? null,
       stepCounter: { value: stepNumber },
+      maxStagesPerInvocation: options.maxStagesPerInvocation,
     });
     return result;
   } catch (error) {
@@ -470,6 +472,7 @@ type PipelineContext = {
   // the regenerated graph so a repair is an informed correction, not merely
   // a second attempt at the same prompt.
   repairFeedback?: StructuredWarning[];
+  maxStagesPerInvocation?: number;
 };
 
 async function executePipeline(ctx: PipelineContext): Promise<CurriculumRunResult> {
@@ -489,6 +492,7 @@ async function executePipeline(ctx: PipelineContext): Promise<CurriculumRunResul
 
   let repairLoops = 0;
   let i = startIndex;
+  let completedStages = 0;
 
   while (i < STAGE_ORDER.length) {
     const stage = STAGE_ORDER[i];
@@ -547,6 +551,7 @@ async function executePipeline(ctx: PipelineContext): Promise<CurriculumRunResul
 
     checkpoints[stage as keyof RunnerCheckpoints] = stageResult as never;
     await runService.checkpointStage(run.id, stage, stageResult);
+    completedStages += 1;
 
     // Repair loop handling for validating stage.
     if (stage === "validating") {
@@ -578,6 +583,13 @@ async function executePipeline(ctx: PipelineContext): Promise<CurriculumRunResul
           { code: "AGENT_STAGE_FAILED", status: 422, expose: true },
         );
       }
+    }
+
+    // A queue delivery owns only one checkpointable stage.  This keeps every
+    // function invocation comfortably below Vercel's execution deadline;
+    // the next delivery reloads checkpoints and continues deterministically.
+    if (ctx.maxStagesPerInvocation && completedStages >= ctx.maxStagesPerInvocation) {
+      return { runId: run.id, status: "continuing", usage: deps.budget.snapshot() };
     }
 
     i += 1;

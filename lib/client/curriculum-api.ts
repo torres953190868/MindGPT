@@ -135,7 +135,8 @@ export async function generateCurriculum(
     });
   }
 
-  return { response, runId: null };
+  const data = (await response.clone().json().catch(() => null)) as { runId?: unknown } | null;
+  return { response, runId: typeof data?.runId === "string" ? data.runId : null };
 }
 
 export async function listCurricula() {

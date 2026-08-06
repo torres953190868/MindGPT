@@ -10,6 +10,17 @@
           "initialDelaySeconds": 0
         }
       ]
+    },
+    "app/api/queues/curriculum-processing/route.ts": {
+      "maxDuration": 300,
+      "experimentalTriggers": [
+        {
+          "type": "queue/v2beta",
+          "topic": "curriculum-processing",
+          "retryAfterSeconds": 60,
+          "initialDelaySeconds": 0
+        }
+      ]
     }
   }
 }
