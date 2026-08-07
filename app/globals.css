@@ -396,6 +396,7 @@ textarea {
 }
 
 .workspace-sidebar-nav-link[data-highlighted="true"],
+.projects-sidebar-nav-link[data-highlighted="true"],
 .branch-node-quick-action[data-highlighted="true"],
 .node-detail-icon-button[data-highlighted="true"],
 .node-detail-mode-button[data-highlighted="true"],
@@ -832,6 +833,12 @@ textarea {
 
 [data-theme="warm-limestone"] .workspace-sidebar-nav-link[data-highlighted="true"] {
   border-color: var(--theme-brand-900);
+  background: var(--theme-brand-900);
+  color: var(--theme-surface-elevated);
+  box-shadow: var(--theme-shadow-sm);
+}
+
+[data-theme="warm-limestone"] .projects-sidebar-nav-link[data-highlighted="true"] {
   background: var(--theme-brand-900);
   color: var(--theme-surface-elevated);
   box-shadow: var(--theme-shadow-sm);

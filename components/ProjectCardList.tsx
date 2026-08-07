@@ -39,9 +39,29 @@ import {
 } from "lucide-react";
 import { AuthPanel } from "@/components/AuthPanel";
 import { useLanguage } from "@/components/language/LanguageProvider";
+import {
+  getHighlightedActionClass,
+  useHighlightedAction,
+} from "@/components/ui/highlighted-action";
 import { createProjectDateFormatter, formatProjectDate } from "@/lib/project-date";
 import { downloadProjectJson, importProjectJsonFile } from "@/lib/project-export";
 import { useBranchMindStore } from "@/store/useBranchMindStore";
+
+type ProjectsSidebarNavItem =
+  | "projects"
+  | "curricula"
+  | "recent"
+  | "import"
+  | "help"
+  | "reader"
+  | "home";
+
+function getProjectsSidebarNavItemClass(highlighted: boolean) {
+  return `projects-sidebar-nav-link inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-3 text-sm font-bold transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 ${getHighlightedActionClass(
+    highlighted,
+    "text-neutral-800 hover:bg-neutral-100",
+  )}`;
+}
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -81,6 +101,9 @@ export function ProjectCardList({ showCurriculumLink = false }: { showCurriculum
   const deleteProject = useBranchMindStore((state) => state.deleteProject);
   const updateProjectTitle = useBranchMindStore((state) => state.updateProjectTitle);
   const editingProjectId = editingProject?.id ?? null;
+  const sidebarNavHighlight = useHighlightedAction<ProjectsSidebarNavItem>({
+    defaultAction: "projects",
+  });
   const [starredProjectIds, setStarredProjectIds] = useState<Set<string>>(() => {
     try {
       const raw = localStorage.getItem("branchmind-starred-projects");
@@ -432,14 +455,18 @@ export function ProjectCardList({ showCurriculumLink = false }: { showCurriculum
         <nav
           aria-label={copy.common.projects}
           data-testid="projects-navigation"
+          onMouseLeave={sidebarNavHighlight.clearHighlightedAction}
           className="mt-3 flex gap-1 overflow-x-auto pb-1 text-sm font-bold lg:mt-5 lg:grid lg:overflow-visible lg:pb-0"
         >
           <Link
             href="/projects"
             aria-current="page"
-            className="relative inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md bg-brand-50 px-3 text-brand-700 transition hover:bg-brand-100 focus:outline-none focus:ring-2 focus:ring-brand-300"
+            data-highlighted={sidebarNavHighlight.getDataHighlighted("projects")}
+            {...sidebarNavHighlight.getPointerHoverHandlers("projects")}
+            className={getProjectsSidebarNavItemClass(
+              sidebarNavHighlight.isHighlighted("projects"),
+            )}
           >
-            <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand-500" />
             <Folder size={16} />
             {copy.common.projects}
           </Link>
@@ -447,7 +474,11 @@ export function ProjectCardList({ showCurriculumLink = false }: { showCurriculum
             <Link
               href="/curricula"
               data-testid="projects-navigation-curricula-link"
-              className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
+              data-highlighted={sidebarNavHighlight.getDataHighlighted("curricula")}
+              {...sidebarNavHighlight.getPointerHoverHandlers("curricula")}
+              className={getProjectsSidebarNavItemClass(
+                sidebarNavHighlight.isHighlighted("curricula"),
+              )}
             >
               <BookOpen size={16} />
               {copy.common.curricula}
@@ -463,7 +494,15 @@ export function ProjectCardList({ showCurriculumLink = false }: { showCurriculum
                 : copy.projects.openMostRecent
             }
             data-testid="open-recent-project-button"
-            className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40 disabled:cursor-not-allowed disabled:text-neutral-500 disabled:opacity-70 disabled:hover:bg-transparent"
+            data-highlighted={sidebarNavHighlight.getDataHighlighted("recent", {
+              enabled: hydrated && Boolean(recentProject),
+            })}
+            {...sidebarNavHighlight.getPointerHoverHandlers("recent")}
+            className={`${getProjectsSidebarNavItemClass(
+              sidebarNavHighlight.isHighlighted("recent", {
+                enabled: hydrated && Boolean(recentProject),
+              }),
+            )} disabled:cursor-not-allowed disabled:text-neutral-500 disabled:opacity-70 disabled:hover:bg-transparent`}
           >
             <Clock3 size={16} />
             {copy.projects.recent}
@@ -499,7 +538,13 @@ export function ProjectCardList({ showCurriculumLink = false }: { showCurriculum
             type="button"
             onClick={openImportPicker}
             disabled={isImporting}
-            className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40 disabled:cursor-not-allowed disabled:opacity-60"
+            data-highlighted={sidebarNavHighlight.getDataHighlighted("import", {
+              enabled: !isImporting,
+            })}
+            {...sidebarNavHighlight.getPointerHoverHandlers("import")}
+            className={`${getProjectsSidebarNavItemClass(
+              sidebarNavHighlight.isHighlighted("import", { enabled: !isImporting }),
+            )} disabled:cursor-not-allowed disabled:opacity-60`}
           >
             <Upload size={16} />
             {copy.common.import}
@@ -518,21 +563,33 @@ export function ProjectCardList({ showCurriculumLink = false }: { showCurriculum
           <Link
             href="/help"
             data-testid="help-feedback-link"
-            className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
+            data-highlighted={sidebarNavHighlight.getDataHighlighted("help")}
+            {...sidebarNavHighlight.getPointerHoverHandlers("help")}
+            className={getProjectsSidebarNavItemClass(
+              sidebarNavHighlight.isHighlighted("help"),
+            )}
           >
             <HelpCircle size={16} />
             {copy.projects.helpFeedback}
           </Link>
           <Link
             href="/reader"
-            className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
+            data-highlighted={sidebarNavHighlight.getDataHighlighted("reader")}
+            {...sidebarNavHighlight.getPointerHoverHandlers("reader")}
+            className={getProjectsSidebarNavItemClass(
+              sidebarNavHighlight.isHighlighted("reader"),
+            )}
           >
             <FileText size={16} />
             {copy.projects.pdfReader}
           </Link>
           <Link
             href="/"
-            className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md px-3 text-neutral-800 transition hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-200/40"
+            data-highlighted={sidebarNavHighlight.getDataHighlighted("home")}
+            {...sidebarNavHighlight.getPointerHoverHandlers("home")}
+            className={getProjectsSidebarNavItemClass(
+              sidebarNavHighlight.isHighlighted("home"),
+            )}
           >
             <Home size={16} />
             {copy.common.home}
@@ -547,7 +604,7 @@ export function ProjectCardList({ showCurriculumLink = false }: { showCurriculum
       <div className="project-card-list-main flex min-w-0 flex-1 flex-col bg-white">
         <header className="project-card-list-header flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-neutral-200 px-4 py-3 md:px-5">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-success-50 text-success-600">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-brand-50 text-brand-600">
               <FolderOpen size={18} />
             </span>
             <div className="min-w-0">

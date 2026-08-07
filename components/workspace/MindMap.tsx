@@ -330,9 +330,11 @@ export function MindMap({
 
   const fitViewOptions = useMemo(
     () => ({
-      maxZoom: inlineNodeComposer ? 1 : 1.7,
+      // Keep the initial workspace view readable. Users can still zoom in manually
+      // up to the ReactFlow maxZoom below after the canvas has opened.
+      maxZoom: 1,
     }),
-    [inlineNodeComposer],
+    [],
   );
 
   const centerHomeComposer = useCallback(() => {

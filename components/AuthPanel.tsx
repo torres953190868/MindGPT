@@ -111,38 +111,24 @@ function UsageBar({
 }
 
 const accountMenuItemClass =
-  "flex min-h-9 items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-brand-100";
-const accountMenuDangerItemClass =
-  "flex min-h-9 w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-danger-100 disabled:cursor-not-allowed disabled:opacity-65";
+  "flex min-h-9 items-center gap-2.5 rounded-md px-2.5 py-2 text-sm leading-6 transition-all focus:outline-none focus:ring-2 focus:ring-brand-100";
 const accountMenuIconBaseClass =
-  "grid h-6 w-6 shrink-0 place-items-center rounded-md bg-transparent transition-all";
+  "grid h-6 w-6 shrink-0 place-items-center rounded-full bg-transparent ring-1 ring-inset ring-brand-100 transition-all";
 
-function getAccountMenuItemClass(isHighlighted: boolean) {
-  return `${accountMenuItemClass} ${
+function getAccountMenuItemClass(isHighlighted: boolean, emphasized = false) {
+  return `${accountMenuItemClass} ${emphasized ? "font-semibold" : "font-normal"} ${
     isHighlighted
       ? "bg-neutral-900 text-white shadow-lg duration-1000 ease-out"
       : "text-neutral-700 duration-100 ease-in"
   }`;
 }
 
-function getAccountMenuDangerItemClass(isHighlighted: boolean) {
-  return `${accountMenuDangerItemClass} ${
-    isHighlighted
-      ? "bg-neutral-900 text-white shadow-lg duration-1000 ease-out"
-      : "text-danger-600 duration-100 ease-in"
-  }`;
-}
-
-function getAccountMenuIconClass(isHighlighted: boolean, tone: "default" | "danger" = "default") {
+function getAccountMenuIconClass(isHighlighted: boolean) {
   if (isHighlighted) {
-    return `${accountMenuIconBaseClass} text-white duration-1000 ease-out`;
+    return `${accountMenuIconBaseClass} text-white ring-white/30 duration-1000 ease-out`;
   }
 
-  return `${accountMenuIconBaseClass} ${
-    tone === "danger"
-      ? "text-danger-600 duration-100 ease-in"
-      : "text-neutral-600 duration-100 ease-in"
-  }`;
+  return `${accountMenuIconBaseClass} text-neutral-600 duration-100 ease-in`;
 }
 
 function WhatsNewModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -492,6 +478,7 @@ export function AuthPanel({
                   {...getAccountMenuHoverHandlers("whats-new")}
                   className={`w-full ${getAccountMenuItemClass(
                     isAccountMenuItemHighlighted("whats-new"),
+                    true,
                   )}`}
                 >
                   <span
@@ -513,6 +500,7 @@ export function AuthPanel({
                   {...getAccountMenuHoverHandlers("report-bug")}
                   className={`w-full ${getAccountMenuItemClass(
                     isAccountMenuItemHighlighted("report-bug"),
+                    true,
                   )}`}
                 >
                   <span
@@ -552,15 +540,12 @@ export function AuthPanel({
                 aria-label={copy.common.signOut}
                 data-testid="sign-out-button"
                 {...getAccountMenuHoverHandlers("sign-out")}
-                className={getAccountMenuDangerItemClass(
+                className={`w-full disabled:cursor-not-allowed disabled:opacity-65 ${getAccountMenuItemClass(
                   isAccountMenuItemHighlighted("sign-out"),
-                )}
+                )}`}
               >
                 <span
-                  className={getAccountMenuIconClass(
-                    isAccountMenuItemHighlighted("sign-out"),
-                    "danger",
-                  )}
+                  className={getAccountMenuIconClass(isAccountMenuItemHighlighted("sign-out"))}
                 >
                   <LogOut size={14} />
                 </span>
