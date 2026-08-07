@@ -19,9 +19,14 @@ import {
 export type CurriculumGenerationTriggerProps = {
   curriculumId?: string | null;
   onCurriculumCreated?: (curriculumId: string) => void;
+  showQuota?: boolean;
 };
 
-export function CurriculumGenerationTrigger({ curriculumId = null, onCurriculumCreated }: CurriculumGenerationTriggerProps) {
+export function CurriculumGenerationTrigger({
+  curriculumId = null,
+  onCurriculumCreated,
+  showQuota = true,
+}: CurriculumGenerationTriggerProps) {
   const { copy } = useLanguage();
   const state = useCurriculumGenerationStore();
   const reconnectIfNeeded = useCurriculumGenerationStore((store) => store.reconnectIfNeeded);
@@ -53,6 +58,7 @@ export function CurriculumGenerationTrigger({ curriculumId = null, onCurriculumC
   }, [curriculumId, reconnectIfNeeded]);
 
   useEffect(() => {
+    if (!showQuota) return;
     let active = true;
     void getCurriculumGenerationQuota()
       .then((result) => {
@@ -66,7 +72,7 @@ export function CurriculumGenerationTrigger({ curriculumId = null, onCurriculumC
     return () => {
       active = false;
     };
-  }, []);
+  }, [showQuota]);
 
   const isBusy =
     isCreatingCurriculum ||
@@ -266,26 +272,28 @@ export function CurriculumGenerationTrigger({ curriculumId = null, onCurriculumC
         </label>
       </div>
 
-      <div
-        data-testid="curriculum-generation-quota"
-        className="space-y-1.5 rounded-lg border border-brand-100 bg-brand-50/70 px-3 py-2.5 text-xs text-brand-900"
-      >
-        <p className="font-bold">
-          {quotaError
-            ? copySection.quotaUnavailable
-            : quota === null
-              ? copySection.quotaLoading
-              : quota.remaining !== null
-                ? copySection.quotaRemaining(quota.remaining)
-                : quota.tracked
-                  ? copySection.quotaUnlimited
-                  : copySection.quotaLocal}
-        </p>
-        <p data-testid="curriculum-generation-estimate" className="text-brand-800">
-          {copySection.estimatedDuration}
-        </p>
-        {isCurriculumGenerationQuotaExhausted(quota) && <p className="font-bold text-danger-700">{copySection.quotaExhausted}</p>}
-      </div>
+      {showQuota && (
+        <div
+          data-testid="curriculum-generation-quota"
+          className="space-y-1.5 rounded-lg border border-brand-100 bg-brand-50/70 px-3 py-2.5 text-xs text-brand-900"
+        >
+          <p className="font-bold">
+            {quotaError
+              ? copySection.quotaUnavailable
+              : quota === null
+                ? copySection.quotaLoading
+                : quota.remaining !== null
+                  ? copySection.quotaRemaining(quota.remaining)
+                  : quota.tracked
+                    ? copySection.quotaUnlimited
+                    : copySection.quotaLocal}
+          </p>
+          <p data-testid="curriculum-generation-estimate" className="text-brand-800">
+            {copySection.estimatedDuration}
+          </p>
+          {isCurriculumGenerationQuotaExhausted(quota) && <p className="font-bold text-danger-700">{copySection.quotaExhausted}</p>}
+        </div>
+      )}
 
       {creationError && <p role="alert" className="rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-xs font-bold text-danger-700">{creationError}</p>}
 

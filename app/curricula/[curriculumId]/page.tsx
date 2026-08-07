@@ -30,7 +30,7 @@ export default async function CurriculumPage({ params }: CurriculumPageProps) {
       <div className="mx-auto max-w-3xl space-y-4">
         <Link href="/curricula" className="text-xs font-bold text-brand-700 hover:underline">All curricula</Link>
         <h1 className="text-xl font-black text-neutral-900">Curriculum</h1>
-        <CurriculumGenerationTrigger curriculumId={curriculumId} />
+        <CurriculumGenerationTrigger curriculumId={curriculumId} showQuota={false} />
         <CurriculumGenerationPanel />
         <CurriculumVersionPreview curriculumId={curriculumId} />
       </div>

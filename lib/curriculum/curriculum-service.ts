@@ -13,6 +13,7 @@ import {
   getCurriculumRepository,
   type CreateCurriculumInput,
   type CurriculumDto,
+  type CurriculumOverviewDto,
   type CurriculumVersionContentDto,
   type CurriculumVersionDto,
   type UpdateCurriculumPatch,
@@ -87,6 +88,15 @@ export async function getCurriculumForOwner(
   const curriculum = await getCurriculumRepository().getCurriculum(ownerId, curriculumId);
   if (!curriculum) notFound("Curriculum was not found.");
   return curriculum;
+}
+
+export async function getCurriculumOverviewForOwner(
+  ownerId: string,
+  curriculumId: string,
+): Promise<CurriculumOverviewDto> {
+  const overview = await getCurriculumRepository().getCurriculumOverview(ownerId, curriculumId);
+  if (!overview) notFound("Curriculum was not found.");
+  return overview;
 }
 
 export async function updateCurriculumForOwner(

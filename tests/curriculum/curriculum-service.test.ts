@@ -11,6 +11,7 @@ import {
   createCurriculumForOwner,
   createDraftVersionForOwner,
   getCurriculumForOwner,
+  getCurriculumOverviewForOwner,
   getVersionForOwner,
   listCurriculaForOwner,
   listVersionsForOwner,
@@ -74,6 +75,25 @@ describe("curriculum service: curricula", () => {
 
     expect(created.subject).toBe("Machine Learning");
     expect(created.projectId).toBe("project_123");
+  });
+
+  it("returns curriculum metadata, version summaries, and the newest version content together", async () => {
+    const created = await createCurriculumForOwner(OWNER, {
+      title: "Overview Course",
+      learningGoal: "Load the first screen efficiently.",
+    });
+    const version = await createDraftVersionForOwner(
+      OWNER,
+      created.id,
+      createValidCurriculumDraft(),
+    );
+
+    const overview = await getCurriculumOverviewForOwner(OWNER, created.id);
+
+    expect(overview.curriculum.id).toBe(created.id);
+    expect(overview.versions.map((entry) => entry.id)).toEqual([version.version.id]);
+    expect(overview.defaultVersion?.version.id).toBe(version.version.id);
+    expect(overview.defaultVersion?.draft.modules).toHaveLength(2);
   });
 
   it("scopes curricula to their owner", async () => {

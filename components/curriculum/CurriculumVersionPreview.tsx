@@ -7,7 +7,7 @@ import {
   deriveCurriculumVersion,
   getCurriculumVersion,
   getCurriculumVersionDiff,
-  listCurriculumVersions,
+  getCurriculumOverview,
   patchCurriculumVersion,
   publishCurriculumVersion,
   type CurriculumVersionContentResponse,
@@ -21,6 +21,7 @@ import {
   type CurriculumDiffDisplayEntry,
 } from "./curriculum-preview-helpers";
 import { useCurriculumGenerationStore } from "@/store/useCurriculumGenerationStore";
+import { useCurriculumPreviewStore } from "@/store/useCurriculumPreviewStore";
 
 type ValidationWarning = {
   code?: string;
@@ -69,55 +70,74 @@ export function CurriculumVersionPreview({ curriculumId }: { curriculumId: strin
   const generationDraftVersionId = useCurriculumGenerationStore((state) =>
     state.curriculumId === curriculumId ? state.draftVersionId : null,
   );
-  const [versions, setVersions] = useState<CurriculumVersionSummary[]>([]);
-  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
-  const [content, setContent] = useState<CurriculumVersionContentResponse | null>(null);
+  const cacheEntry = useCurriculumPreviewStore((state) => state.entries[curriculumId]);
+  const setOverview = useCurriculumPreviewStore((state) => state.setOverview);
+  const setContentCache = useCurriculumPreviewStore((state) => state.setContent);
+  const setVersionSummary = useCurriculumPreviewStore((state) => state.setVersionSummary);
+  const versions = useMemo(() => cacheEntry?.versions ?? [], [cacheEntry?.versions]);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(
+    () => cacheEntry?.versions[0]?.id ?? null,
+  );
+  const content = selectedVersionId ? cacheEntry?.contents[selectedVersionId] ?? null : null;
   const [againstVersionId, setAgainstVersionId] = useState<string | null>(null);
   const [diffEntries, setDiffEntries] = useState<CurriculumDiffDisplayEntry[]>([]);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [versionLabel, setVersionLabel] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !cacheEntry);
+  const [contentLoading, setContentLoading] = useState(false);
   const [busy, setBusy] = useState<"save" | "derive" | "publish" | "diff" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const loadVersions = useCallback(async () => {
-    setLoading(true);
+  const refreshOverview = useCallback(async () => {
+    const hasCachedOverview = Boolean(useCurriculumPreviewStore.getState().entries[curriculumId]);
+    setLoading(!hasCachedOverview);
     try {
-      const result = await listCurriculumVersions(curriculumId);
-      setVersions(result.versions);
-      setSelectedVersionId((current) =>
-        current && result.versions.some((version) => version.id === current)
-          ? current
-          : result.versions[0]?.id ?? null,
-      );
+      const result = await getCurriculumOverview(curriculumId);
+      setOverview(curriculumId, result);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : copySection.errors.load);
     } finally {
       setLoading(false);
     }
-  }, [copySection.errors.load, curriculumId]);
+  }, [copySection.errors.load, curriculumId, setOverview]);
 
   useEffect(() => {
-    void loadVersions();
-  }, [loadVersions]);
+    void refreshOverview();
+  }, [refreshOverview]);
 
   useEffect(() => {
     if (!generationDraftVersionId) return;
-    void loadVersions();
-  }, [generationDraftVersionId, loadVersions]);
+    void refreshOverview();
+  }, [generationDraftVersionId, refreshOverview]);
+
+  useEffect(() => {
+    setSelectedVersionId((current) =>
+      current && versions.some((version) => version.id === current)
+        ? current
+        : versions[0]?.id ?? null,
+    );
+  }, [versions]);
 
   useEffect(() => {
     if (!selectedVersionId) {
-      setContent(null);
+      setContentLoading(false);
+      return;
+    }
+    const cachedContent = useCurriculumPreviewStore.getState().entries[curriculumId]?.contents[
+      selectedVersionId
+    ];
+    if (cachedContent) {
+      setVersionLabel(cachedContent.version.versionLabel);
+      setContentLoading(false);
       return;
     }
     let active = true;
-    setLoading(true);
+    setContentLoading(true);
     void getCurriculumVersion(curriculumId, selectedVersionId)
       .then((result) => {
         if (!active) return;
-        setContent(result);
+        setContentCache(curriculumId, result);
         setVersionLabel(result.version.versionLabel);
         setError(null);
       })
@@ -125,12 +145,16 @@ export function CurriculumVersionPreview({ curriculumId }: { curriculumId: strin
         if (active) setError(loadError instanceof Error ? loadError.message : copySection.errors.load);
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) setContentLoading(false);
       });
     return () => {
       active = false;
     };
-  }, [copySection.errors.load, curriculumId, selectedVersionId]);
+  }, [copySection.errors.load, curriculumId, selectedVersionId, setContentCache]);
+
+  useEffect(() => {
+    if (content) setVersionLabel(content.version.versionLabel);
+  }, [content]);
 
   const otherVersions = useMemo(
     () => versions.filter((version) => version.id !== selectedVersionId),
@@ -144,8 +168,8 @@ export function CurriculumVersionPreview({ curriculumId }: { curriculumId: strin
       const result = await patchCurriculumVersion(curriculumId, content.version.id, {
         versionLabel: versionLabel.trim(),
       });
-      setContent(result);
-      setVersions((current) => current.map((version) => version.id === result.version.id ? result.version : version));
+      setContentCache(curriculumId, result);
+      setVersionSummary(curriculumId, result.version);
       setError(null);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : copySection.errors.save);
@@ -159,9 +183,9 @@ export function CurriculumVersionPreview({ curriculumId }: { curriculumId: strin
     setBusy("derive");
     try {
       const result = await deriveCurriculumVersion(curriculumId, content.version.id);
-      await loadVersions();
+      await refreshOverview();
       setSelectedVersionId(result.version.id);
-      setContent(result);
+      setContentCache(curriculumId, result);
       setVersionLabel(result.version.versionLabel);
       setError(null);
     } catch (deriveError) {
@@ -176,9 +200,9 @@ export function CurriculumVersionPreview({ curriculumId }: { curriculumId: strin
     setBusy("publish");
     try {
       await publishCurriculumVersion(curriculumId, content.version.id);
-      await loadVersions();
+      await refreshOverview();
       const refreshed = await getCurriculumVersion(curriculumId, content.version.id);
-      setContent(refreshed);
+      setContentCache(curriculumId, refreshed);
       setIsPublishDialogOpen(false);
       setError(null);
     } catch (publishError) {
@@ -202,20 +226,13 @@ export function CurriculumVersionPreview({ curriculumId }: { curriculumId: strin
     }
   }
 
-  if (loading && versions.length === 0) {
-    return (
-      <div data-testid="curriculum-version-preview" className="rounded-xl border border-neutral-200 bg-white/95 p-4 text-sm text-neutral-500 shadow-sm">
-        <Loader2 size={16} className="mr-2 inline animate-spin" /> {copySection.preview}
-      </div>
-    );
-  }
-
   return (
     <section data-testid="curriculum-version-preview" className="space-y-4 rounded-xl border border-neutral-200 bg-white/95 p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-sm font-black text-neutral-900">
           <Split size={16} className="text-brand-600" /> {copySection.title}
         </h2>
+        {(loading || contentLoading) && <Loader2 size={15} className="animate-spin text-brand-600" aria-label={copySection.preview} />}
         {versions.length > 0 && (
           <select
             data-testid="curriculum-version-select"
@@ -235,7 +252,15 @@ export function CurriculumVersionPreview({ curriculumId }: { curriculumId: strin
       {error && <p className="rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-xs font-bold text-danger-700">{error}</p>}
 
       {!content ? (
-        <p className="text-sm text-neutral-500">{copySection.empty}</p>
+        loading || contentLoading ? (
+          <div aria-busy="true" className="space-y-3 rounded-lg border border-neutral-200 bg-surface-soft p-4">
+            <div className="h-4 w-1/3 animate-pulse rounded bg-neutral-200" />
+            <div className="h-20 animate-pulse rounded-lg bg-white" />
+            <div className="h-20 animate-pulse rounded-lg bg-white" />
+          </div>
+        ) : (
+          <p className="text-sm text-neutral-500">{copySection.empty}</p>
+        )
       ) : (
         <>
           <div className="flex flex-wrap items-end gap-2">

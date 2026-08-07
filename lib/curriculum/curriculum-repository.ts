@@ -97,6 +97,12 @@ export type CurriculumVersionContentDto = {
   validation: unknown | null;
 };
 
+export type CurriculumOverviewDto = {
+  curriculum: CurriculumDto;
+  versions: CurriculumVersionDto[];
+  defaultVersion: CurriculumVersionContentDto | null;
+};
+
 export type CreateCurriculumInput = {
   title: string;
   subject?: string;
@@ -163,6 +169,10 @@ export type CurriculumRepository = {
     ownerId: string,
     curriculumId: string,
   ) => Promise<CurriculumDto | null>;
+  getCurriculumOverview: (
+    ownerId: string,
+    curriculumId: string,
+  ) => Promise<CurriculumOverviewDto | null>;
   updateCurriculum: (
     ownerId: string,
     curriculumId: string,
@@ -735,6 +745,23 @@ const fileRepository: CurriculumRepository = {
     return stored ? toCurriculumDto(stored.curriculum) : null;
   },
 
+  getCurriculumOverview: async (ownerId, curriculumId) => {
+    const data = await readCurriculaData();
+    const stored = findStoredCurriculum(data, ownerId, curriculumId);
+    if (!stored) return null;
+
+    const versionRows = [...stored.versions].sort(
+      (left, right) => right.version.version_number - left.version.version_number,
+    );
+    return {
+      curriculum: toCurriculumDto(stored.curriculum),
+      versions: versionRows.map((entry) => toVersionDto(entry.version)),
+      defaultVersion: versionRows[0]
+        ? assembleVersionContent(stored.curriculum, versionRows[0])
+        : null,
+    };
+  },
+
   updateCurriculum: async (ownerId, curriculumId, patch) => {
     return mutateCurriculaData((data) => {
       const stored = findStoredCurriculum(data, ownerId, curriculumId);
@@ -1139,6 +1166,29 @@ class SupabaseCurriculumRepository implements CurriculumRepository {
   async getCurriculum(ownerId: string, curriculumId: string) {
     const row = await this.getOwnedCurriculumRow(ownerId, curriculumId);
     return row ? toCurriculumDto(row) : null;
+  }
+
+  async getCurriculumOverview(ownerId: string, curriculumId: string) {
+    const curriculum = await this.getOwnedCurriculumRow(ownerId, curriculumId);
+    if (!curriculum) return null;
+
+    const { data, error } = await getSupabaseAdminClient()
+      .from("curriculum_versions")
+      .select("*")
+      .eq("curriculum_id", curriculumId)
+      .order("version_number", { ascending: false });
+    assertNoError(error, "list curriculum versions for overview");
+
+    const versions = (data ?? []).map((row) => fromDbVersionRow(row));
+    const defaultVersion = versions[0]
+      ? await this.getVersionWithContent(ownerId, curriculumId, versions[0].id)
+      : null;
+
+    return {
+      curriculum: toCurriculumDto(curriculum),
+      versions: versions.map(toVersionDto),
+      defaultVersion,
+    };
   }
 
   async updateCurriculum(ownerId: string, curriculumId: string, patch: UpdateCurriculumPatch) {

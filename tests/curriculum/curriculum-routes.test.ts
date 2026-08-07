@@ -133,6 +133,41 @@ describe("curriculum routes", () => {
     ]);
   });
 
+  it("loads the curriculum overview in one owner-scoped read", async () => {
+    const createResponse = await createCurriculum({
+      title: "Overview Course",
+      learningGoal: "Load the first screen efficiently.",
+    });
+    const { curriculum } = await createResponse.json();
+    const { POST: createVersion } = await import(
+      "@/app/api/curricula/[curriculumId]/versions/route"
+    );
+    const versionResponse = await createVersion(
+      jsonRequest(
+        `/api/curricula/${curriculum.id}/versions`,
+        "POST",
+        createValidCurriculumDraft(),
+      ),
+      { params: Promise.resolve({ curriculumId: curriculum.id }) },
+    );
+    const createdVersion = await versionResponse.json();
+
+    const { GET: getOverview } = await import(
+      "@/app/api/curricula/[curriculumId]/overview/route"
+    );
+    const response = await getOverview(
+      jsonRequest(`/api/curricula/${curriculum.id}/overview`, "GET"),
+      { params: Promise.resolve({ curriculumId: curriculum.id }) },
+    );
+
+    expect(response.status).toBe(200);
+    const overview = await response.json();
+    expect(overview.curriculum.id).toBe(curriculum.id);
+    expect(overview.versions[0].id).toBe(createdVersion.version.id);
+    expect(overview.defaultVersion.version.id).toBe(createdVersion.version.id);
+    expect(overview.defaultVersion.draft.modules).toHaveLength(2);
+  });
+
   it("rejects an invalid create body with 400", async () => {
     const response = await createCurriculum({ title: "", learningGoal: "Learn." });
 

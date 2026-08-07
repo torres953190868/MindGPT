@@ -72,6 +72,12 @@ export type CurriculumVersionContentResponse = {
   validation: unknown;
 };
 
+export type CurriculumOverviewResponse = {
+  curriculum: CurriculumDto;
+  versions: CurriculumVersionSummary[];
+  defaultVersion: CurriculumVersionContentResponse | null;
+};
+
 export type CurriculumVersionDiffEntry = {
   key: string;
   kind: "added" | "removed" | "changed";
@@ -140,8 +146,15 @@ export async function generateCurriculum(
 }
 
 export async function listCurricula() {
-  return readJsonApi<{ curricula: CurriculumDto[] }>("/api/curricula");
+  if (curriculumListRequest) return curriculumListRequest;
+
+  curriculumListRequest = readJsonApi<{ curricula: CurriculumDto[] }>("/api/curricula").finally(() => {
+    curriculumListRequest = null;
+  });
+  return curriculumListRequest;
 }
+
+let curriculumListRequest: Promise<{ curricula: CurriculumDto[] }> | null = null;
 
 export async function createCurriculum(input: {
   title: string;
@@ -156,10 +169,17 @@ export async function createCurriculum(input: {
 }
 
 export async function getCurriculumGenerationQuota() {
-  return readJsonApi<{ quota: CurriculumGenerationQuota }>(
+  if (curriculumQuotaRequest) return curriculumQuotaRequest;
+
+  curriculumQuotaRequest = readJsonApi<{ quota: CurriculumGenerationQuota }>(
     "/api/curricula/generate/quota",
-  );
+  ).finally(() => {
+    curriculumQuotaRequest = null;
+  });
+  return curriculumQuotaRequest;
 }
+
+let curriculumQuotaRequest: Promise<{ quota: CurriculumGenerationQuota }> | null = null;
 
 export async function getAgentRun(
   runId: string,
@@ -229,13 +249,38 @@ export async function listCurriculumVersions(curriculumId: string) {
   );
 }
 
+const curriculumOverviewRequests = new Map<string, Promise<CurriculumOverviewResponse>>();
+
+export function getCurriculumOverview(curriculumId: string) {
+  const existing = curriculumOverviewRequests.get(curriculumId);
+  if (existing) return existing;
+
+  const request = readJsonApi<CurriculumOverviewResponse>(
+    `/api/curricula/${encodeURIComponent(curriculumId)}/overview`,
+  ).finally(() => {
+    curriculumOverviewRequests.delete(curriculumId);
+  });
+  curriculumOverviewRequests.set(curriculumId, request);
+  return request;
+}
+
+const curriculumVersionRequests = new Map<string, Promise<CurriculumVersionContentResponse>>();
+
 export async function getCurriculumVersion(
   curriculumId: string,
   versionId: string,
 ) {
-  return readJsonApi<CurriculumVersionContentResponse>(
+  const key = `${curriculumId}:${versionId}`;
+  const existing = curriculumVersionRequests.get(key);
+  if (existing) return existing;
+
+  const request = readJsonApi<CurriculumVersionContentResponse>(
     `/api/curricula/${encodeURIComponent(curriculumId)}/versions/${encodeURIComponent(versionId)}`,
-  );
+  ).finally(() => {
+    curriculumVersionRequests.delete(key);
+  });
+  curriculumVersionRequests.set(key, request);
+  return request;
 }
 
 export async function patchCurriculumVersion(

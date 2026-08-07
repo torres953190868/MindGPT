@@ -5,19 +5,29 @@ import { ArrowLeft, ArrowRight, BookOpen, Loader2, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/components/language/LanguageProvider";
 import { listCurricula, type CurriculumDto } from "@/lib/client/curriculum-api";
+import { useCurriculumListStore } from "@/store/useCurriculumListStore";
 
 export function CurriculumListPage() {
   const { copy } = useLanguage();
   const copySection = copy.curriculumList;
-  const [curricula, setCurricula] = useState<CurriculumDto[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const cachedCurricula = useCurriculumListStore((state) => state.curricula);
+  const hasLoaded = useCurriculumListStore((state) => state.hasLoaded);
+  const setCachedCurricula = useCurriculumListStore((state) => state.setCurricula);
+  const [curricula, setCurricula] = useState<CurriculumDto[]>(cachedCurricula);
+  const [isLoading, setIsLoading] = useState(!hasLoaded);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setCurricula(cachedCurricula);
+  }, [cachedCurricula]);
+
+  useEffect(() => {
     let active = true;
+    setIsLoading(!hasLoaded);
     void listCurricula()
       .then((result) => {
         if (!active) return;
+        setCachedCurricula(result.curricula);
         setCurricula(result.curricula);
         setError(null);
       })
@@ -31,7 +41,7 @@ export function CurriculumListPage() {
     return () => {
       active = false;
     };
-  }, [copySection.loadError]);
+  }, [copySection.loadError, hasLoaded, setCachedCurricula]);
 
   return (
     <main

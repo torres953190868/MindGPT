@@ -370,7 +370,7 @@ export function AuthPanel({
                     {getInitial(displayAccountName)}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-neutral-900">
+                    <p className="truncate text-sm font-normal text-neutral-900">
                       {displayAccountName ?? copy.accountMenu.branchMindAccount}
                     </p>
                     <div className="mt-0.5 flex items-center gap-2">
