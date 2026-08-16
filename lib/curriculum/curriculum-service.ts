@@ -81,6 +81,45 @@ export async function listCurriculaForOwner(ownerId: string): Promise<Curriculum
   return getCurriculumRepository().listCurricula(ownerId);
 }
 
+export type AttachableCurriculumDto = {
+  curriculumId: string;
+  title: string;
+  subject: string;
+  versionId: string;
+  versionLabel: string;
+};
+
+// Curricula that can be attached as chat knowledge context: not archived and
+// with a current published version. The per-curriculum version lookup is an
+// intentional N+1 — owner libraries are small and the endpoint is read
+// rate-limited.
+export async function listAttachableCurriculaForOwner(
+  ownerId: string,
+): Promise<AttachableCurriculumDto[]> {
+  const repository = getCurriculumRepository();
+  const curricula = (await repository.listCurricula(ownerId)).filter(
+    (curriculum) => curriculum.status !== "archived",
+  );
+
+  const attachable: AttachableCurriculumDto[] = [];
+  for (const curriculum of curricula) {
+    const versions = (await repository.listVersions(ownerId, curriculum.id)) ?? [];
+    const published = versions
+      .filter((version) => version.status === "published")
+      .sort((left, right) => right.versionNumber - left.versionNumber)[0];
+    if (!published) continue;
+
+    attachable.push({
+      curriculumId: curriculum.id,
+      title: curriculum.title,
+      subject: curriculum.subject,
+      versionId: published.id,
+      versionLabel: published.versionLabel,
+    });
+  }
+  return attachable;
+}
+
 export async function getCurriculumForOwner(
   ownerId: string,
   curriculumId: string,

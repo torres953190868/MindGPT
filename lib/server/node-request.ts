@@ -26,6 +26,7 @@ export const chatAttachmentSchema = z.object({
     .trim()
     .refine((value) => !Number.isNaN(Date.parse(value)), "Invalid attachment timestamp."),
   documentId: z.string().trim().min(1).max(120).optional(),
+  curriculumId: z.string().trim().min(1).max(120).optional(),
   documentStatus: documentStatusSchema.optional(),
   errorMessage: z.string().trim().max(500).nullable().optional(),
   errorRequestId: z.string().trim().max(160).nullable().optional(),

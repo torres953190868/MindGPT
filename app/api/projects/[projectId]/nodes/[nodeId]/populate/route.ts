@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getBranchMindAuthContext } from "@/lib/server/auth";
 import { getAccountPlanForModelAccess } from "@/lib/server/account-plan";
+import { getWorkspaceCurriculumContextsForOwner } from "@/lib/server/curriculum-context";
 import { streamDeepSeekReply } from "@/lib/server/deepseek-streaming";
 import {
   getSafeErrorMessage,
@@ -106,6 +107,11 @@ export async function POST(
       contextData.attachments,
       contextData.instruction,
     );
+    const curriculumContexts = await getWorkspaceCurriculumContextsForOwner(
+      principal.id,
+      contextData.attachments,
+      contextData.instruction,
+    );
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
@@ -119,6 +125,7 @@ export async function POST(
               content,
             })),
             documentContexts,
+            curriculumContexts,
             modelSelection: body.modelSelection,
             userPlan,
             skill: body.skill,

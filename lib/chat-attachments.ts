@@ -85,6 +85,7 @@ export function normalizeChatAttachments(
     };
 
     const documentId = cleanOptionalString(attachment.documentId, MAX_ATTACHMENT_ID_LENGTH);
+    const curriculumId = cleanOptionalString(attachment.curriculumId, MAX_ATTACHMENT_ID_LENGTH);
     const documentStatus = cleanDocumentStatus(attachment.documentStatus);
     const errorMessage = cleanOptionalString(
       attachment.errorMessage,
@@ -96,6 +97,7 @@ export function normalizeChatAttachments(
     );
 
     if (documentId) normalized.documentId = documentId;
+    if (curriculumId) normalized.curriculumId = curriculumId;
     if (documentStatus) normalized.documentStatus = documentStatus;
     if (errorMessage) normalized.errorMessage = errorMessage;
     if (errorRequestId) normalized.errorRequestId = errorRequestId;

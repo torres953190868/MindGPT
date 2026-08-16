@@ -175,6 +175,72 @@ describe("requestDeepSeekReply", () => {
     ]);
   });
 
+  it("includes attached course material in node reply prompts", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  title: "Course answer",
+                  summary: "Uses course material.",
+                  content: "Per the attached course, gradient descent follows the loss gradient.",
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const reply = await requestDeepSeekReply({
+      instruction: "How does gradient descent work?",
+      curriculumContexts: [
+        {
+          curriculumId: "cur_dl",
+          versionId: "ver_dl_1",
+          title: "Deep Learning Foundations",
+          versionLabel: "v1",
+          outline: "- Foundations\n  - Optimization: Gradient descent basics.",
+          snippets: [
+            {
+              chunkId: "chunk_gd",
+              sourceId: "src_textbook",
+              excerpt:
+                "Gradient descent optimizes neural networks by following the loss gradient.",
+              score: 1.5,
+            },
+          ],
+        },
+      ],
+    });
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(requestBody.messages[0].content).toContain(
+      "When course material is attached",
+    );
+    expect(requestBody.messages[0].content).not.toContain("[[cite:N]]");
+    expect(requestBody.messages[1].content).toContain("Attached course material:");
+    expect(requestBody.messages[1].content).toContain(
+      "Course: Deep Learning Foundations (version v1)",
+    );
+    expect(requestBody.messages[1].content).toContain(
+      "- Foundations\n  - Optimization: Gradient descent basics.",
+    );
+    expect(requestBody.messages[1].content).toContain("[excerpt 1 | chunk chunk_gd]");
+    expect(requestBody.messages[1].content).toContain(
+      "Gradient descent optimizes neural networks by following the loss gradient.",
+    );
+    // Course material never enters the [[cite:N]] catalog.
+    expect(reply.citations).toBeUndefined();
+  });
+
   it("accepts single-bracket PDF citation markers from model replies", async () => {
     vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
     vi.stubEnv("DEEPSEEK_MODEL", "test-model");

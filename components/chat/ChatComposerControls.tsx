@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronRight,
   Check,
+  GraduationCap,
   Infinity as InfinityIcon,
   Loader2,
   LockKeyhole,
@@ -89,6 +90,20 @@ type KnowledgeDocument = {
   updatedAt: string;
 };
 
+// A published curriculum the user can attach as knowledge context, as returned
+// by GET /api/curricula/attachable.
+type AttachableCurriculumItem = {
+  curriculumId: string;
+  title: string;
+  subject: string;
+  versionId: string;
+  versionLabel: string;
+};
+
+type AttachableCurriculaResponse = {
+  items: AttachableCurriculumItem[];
+};
+
 type UploadPdfResponse = {
   document: UploadedDocument;
   job?: {
@@ -128,6 +143,9 @@ const MODEL_CATALOG_CACHE_KEY = "branchmind.chatModelCatalog.v1";
 const MODEL_CATALOG_CACHE_TTL_MS = 15 * 60 * 1000;
 const PDF_INDEX_POLL_INTERVAL_MS = 2_500;
 const PDF_INDEX_POLL_TIMEOUT_MS = 5 * 60 * 1000;
+// Synthetic mime type for curriculum attachments; lets the UI tell course
+// materials apart from files without inspecting curriculumId everywhere.
+const CURRICULUM_ATTACHMENT_MIME_TYPE = "application/x-branchmind-curriculum";
 
 const FALLBACK_MODEL_OPTIONS: ChatModelOption[] = [
   {
@@ -300,18 +318,25 @@ function getAttachmentTypeLabel(attachment: ChatAttachment, unknownTypeLabel: st
 }
 
 export function isKnowledgeAttachment(
-  attachment: Pick<ChatAttachment, "documentId" | "size">,
+  attachment: Pick<ChatAttachment, "documentId" | "curriculumId" | "size">,
 ) {
-  return Boolean(attachment.documentId && attachment.size === 0);
+  return Boolean(
+    (attachment.documentId || attachment.curriculumId) && attachment.size === 0,
+  );
 }
 
 export function getAttachmentDetailLabel(
   attachment: ChatAttachment,
-  labels = {
+  labels: {
+    knowledgePdf: string;
+    unknownType: string;
+    knowledgeCurriculum?: string;
+  } = {
     knowledgePdf: "Knowledge PDF",
     unknownType: "Unknown type",
   },
 ) {
+  if (attachment.curriculumId) return labels.knowledgeCurriculum ?? "Course material";
   if (isKnowledgeAttachment(attachment)) return labels.knowledgePdf;
   return `${getAttachmentTypeLabel(attachment, labels.unknownType)} - ${formatFileSize(attachment.size)}`;
 }
@@ -458,6 +483,7 @@ function toSendableAttachment(attachment: PendingChatAttachment): ChatAttachment
     size: attachment.size,
     createdAt: attachment.createdAt,
     ...(attachment.documentId ? { documentId: attachment.documentId } : {}),
+    ...(attachment.curriculumId ? { curriculumId: attachment.curriculumId } : {}),
     ...(attachment.documentStatus ? { documentStatus: attachment.documentStatus } : {}),
     ...(attachment.errorMessage ? { errorMessage: attachment.errorMessage } : {}),
     ...(attachment.errorRequestId ? { errorRequestId: attachment.errorRequestId } : {}),
@@ -691,6 +717,8 @@ export function useChatComposerControls({
   const [knowledgeDocuments, setKnowledgeDocuments] = useState<KnowledgeDocument[]>([]);
   const [isLoadingKnowledgeDocuments, setIsLoadingKnowledgeDocuments] = useState(false);
   const [knowledgeDocumentError, setKnowledgeDocumentError] = useState<string | null>(null);
+  const [attachableCurricula, setAttachableCurricula] = useState<AttachableCurriculumItem[]>([]);
+  const [isLoadingAttachableCurricula, setIsLoadingAttachableCurricula] = useState(false);
   const [availableSkills, setAvailableSkills] = useState<ChatSkill[]>([]);
   const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
   const [isSkillMenuOpen, setIsSkillMenuOpen] = useState(false);
@@ -877,7 +905,27 @@ export function useChatComposerControls({
       }
     }
 
+    async function loadAttachableCurricula() {
+      setIsLoadingAttachableCurricula(true);
+
+      try {
+        const data = await readJsonApi<AttachableCurriculaResponse>(
+          "/api/curricula/attachable",
+          { method: "GET" },
+        );
+        if (!cancelled) setAttachableCurricula(data.items ?? []);
+      } catch {
+        // The endpoint 404s while ENABLE_CURRICULUM_AGENT is off; any failure
+        // means "no course materials to offer", so the section stays hidden
+        // instead of surfacing an error.
+        if (!cancelled) setAttachableCurricula([]);
+      } finally {
+        if (!cancelled) setIsLoadingAttachableCurricula(false);
+      }
+    }
+
     void loadKnowledgeDocuments();
+    void loadAttachableCurricula();
 
     return () => {
       cancelled = true;
@@ -1226,6 +1274,38 @@ export function useChatComposerControls({
     setIsKnowledgeMenuOpen(false);
   }
 
+  function selectKnowledgeCurriculum(curriculum: AttachableCurriculumItem) {
+    if (controlsBusy || pendingAttachments.length >= maxAttachments) {
+      return;
+    }
+
+    setAttachmentError(null);
+    setPendingAttachments((current) => {
+      if (
+        current.length >= maxAttachments ||
+        current.some(
+          (attachment) => attachment.curriculumId === curriculum.curriculumId,
+        )
+      ) {
+        return current;
+      }
+
+      return [
+        ...current,
+        {
+          id: createId("attachment"),
+          name: curriculum.title,
+          mimeType: CURRICULUM_ATTACHMENT_MIME_TYPE,
+          size: 0,
+          createdAt: new Date().toISOString(),
+          curriculumId: curriculum.curriculumId,
+        },
+      ];
+    });
+    setIsAttachmentMenuOpen(false);
+    setIsKnowledgeMenuOpen(false);
+  }
+
   function handleAttachmentChange(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
@@ -1287,6 +1367,7 @@ export function useChatComposerControls({
   return {
     activeSkill,
     activeSkillId,
+    attachableCurricula,
     attachmentError,
     attachmentMenuRef,
     controlsBusy,
@@ -1300,6 +1381,7 @@ export function useChatComposerControls({
     isImportingSkill,
     isKnowledgeMenuOpen,
     hasLoadedModelCatalog,
+    isLoadingAttachableCurricula,
     isLoadingModelCatalog,
     isLoadingKnowledgeDocuments,
     isModelMenuOpen,
@@ -1321,6 +1403,7 @@ export function useChatComposerControls({
     removePendingAttachment,
     resetAttachments,
     selectAutoModel,
+    selectKnowledgeCurriculum,
     selectKnowledgeDocument,
     selectModel,
     selectSkill,
@@ -1409,6 +1492,7 @@ export function PendingAttachmentChips({
           <span className="shrink-0 opacity-65">
             {getAttachmentDetailLabel(attachment, {
               knowledgePdf: copy.chat.knowledgePdf,
+              knowledgeCurriculum: copy.chat.knowledgeCurriculum,
               unknownType: copy.chat.unknownType,
             })}
           </span>
@@ -1687,6 +1771,50 @@ export function AttachmentMenuButton({
                         </button>
                       );
                     })}
+
+                  {!controls.isLoadingAttachableCurricula &&
+                    controls.attachableCurricula.length > 0 && (
+                      <>
+                        <p className="px-3 pb-1 pt-2 text-xs font-black uppercase tracking-wide text-neutral-500">
+                          {copy.chat.knowledgeCurricula}
+                        </p>
+                        {controls.attachableCurricula.map((curriculum) => {
+                          const isAlreadySelected = controls.pendingAttachments.some(
+                            (attachment) =>
+                              attachment.curriculumId === curriculum.curriculumId,
+                          );
+                          const canSelect =
+                            !isAlreadySelected &&
+                            controls.pendingAttachments.length < controls.maxAttachments;
+
+                          return (
+                            <button
+                              key={curriculum.curriculumId}
+                              type="button"
+                              role="menuitem"
+                              disabled={!canSelect}
+                              onClick={() => controls.selectKnowledgeCurriculum(curriculum)}
+                              data-testid="knowledge-curriculum-option"
+                              className="chat-menu-highlightable flex w-full min-w-0 items-center gap-3 rounded-[12px] px-3 py-2 text-left text-neutral-700 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                            >
+                              <span className="chat-menu-item-icon grid h-8 w-8 shrink-0 place-items-center rounded-[10px] border border-neutral-200 bg-white text-brand-600">
+                                <GraduationCap size={16} />
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm font-black">
+                                  {curriculum.title}
+                                </span>
+                                <span className="block truncate text-xs font-bold text-neutral-500">
+                                  {isAlreadySelected
+                                    ? copy.chat.selected
+                                    : curriculum.subject || curriculum.versionLabel}
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </>
+                    )}
                     </div>,
                     document.body,
                   )

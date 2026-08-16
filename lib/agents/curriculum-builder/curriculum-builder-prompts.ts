@@ -275,6 +275,12 @@ ${formatSourcesDigest(input.sources)}
 }
 
 // Stage 7.2 (spec §3.9 step 7): nodes of ONE module.
+//
+// Block order is deliberate: everything shared across the run's module calls
+// (intake, concepts, sources) comes FIRST, and everything module-specific
+// (marker, module info, repair feedback, existing nodes) comes LAST. Provider
+// prompt caches match on identical prefixes, so this layout lets module 2..N
+// calls reuse the cached shared bulk instead of missing on the whole prompt.
 export function buildModuleNodesUserPrompt(input: {
   request: CurriculumBuildRequest;
   intake: IntakeNormalization;
@@ -305,23 +311,23 @@ export function buildModuleNodesUserPrompt(input: {
         .join("\n")}\n`
     : "";
 
-  return `${CURRICULUM_STAGE_MARKERS.moduleNodes(input.moduleClientId)}
+  return `【标准化目标】
+${formatIntake(input.intake)}
+
+【候选知识点】
+${concepts}
+
+【可用来源（sourceIds 只能引用这些 id）】
+${formatSourcesDigest(input.sources)}
+${repair}${existingNodes}
+【本模块任务】
+${CURRICULUM_STAGE_MARKERS.moduleNodes(input.moduleClientId)}
 请为课程「${input.skeleton.title}」的模块「${courseModule?.title ?? input.moduleClientId}」生成节点。
 
 【模块信息】
 clientId：${input.moduleClientId}
 描述：${courseModule?.description ?? ""}
 必修：${courseModule?.required ? "是" : "否"}
-
-【标准化目标】
-${formatIntake(input.intake)}
-${repair}
-${existingNodes}
-【候选知识点】
-${concepts}
-
-【可用来源（sourceIds 只能引用这些 id）】
-${formatSourcesDigest(input.sources)}
 
 要求：
 - 只输出本模块的 nodes，每个节点包含 clientId / title / summary / nodeType / importance / difficulty / estimatedMinutes / learningObjectives / completionCriteria / prerequisiteClientIds / sourceIds / tags / orderIndex。

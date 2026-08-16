@@ -11,7 +11,7 @@ This file is a single source of truth for AI coding agents working in the Branch
 - **Continue Down** — extend the main thread vertically.
 - **Branch Right** — open a sub-topic in a parallel node.
 
-The product also includes a selectable-text PDF reader and a RAG (retrieval-augmented generation) MVP. Users can upload PDFs, extract and index text, ask grounded questions with page citations, and attach indexed PDFs as knowledge context inside BranchMind conversations.
+The product also includes a selectable-text PDF reader and a RAG (retrieval-augmented generation) MVP. Users can upload PDFs, extract and index text, ask grounded questions with page citations, and attach indexed PDFs as knowledge context inside BranchMind conversations. Published curricula ("course materials") can also be attached per node as knowledge context: generation injects the curriculum outline plus keyword-retrieved source excerpts (no `[[cite:N]]` page citations — excerpts have no page semantics).
 
 ### Core Stack
 
@@ -185,7 +185,7 @@ All persistence goes through API routes under `app/api/`:
 - `/api/admin/*` — admin summary, users (list, password reset), analytics, LLM config, bug reports.
 - `/api/bug-reports` — public bug report submission.
 - `/api/documents/*` and `/api/queues/rag-document-processing` — PDF/RAG lifecycle.
-- `/api/curricula*` — curriculum CRUD, draft versions, and publish (all gated behind `ENABLE_CURRICULUM_AGENT`, 404 when off).
+- `/api/curricula*` — curriculum CRUD, draft versions, and publish (all gated behind `ENABLE_CURRICULUM_AGENT`, 404 when off). `/api/curricula/attachable` lists curricula attachable as chat knowledge context (not archived, with a published version).
 - `/api/health` — health check for uptime probes.
 
 ### Server Abstractions

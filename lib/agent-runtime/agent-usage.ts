@@ -8,6 +8,9 @@ export type ModelCallUsage = {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  // Provider context-cache accounting; 0 when the provider does not report it.
+  cacheHitTokens: number;
+  cacheMissTokens: number;
   durationMs: number;
   estimatedCostUsd: number;
 };
@@ -15,6 +18,10 @@ export type ModelCallUsage = {
 export type ModelCostRate = {
   inputPerMillionTokens: number;
   outputPerMillionTokens: number;
+  // Price for cache-hit input tokens (e.g. DeepSeek context-cache hits are
+  // billed far below the standard input price). Falls back to the standard
+  // input rate when absent.
+  cacheHitInputPerMillionTokens?: number;
 };
 
 export type ModelCostRates = Record<string, ModelCostRate>;
@@ -22,6 +29,7 @@ export type ModelCostRates = Record<string, ModelCostRate>;
 const rateSchema = z.object({
   inputPerMillionTokens: z.number().finite().nonnegative(),
   outputPerMillionTokens: z.number().finite().nonnegative(),
+  cacheHitInputPerMillionTokens: z.number().finite().nonnegative().optional(),
 });
 
 const DEFAULT_RATE: ModelCostRate = {
@@ -66,11 +74,18 @@ export function getModelCostRate(
 }
 
 export function estimateModelCostUsd(
-  input: Pick<ModelCallUsage, "promptTokens" | "completionTokens">,
+  input: Pick<ModelCallUsage, "promptTokens" | "completionTokens" | "cacheHitTokens">,
   rate: ModelCostRate,
 ) {
+  const promptTokens = finiteNonNegative(input.promptTokens);
+  // Cache-hit tokens are billed at the (cheaper) hit rate; everything else is
+  // a miss charged at the standard input rate.
+  const cacheHitTokens = Math.min(finiteNonNegative(input.cacheHitTokens), promptTokens);
+  const cacheMissTokens = promptTokens - cacheHitTokens;
+  const cacheHitRate = rate.cacheHitInputPerMillionTokens ?? rate.inputPerMillionTokens;
   return (
-    finiteNonNegative(input.promptTokens) * finiteNonNegative(rate.inputPerMillionTokens) / 1_000_000 +
+    (cacheMissTokens * finiteNonNegative(rate.inputPerMillionTokens) +
+      cacheHitTokens * finiteNonNegative(cacheHitRate)) / 1_000_000 +
     finiteNonNegative(input.completionTokens) * finiteNonNegative(rate.outputPerMillionTokens) / 1_000_000
   );
 }
@@ -81,21 +96,29 @@ export function createModelCallUsage(input: {
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
+  cacheHitTokens?: number;
+  cacheMissTokens?: number;
   durationMs?: number;
   rates?: ModelCostRates;
 }): ModelCallUsage {
   const promptTokens = finiteNonNegative(input.promptTokens ?? 0);
   const completionTokens = finiteNonNegative(input.completionTokens ?? 0);
   const totalTokens = finiteNonNegative(input.totalTokens ?? promptTokens + completionTokens);
+  const cacheHitTokens = finiteNonNegative(input.cacheHitTokens ?? 0);
+  const cacheMissTokens = finiteNonNegative(
+    input.cacheMissTokens ?? Math.max(0, promptTokens - cacheHitTokens),
+  );
   return {
     provider: input.provider,
     model: input.model,
     promptTokens,
     completionTokens,
     totalTokens,
+    cacheHitTokens,
+    cacheMissTokens,
     durationMs: finiteNonNegative(input.durationMs ?? 0),
     estimatedCostUsd: estimateModelCostUsd(
-      { promptTokens, completionTokens },
+      { promptTokens, completionTokens, cacheHitTokens },
       getModelCostRate(input.provider, input.model, input.rates),
     ),
   };
@@ -107,10 +130,21 @@ export function aggregateModelCallUsage(calls: readonly ModelCallUsage[]) {
       promptTokens: total.promptTokens + call.promptTokens,
       completionTokens: total.completionTokens + call.completionTokens,
       totalTokens: total.totalTokens + call.totalTokens,
+      // Rows persisted before cache tracking lack these fields — count as 0.
+      cacheHitTokens: total.cacheHitTokens + finiteNonNegative(call.cacheHitTokens),
+      cacheMissTokens: total.cacheMissTokens + finiteNonNegative(call.cacheMissTokens),
       durationMs: total.durationMs + call.durationMs,
       estimatedCostUsd: total.estimatedCostUsd + call.estimatedCostUsd,
     }),
-    { promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMs: 0, estimatedCostUsd: 0 },
+    {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      cacheHitTokens: 0,
+      cacheMissTokens: 0,
+      durationMs: 0,
+      estimatedCostUsd: 0,
+    },
   );
 }
 

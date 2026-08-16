@@ -17,6 +17,7 @@ import {
   CREATE_NODE_WINDOW_MS,
   createNodeSchema,
 } from "@/lib/server/node-request";
+import { getWorkspaceCurriculumContextsForOwner } from "@/lib/server/curriculum-context";
 import {
   createChildNodeForOwner,
   prepareChildContext,
@@ -107,6 +108,11 @@ export async function POST(request: NextRequest, context: NodesStreamRouteContex
       body.attachments,
       [body.instruction, body.sourceText].filter(Boolean).join("\n\n"),
     );
+    const curriculumContexts = await getWorkspaceCurriculumContextsForOwner(
+      principal.id,
+      body.attachments,
+      [body.instruction, body.sourceText].filter(Boolean).join("\n\n"),
+    );
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
@@ -121,6 +127,7 @@ export async function POST(request: NextRequest, context: NodesStreamRouteContex
             })),
             sourceText: body.sourceText,
             documentContexts,
+            curriculumContexts,
             modelSelection: body.modelSelection,
             userPlan,
             skill: body.skill,

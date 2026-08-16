@@ -21,6 +21,14 @@ describe("chat attachment normalization", () => {
           errorRequestId: "  req-1  ",
         },
         {
+          id: "attachment-course",
+          name: "Deep Learning Foundations",
+          mimeType: "application/x-branchmind-curriculum",
+          size: 0,
+          createdAt: "2026-01-02T00:00:00.000Z",
+          curriculumId: "  curriculum-1  ",
+        },
+        {
           name: "Generated fallback id.txt",
           size: -10,
           createdAt: "not-a-date",
@@ -46,6 +54,14 @@ describe("chat attachment normalization", () => {
         documentStatus: "indexed",
         errorMessage: "Retry succeeded",
         errorRequestId: "req-1",
+      },
+      {
+        id: "attachment-course",
+        name: "Deep Learning Foundations",
+        mimeType: "application/x-branchmind-curriculum",
+        size: 0,
+        createdAt: "2026-01-02T00:00:00.000Z",
+        curriculumId: "curriculum-1",
       },
       {
         id: "generated-attachment-id",

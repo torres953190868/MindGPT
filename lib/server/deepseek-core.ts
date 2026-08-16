@@ -15,6 +15,7 @@ import {
 } from "@/lib/server/ai-provider";
 import type {
   ChatCitation,
+  ChatCurriculumContext,
   ChatDocumentContext,
   ChatModelSelection,
   ChatSkill,
@@ -35,6 +36,7 @@ export type BranchMindReplyRequest = {
   messages?: ApiMessage[];
   sourceText?: string;
   documentContexts?: ChatDocumentContext[];
+  curriculumContexts?: ChatCurriculumContext[];
   modelSelection?: ChatModelSelection;
   userPlan?: string | null;
   llmTask?: LlmRouteTask;
@@ -398,9 +400,12 @@ export function getMockReply(body: BranchMindReplyRequest): MockReply {
   const documents = body.documentContexts?.length
     ? ` Attached PDFs: ${body.documentContexts.map((context) => context.fileName).join(", ")}.`
     : "";
+  const courses = body.curriculumContexts?.length
+    ? ` Attached courses: ${body.curriculumContexts.map((context) => context.title).join(", ")}.`
+    : "";
   const content = [
     `Mock mode is enabled for ${mode} mode.`,
-    `Current path: ${context}.${source}${documents}`,
+    `Current path: ${context}.${source}${documents}${courses}`,
     `Instruction received: ${body.instruction}`,
     citations.length > 0
       ? `PDF context citation available [[cite:${citations[0].index}]].`
@@ -453,6 +458,39 @@ function formatDocumentContexts(
         .join("\n\n");
 
       return [`PDF: ${document.fileName}${title}`, snippets].join("\n");
+    })
+    .join("\n\n---\n\n");
+}
+
+// Formats attached curriculum ("course material") contexts. Unlike PDF
+// contexts these never enter the [[cite:N]] catalog — excerpts have no page
+// semantics — so the model references the course by name in prose instead.
+function formatCurriculumContexts(
+  curriculumContexts: ChatCurriculumContext[] = [],
+) {
+  if (curriculumContexts.length === 0) return "";
+
+  return curriculumContexts
+    .map((course) => {
+      const outline = course.outline
+        ? `Outline:\n${course.outline}`
+        : "Outline: (unavailable)";
+      const excerpts = course.snippets.length
+        ? course.snippets
+            .map((snippet, index) =>
+              [
+                `[excerpt ${index + 1} | chunk ${snippet.chunkId}]`,
+                snippet.excerpt,
+              ].join("\n"),
+            )
+            .join("\n\n")
+        : "(no excerpts matched the instruction)";
+
+      return [
+        `Course: ${course.title} (version ${course.versionLabel})`,
+        outline,
+        `Excerpts:\n${excerpts}`,
+      ].join("\n");
     })
     .join("\n\n---\n\n");
 }
@@ -610,8 +648,15 @@ export function buildMessages(body: BranchMindReplyRequest): ApiMessage[] {
   const pdfContext = documentContexts
     ? `\nRetrieved PDF context:\n${documentContexts}`
     : "";
+  const courseContexts = formatCurriculumContexts(body.curriculumContexts);
+  const courseContext = courseContexts
+    ? `\nAttached course material:\n${courseContexts}`
+    : "";
   const citationInstruction = citationCatalog.length
     ? " When retrieved PDF context is provided, use it as evidence, cite factual claims with the exact [[cite:N]] markers shown in the context, do not invent citation numbers, and do not replace those markers with plain page citations."
+    : "";
+  const courseInstruction = body.curriculumContexts?.length
+    ? " When course material is attached, treat it as the primary reference for this branch, and say when the material does not cover the user's question."
     : "";
   const skill = body.skill;
 
@@ -619,7 +664,7 @@ export function buildMessages(body: BranchMindReplyRequest): ApiMessage[] {
     {
       role: "system",
       content:
-        `You are BranchMind, a concise learning assistant. Return only valid JSON with keys title, summary, content. Match the user's language: answer in English when the user writes in English, and answer in Chinese when the user writes in Chinese. The title must be short. The summary must be concise. The content should be 300-600 characters unless the user asks otherwise. Write all mathematical notation as LaTeX: wrap inline math in single dollar signs ($...$) and standalone equations in double dollar signs ($$...$$); never leave formulas as plain text.${citationInstruction} Say when the provided snippets do not contain enough evidence.`,
+        `You are BranchMind, a concise learning assistant. Return only valid JSON with keys title, summary, content. Match the user's language: answer in English when the user writes in English, and answer in Chinese when the user writes in Chinese. The title must be short. The summary must be concise. The content should be 300-600 characters unless the user asks otherwise. Write all mathematical notation as LaTeX: wrap inline math in single dollar signs ($...$) and standalone equations in double dollar signs ($$...$$); never leave formulas as plain text.${citationInstruction}${courseInstruction} Say when the provided snippets do not contain enough evidence.`,
     },
   ];
 
@@ -636,7 +681,7 @@ export function buildMessages(body: BranchMindReplyRequest): ApiMessage[] {
       `Node mode: ${mode}`,
       `Current path: ${context}`,
       `Recent node conversation: ${JSON.stringify(history)}`,
-      `User instruction: ${body.instruction}${source}${pdfContext}`,
+      `User instruction: ${body.instruction}${source}${pdfContext}${courseContext}`,
     ].join("\n"),
   });
 

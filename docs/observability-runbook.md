@@ -7,7 +7,11 @@ prompt, answer, source excerpt and code bodies are hashed or summarized.
 
 Set `BRANCHMIND_LLM_COST_RATES_JSON` to JSON rates keyed by `provider/model`,
 model, provider, or `default`, using input/output USD per million tokens. Missing
-or invalid rates safely estimate cost as zero.
+or invalid rates safely estimate cost as zero. Each model call also records
+provider context-cache usage (`cacheHitTokens`/`cacheMissTokens`, from DeepSeek's
+`prompt_cache_hit_tokens`/`prompt_cache_miss_tokens`); hit tokens are priced by
+the optional `cacheHitInputPerMillionTokens` rate, which falls back to the
+standard input rate.
 
 Search is degradable: Tavily failures are logged as provider/fallback/code and
 fall back to the explicitly configured `WEB_SEARCH_FALLBACK_PROVIDER` (default

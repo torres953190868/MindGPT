@@ -193,6 +193,8 @@ export async function runTutorAgent(input: TutorAgentInput): Promise<TutorRespon
       promptTokens: result.usage.promptTokens,
       completionTokens: result.usage.completionTokens,
       totalTokens: result.usage.totalTokens,
+      cacheHitTokens: result.usage.promptCacheHitTokens,
+      cacheMissTokens: result.usage.promptCacheMissTokens,
       durationMs,
     }));
     budget.assertWithinRuntime("inline");

@@ -255,6 +255,7 @@ function MessageAttachmentList({ attachments }: { attachments: ChatAttachment[] 
           <span className="shrink-0 opacity-65">
             {getAttachmentDetailLabel(attachment, {
               knowledgePdf: copy.chat.knowledgePdf,
+              knowledgeCurriculum: copy.chat.knowledgeCurriculum,
               unknownType: copy.chat.unknownType,
             })}
           </span>

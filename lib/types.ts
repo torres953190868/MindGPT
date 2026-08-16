@@ -22,6 +22,9 @@ export type ChatAttachment = {
     | "indexing"
     | "indexed"
     | "failed";
+  // Set when the attachment references a published curriculum ("course
+  // material") instead of an uploaded file. Mutually exclusive with documentId.
+  curriculumId?: string;
   errorMessage?: string | null;
   errorRequestId?: string | null;
 };
@@ -38,6 +41,27 @@ export type ChatDocumentContext = {
     content: string;
     // Retrieval score (vector + keyword), present when produced by the
     // server-side retrieval pipeline; optional for client-built fixtures.
+    score?: number;
+  }>;
+};
+
+// Curriculum ("course material") context injected into node generation when a
+// published curriculum is attached. The outline is preformatted server-side so
+// prompt assembly stays structure-agnostic. Unlike ChatDocumentContext there
+// are no page semantics, so snippets are excerpt-only and never cited via
+// [[cite:N]] markers.
+export type ChatCurriculumContext = {
+  curriculumId: string;
+  versionId: string;
+  title: string;
+  versionLabel: string;
+  outline: string;
+  snippets: Array<{
+    chunkId: string;
+    sourceId: string;
+    excerpt: string;
+    // Keyword retrieval score, present when produced by the server-side
+    // retrieval pipeline.
     score?: number;
   }>;
 };

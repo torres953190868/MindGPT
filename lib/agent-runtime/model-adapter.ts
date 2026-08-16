@@ -52,6 +52,11 @@ export type AgentModelUsage = {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  // Provider context-cache accounting (DeepSeek: prompt_cache_hit_tokens /
+  // prompt_cache_miss_tokens; OpenAI-style fallback: prompt_tokens_details.
+  // cached_tokens). Absent when the provider does not report cache usage.
+  promptCacheHitTokens?: number;
+  promptCacheMissTokens?: number;
 };
 
 export type AgentModelActionResult<T> = {
@@ -100,6 +105,13 @@ const completionResponseSchema = z.object({
       prompt_tokens: z.number().optional(),
       completion_tokens: z.number().optional(),
       total_tokens: z.number().optional(),
+      prompt_cache_hit_tokens: z.number().optional(),
+      prompt_cache_miss_tokens: z.number().optional(),
+      prompt_tokens_details: z
+        .object({
+          cached_tokens: z.number().optional(),
+        })
+        .optional(),
     })
     .optional(),
   error: z
@@ -173,13 +185,25 @@ function extractUsage(usage: unknown): AgentModelUsage {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
+    prompt_cache_hit_tokens?: number;
+    prompt_cache_miss_tokens?: number;
+    prompt_tokens_details?: { cached_tokens?: number };
   };
   const promptTokens = entry.prompt_tokens ?? 0;
   const completionTokens = entry.completion_tokens ?? 0;
+  const cacheHitTokens = entry.prompt_cache_hit_tokens ?? entry.prompt_tokens_details?.cached_tokens;
+  const cacheMissTokens =
+    entry.prompt_cache_miss_tokens ??
+    (typeof cacheHitTokens === "number" ? Math.max(0, promptTokens - cacheHitTokens) : undefined);
   return {
     promptTokens,
     completionTokens,
     totalTokens: entry.total_tokens ?? promptTokens + completionTokens,
+    // Only stamp cache fields when the provider reports them, so providers
+    // without context caching stay indistinguishable from a full miss.
+    ...(typeof cacheHitTokens === "number"
+      ? { promptCacheHitTokens: cacheHitTokens, promptCacheMissTokens: cacheMissTokens ?? 0 }
+      : {}),
   };
 }
 

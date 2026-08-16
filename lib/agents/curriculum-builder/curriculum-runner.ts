@@ -1641,6 +1641,8 @@ async function callModel<T>(
     provider: result.provider,
     model: result.model,
     ...result.usage,
+    cacheHitTokens: result.usage.promptCacheHitTokens,
+    cacheMissTokens: result.usage.promptCacheMissTokens,
     durationMs: duration,
   });
   budget.recordModelCall(callUsage);

@@ -199,6 +199,61 @@ describe("LlmModelAdapter", () => {
     expect(body.messages[0].content).toContain('"properties":{"kind"');
   });
 
+  it("extracts provider context-cache usage when reported", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify({ kind: "final", text: "ok" }) } }],
+          usage: {
+            prompt_tokens: 1_000,
+            completion_tokens: 50,
+            total_tokens: 1_050,
+            prompt_cache_hit_tokens: 768,
+            prompt_cache_miss_tokens: 232,
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const result = await new LlmModelAdapter().completeAction(createRequest());
+
+    expect(result.usage).toEqual({
+      promptTokens: 1_000,
+      completionTokens: 50,
+      totalTokens: 1_050,
+      promptCacheHitTokens: 768,
+      promptCacheMissTokens: 232,
+    });
+  });
+
+  it("derives the cache miss from prompt minus hit when only the hit is reported", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify({ kind: "final", text: "ok" }) } }],
+          usage: {
+            prompt_tokens: 500,
+            completion_tokens: 10,
+            total_tokens: 510,
+            prompt_tokens_details: { cached_tokens: 128 },
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const result = await new LlmModelAdapter().completeAction(createRequest());
+
+    expect(result.usage).toEqual({
+      promptTokens: 500,
+      completionTokens: 10,
+      totalTokens: 510,
+      promptCacheHitTokens: 128,
+      promptCacheMissTokens: 372,
+    });
+  });
+
   it("retries invalid output with the error fed back, then succeeds", async () => {
     fetchMock
       .mockResolvedValueOnce(completionResponse("this is not json"))

@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { getBranchMindAuthContext } from "@/lib/server/auth";
 import { getAccountPlanForModelAccess } from "@/lib/server/account-plan";
+import { getWorkspaceCurriculumContextsForOwner } from "@/lib/server/curriculum-context";
 import { requestDeepSeekReply } from "@/lib/server/deepseek";
 import { jsonWithSession, safeErrorWithSession } from "@/lib/server/http";
 import {
@@ -76,6 +77,11 @@ export async function POST(request: NextRequest, context: NodesRouteContext) {
       createBody.attachments,
       [createBody.instruction, createBody.sourceText].filter(Boolean).join("\n\n"),
     );
+    const curriculumContexts = await getWorkspaceCurriculumContextsForOwner(
+      principal.id,
+      createBody.attachments,
+      [createBody.instruction, createBody.sourceText].filter(Boolean).join("\n\n"),
+    );
     const reply = await requestDeepSeekReply({
       llmTask: "node_generation",
       mode: createBody.mode,
@@ -87,6 +93,7 @@ export async function POST(request: NextRequest, context: NodesRouteContext) {
       })),
       sourceText: createBody.sourceText,
       documentContexts,
+      curriculumContexts,
       modelSelection: createBody.modelSelection,
       userPlan,
       skill: createBody.skill,

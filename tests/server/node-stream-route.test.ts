@@ -10,6 +10,7 @@ const trackDailyAiMessageUsageMock = vi.hoisted(() => vi.fn());
 const prepareChildContextMock = vi.hoisted(() => vi.fn());
 const createChildNodeForOwnerMock = vi.hoisted(() => vi.fn());
 const getWorkspaceDocumentContextsForOwnerMock = vi.hoisted(() => vi.fn());
+const getWorkspaceCurriculumContextsForOwnerMock = vi.hoisted(() => vi.fn());
 const streamDeepSeekReplyMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/server/auth", () => ({
@@ -39,6 +40,10 @@ vi.mock("@/lib/server/projects-service", () => ({
 
 vi.mock("@/lib/server/rag/service", () => ({
   getWorkspaceDocumentContextsForOwner: getWorkspaceDocumentContextsForOwnerMock,
+}));
+
+vi.mock("@/lib/server/curriculum-context", () => ({
+  getWorkspaceCurriculumContextsForOwner: getWorkspaceCurriculumContextsForOwnerMock,
 }));
 
 vi.mock("@/lib/server/deepseek-streaming", () => ({
@@ -78,6 +83,7 @@ describe("POST /api/projects/[projectId]/nodes/stream", () => {
     prepareChildContextMock.mockReset();
     createChildNodeForOwnerMock.mockReset();
     getWorkspaceDocumentContextsForOwnerMock.mockReset();
+    getWorkspaceCurriculumContextsForOwnerMock.mockReset();
     streamDeepSeekReplyMock.mockReset();
 
     getBranchMindAuthContextMock.mockResolvedValue({
@@ -101,6 +107,7 @@ describe("POST /api/projects/[projectId]/nodes/stream", () => {
       messages: [],
     });
     getWorkspaceDocumentContextsForOwnerMock.mockResolvedValue([]);
+    getWorkspaceCurriculumContextsForOwnerMock.mockResolvedValue([]);
     createChildNodeForOwnerMock.mockResolvedValue({
       project: { id: "project_test" },
       node: { id: "node_new" },
@@ -174,5 +181,51 @@ describe("POST /api/projects/[projectId]/nodes/stream", () => {
 
     expect(response.status).toBe(200);
     expect(streamDeepSeekReplyMock).toHaveBeenCalledOnce();
+  });
+
+  it("resolves attached curricula and passes them to the reply stream", async () => {
+    const curriculumContexts = [
+      {
+        curriculumId: "cur_1",
+        versionId: "ver_1",
+        title: "Deep Learning Foundations",
+        versionLabel: "v1",
+        outline: "- Foundations",
+        snippets: [],
+      },
+    ];
+    getWorkspaceCurriculumContextsForOwnerMock.mockResolvedValue(curriculumContexts);
+    const { POST } = await import(
+      "@/app/api/projects/[projectId]/nodes/stream/route"
+    );
+
+    const response = await POST(
+      createStreamRequest({
+        attachments: [
+          {
+            id: "att_1",
+            name: "Deep Learning Foundations",
+            mimeType: "application/x-branchmind-curriculum",
+            size: 0,
+            createdAt: "2026-08-16T00:00:00.000Z",
+            curriculumId: "cur_1",
+          },
+        ],
+      }),
+      routeContext,
+    );
+    await response.text();
+
+    expect(response.status).toBe(200);
+    expect(getWorkspaceCurriculumContextsForOwnerMock).toHaveBeenCalledWith(
+      "user_test",
+      expect.arrayContaining([
+        expect.objectContaining({ curriculumId: "cur_1" }),
+      ]),
+      "继续讲下一个关键知识点。",
+    );
+    expect(streamDeepSeekReplyMock).toHaveBeenCalledWith(
+      expect.objectContaining({ curriculumContexts }),
+    );
   });
 });
