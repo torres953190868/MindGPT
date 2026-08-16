@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   mkdir,
   readFile,
@@ -445,7 +446,7 @@ async function readDataFile(): Promise<RagDataFile> {
 
 async function writeDataFile(data: RagDataFile) {
   await mkdir(DATA_DIR, { recursive: true });
-  const tempFile = `${DATA_FILE}.${process.pid}.${Date.now()}.tmp`;
+  const tempFile = `${DATA_FILE}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
   await writeFile(tempFile, `${JSON.stringify(data, null, 2)}\n`, "utf8");
   await rename(tempFile, DATA_FILE);
 }

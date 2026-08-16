@@ -3,6 +3,7 @@
 // published curriculum without owning its authoring rows, while every
 // enrollment/session/message/progress row remains scoped to the learner.
 
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createId } from "@/lib/ids";
@@ -221,7 +222,7 @@ async function readLearningData() {
 async function writeLearningData(data: LearningDataFile) {
   const filePath = getDataFilePath();
   await mkdir(path.dirname(filePath), { recursive: true });
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
   await writeFile(tempPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
   await rename(tempPath, filePath);
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { getSupabaseAccountPlanInfo } from "@/lib/server/account-plan";
@@ -63,7 +64,9 @@ async function readFileDailyAiUsage(): Promise<FileDailyAiUsage> {
 async function writeFileDailyAiUsage(data: FileDailyAiUsage) {
   const filePath = usageDataFile();
   await mkdir(path.dirname(filePath), { recursive: true });
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  // Unique per writer: Vitest worker threads share process.pid and can hit
+  // the same Date.now() millisecond, truncating each other's temp file.
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
   await writeFile(tempPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
   await rename(tempPath, filePath);
 }

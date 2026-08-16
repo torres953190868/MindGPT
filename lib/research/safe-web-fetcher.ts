@@ -17,6 +17,10 @@ export type SafeFetchedPage = {
   content: string;
   fetchedAt: string;
   truncated: boolean;
+  // Prompt-injection signal CATEGORY codes detected in the cleaned content
+  // (never the matched text). Absent means clean; consumers use it to enforce
+  // policy (e.g. quarantine) instead of relying on the security-event log.
+  injectionSignals?: string[];
 };
 
 export interface SafeWebFetcher {

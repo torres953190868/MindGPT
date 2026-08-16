@@ -2,7 +2,9 @@
 // dimension crossing its cap throws AgentError(AGENT_BUDGET_EXHAUSTED), which
 // terminates the run; the runner persists the reason. The tracker is pure
 // in-memory (one instance per run execution) and unit-testable — persistence
-// of the final usage lives in agent_runs.usage_json via snapshot().
+// of the final usage lives in agent_runs.usage_json via snapshot(). A queued
+// run gets a fresh tracker per invocation, so the runner rehydrates
+// already-real consumption from the run's persisted rows via restore().
 //
 // "1 Agent Step = 1 model round-trip" (spec §11.4): a single round-trip may
 // batch several tool calls, which is why searches/fetches/sources have their
@@ -77,6 +79,20 @@ export type AgentRunUsage = {
 };
 
 export type AgentRuntimeMode = "inline" | "queued";
+
+// Already-real consumption from an earlier execution of the same run. Every
+// field is optional; absent dimensions restore as zero. Used by restore() to
+// rehydrate a fresh tracker on resume/continuation.
+export type AgentBudgetConsumption = {
+  agentSteps?: number;
+  searchQueries?: number;
+  fetchedPages?: number;
+  repairLoops?: number;
+  sources?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+};
 
 type BudgetDimension =
   | "maxAgentSteps"
@@ -199,6 +215,21 @@ export class AgentBudgetTracker {
 
   recordModelCall(call: ModelCallUsage) {
     this.modelCalls.push({ ...call });
+  }
+
+  // Pre-loads consumption recorded by earlier executions of the same run
+  // (queued mode gets a fresh tracker per invocation). Restore never throws:
+  // restored amounts only count against the caps, so the NEXT consume on an
+  // exhausted dimension is what fails the run.
+  restore(consumed: AgentBudgetConsumption) {
+    this.usage.agentSteps += consumed.agentSteps ?? 0;
+    this.usage.searchQueries += consumed.searchQueries ?? 0;
+    this.usage.fetchedPages += consumed.fetchedPages ?? 0;
+    this.usage.repairLoops += consumed.repairLoops ?? 0;
+    this.usage.sources += consumed.sources ?? 0;
+    this.usage.promptTokens += consumed.promptTokens ?? 0;
+    this.usage.completionTokens += consumed.completionTokens ?? 0;
+    this.usage.totalTokens += consumed.totalTokens ?? 0;
   }
 
   // Runtime is checked at stage safe-points instead of being "consumed".

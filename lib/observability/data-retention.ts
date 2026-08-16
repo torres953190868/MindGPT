@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { getSupabaseAdminClient, hasSupabaseServerConfig } from "@/lib/supabase/server";
@@ -121,7 +122,7 @@ export async function executeRetentionCleanup(options: {
   data.events = (data.events ?? []).filter((event) => !deletedRunIds.has(event.run_id));
   data.idempotencyKeys = (data.idempotencyKeys ?? []).filter((entry) => entry.created_at >= plan.cutoffs.tracesBefore);
   await mkdir(path.dirname(target), { recursive: true });
-  const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
+  const temporary = `${target}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
   await writeFile(temporary, `${JSON.stringify(data, null, 2)}\n`, "utf8");
   await rename(temporary, target);
   return {

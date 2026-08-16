@@ -18,6 +18,7 @@ import {
 } from "@/lib/curriculum/curriculum-version-diff-service";
 import type {
   LearningEnrollment,
+  LearningMessage,
   LearningPath,
   LearningSession,
   TeachingSkill,
@@ -25,7 +26,18 @@ import type {
   TutorResponse,
 } from "@/lib/learning/learning-types";
 import type { EnrollmentMigrationProgressInput } from "@/lib/learning/learning-repository";
-import { runTutorAgent } from "@/lib/agents/tutor/tutor-agent";
+import { runTutorAgent, type TutorAgentInput } from "@/lib/agents/tutor/tutor-agent";
+import { TUTOR_AGENT_BUDGET, type AgentRunUsage } from "@/lib/agent-runtime/agent-budget";
+import { AgentError, isAgentError } from "@/lib/agent-runtime/agent-errors";
+import {
+  completeStep,
+  createRun,
+  finishRun,
+  startRun,
+} from "@/lib/agent-runtime/agent-run-service";
+import type { AgentRunDto } from "@/lib/agent-runtime/agent-run-types";
+import { createModelCallUsage, hashTelemetryText } from "@/lib/agent-runtime/agent-usage";
+import { createId } from "@/lib/ids";
 import { isTutorAgentEnabled } from "@/lib/server/feature-flags";
 import { appendTutorTurn, listRecentLearningMessages } from "@/lib/learning/message-service";
 import { incrementDailyAgentUsage } from "@/lib/server/ai-usage";
@@ -361,6 +373,197 @@ async function recordTutorAgentUsage(userId: string, response: TutorResponse) {
   });
 }
 
+type TutorChatRunContext = {
+  userId: string;
+  request: TutorRequest;
+  context: LearningContext;
+  session: LearningSession;
+  skill: TeachingSkill;
+  currentNodeId: string;
+  recentMessages: LearningMessage[];
+  recentErrors: string[];
+  sources: SourceChunkMatch[];
+};
+
+// Same content-to-{chars, sha256} summary the curriculum runner persists for
+// model steps; prompt bodies are never stored.
+function summarizeTutorContextMessages(request: TutorRequest, recentMessages: LearningMessage[]) {
+  const entries = recentMessages.map((message) => {
+    const content = JSON.stringify(message.blocks);
+    return {
+      role: message.role === "user" ? "user" : "assistant",
+      chars: content.length,
+      sha256: hashTelemetryText(content),
+    };
+  });
+  const trimmed = request.message?.trim();
+  if (trimmed) entries.push({ role: "user", chars: trimmed.length, sha256: hashTelemetryText(trimmed) });
+  return JSON.stringify(entries);
+}
+
+// Creates + starts a lightweight run for one tutor chat so metrics and trace
+// endpoints cover the tutor. Tutor runs share the one-active-run-per-curriculum
+// constraint with curriculum_builder; an in-flight generation must never block
+// a chat, so AGENT_RUN_CONFLICT degrades to serving the turn without a record.
+async function startTutorChatRun(input: TutorChatRunContext): Promise<AgentRunDto | null> {
+  const { enrollment } = input.context;
+  try {
+    const { run } = await createRun({
+      agentType: "tutor",
+      userId: input.userId,
+      projectId: null,
+      curriculumId: enrollment.curriculumId,
+      curriculumVersionId: enrollment.curriculumVersionId,
+      enrollmentId: enrollment.id,
+      idempotencyKey: createId("tutor-chat"),
+      // Privacy-safe summary only: ids, enums and counts — never the
+      // assembled prompt or conversation text.
+      input: {
+        enrollmentId: enrollment.id,
+        nodeId: input.currentNodeId,
+        sessionId: input.session.id,
+        skillId: input.skill.id,
+        action: input.request.action ?? null,
+        targetNodeId: input.request.targetNodeId ?? null,
+        messageLength: input.request.message?.trim().length ?? 0,
+        recentMessageCount: input.recentMessages.length,
+        recentErrorCount: input.recentErrors.length,
+        sourceCount: input.sources.length,
+      },
+      budget: TUTOR_AGENT_BUDGET,
+    });
+    return await startRun(run.id);
+  } catch (error) {
+    if (isAgentError(error) && error.code === "AGENT_RUN_CONFLICT") {
+      console.warn("BranchMind tutor run recording degraded", {
+        code: error.code,
+        curriculumId: enrollment.curriculumId,
+        enrollmentId: enrollment.id,
+      });
+      return null;
+    }
+    throw error;
+  }
+}
+
+function buildTutorChatRunUsage(response: TutorResponse, sourceCount: number): AgentRunUsage {
+  const usage = response.usage;
+  const modelCalls = usage
+    ? [createModelCallUsage({
+        provider: usage.provider,
+        model: usage.model,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        totalTokens: usage.totalTokens,
+        durationMs: usage.durationMs,
+      })]
+    : [];
+  return {
+    agentSteps: 1,
+    searchQueries: 1, // The enrolled-source lookup counted by the tutor budget.
+    fetchedPages: 0,
+    repairLoops: 0,
+    sources: sourceCount,
+    promptTokens: usage?.promptTokens ?? 0,
+    completionTokens: usage?.completionTokens ?? 0,
+    totalTokens: usage?.totalTokens ?? 0,
+    runtimeMs: usage?.durationMs ?? 0,
+    ...(modelCalls.length > 0
+      ? { estimatedCostUsd: modelCalls[0].estimatedCostUsd, modelCalls }
+      : {}),
+  };
+}
+
+// Runs the tutor's single model call inside the run lifecycle: one model
+// step, then a terminal finishRun whose usage doubles as the daily-usage
+// accounting for the turn (finishRun summarizes it into the daily counters),
+// so callers must skip the manual increment when runRecorded is true.
+async function runTutorChatWithRunRecord(
+  input: TutorChatRunContext,
+): Promise<{ response: TutorResponse; runRecorded: boolean }> {
+  const agentInput: TutorAgentInput = {
+    request: input.request,
+    context: input.context,
+    session: input.session,
+    recentMessages: input.recentMessages,
+    sources: input.sources,
+    skill: input.skill,
+    recentErrors: input.recentErrors,
+  };
+  const run = await startTutorChatRun(input);
+  if (!run) return { response: await runTutorAgent(agentInput), runRecorded: false };
+
+  const stepInput = {
+    task: "tutor_chat",
+    messagesSummary: summarizeTutorContextMessages(input.request, input.recentMessages),
+  };
+  const startedAt = Date.now();
+  let response: TutorResponse;
+  try {
+    response = await runTutorAgent(agentInput);
+  } catch (error) {
+    const tracked = isAgentError(error)
+      ? error
+      : new AgentError(error instanceof Error ? error.message : String(error), {
+          code: "AGENT_STAGE_FAILED",
+          status: 500,
+        });
+    await completeStep({
+      runId: run.id,
+      stepNumber: 1,
+      stage: "teaching",
+      stepType: "model",
+      toolName: null,
+      input: stepInput,
+      output: null,
+      status: "failed",
+      durationMs: Date.now() - startedAt,
+      usage: null,
+      error: { code: tracked.code, message: tracked.message },
+    });
+    await finishRun(run.id, {
+      status: "failed",
+      errorCode: tracked.code,
+      errorMessage: tracked.message,
+      usage: null,
+    });
+    throw error;
+  }
+
+  await completeStep({
+    runId: run.id,
+    stepNumber: 1,
+    stage: "teaching",
+    stepType: "model",
+    toolName: null,
+    input: stepInput,
+    output: {
+      lessonGoal: response.lessonGoal,
+      currentNodeId: response.currentNodeId,
+      blocks: response.blocks,
+      progressProposal: response.progressProposal ?? null,
+    },
+    status: "succeeded",
+    durationMs: response.usage?.durationMs ?? Date.now() - startedAt,
+    usage: response.usage
+      ? createModelCallUsage({
+          provider: response.usage.provider,
+          model: response.usage.model,
+          promptTokens: response.usage.promptTokens,
+          completionTokens: response.usage.completionTokens,
+          totalTokens: response.usage.totalTokens,
+          durationMs: response.usage.durationMs,
+        })
+      : null,
+    error: null,
+  });
+  await finishRun(run.id, {
+    status: "succeeded",
+    usage: buildTutorChatRunUsage(response, input.sources.length),
+  });
+  return { response, runRecorded: true };
+}
+
 export async function chatWithTutorForOwner(
   userId: string,
   request: TutorRequest,
@@ -473,14 +676,16 @@ export async function chatWithTutorForOwner(
     // Recent-error context is advisory; a missing assessment backend must not
     // block a normal Tutor turn.
   }
-  const response = await runTutorAgent({
+  const { response, runRecorded } = await runTutorChatWithRunRecord({
+    userId,
     request,
     context: activeContext,
     session,
+    currentNodeId,
     recentMessages,
+    recentErrors,
     sources,
     skill,
-    recentErrors,
   });
 
   const allowedSourceIds = new Set(sources.map((source) => source.sourceId));
@@ -505,7 +710,9 @@ export async function chatWithTutorForOwner(
     response: safeResponse,
     session,
   }, repository);
-  await recordTutorAgentUsage(userId, appended.response);
+  // finishRun already folded the turn's usage into the daily counters when a
+  // run was recorded; the degraded (no-run) path keeps the manual increment.
+  if (!runRecorded) await recordTutorAgentUsage(userId, appended.response);
 
   return {
     ...(await readContext(userId, request.enrollmentId, repository)),

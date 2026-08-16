@@ -1,14 +1,16 @@
 import type { NextRequest } from "next/server";
-import { NextResponse } from "next/server";
+import { send } from "@vercel/queue";
+import {
+  CURRICULUM_PROCESSING_TOPIC,
+  type CurriculumProcessingJob,
+} from "@/lib/agents/curriculum-builder/curriculum-jobs";
 import { runCurriculumBuilder } from "@/lib/agents/curriculum-builder/curriculum-runner";
+import { getRun, resumeRun } from "@/lib/agent-runtime/agent-run-service";
 import { assertCurriculumAgentEnabled } from "@/lib/curriculum/curriculum-service";
 import { curriculumBuildRequestSchema } from "@/lib/curriculum/curriculum-types";
-import { getRun } from "@/lib/agent-runtime/agent-run-service";
 import { getAccountPlanForModelAccess } from "@/lib/server/account-plan";
 import { getBranchMindAuthContext } from "@/lib/server/auth";
 import {
-  getSafeErrorCode,
-  getSafeErrorMessage,
   getSafeErrorStatus,
   jsonWithSession,
   logApiError,
@@ -17,13 +19,7 @@ import {
 import { getOrCreateRequestId } from "@/lib/server/request";
 import { checkRateLimitAsync } from "@/lib/server/rate-limit";
 import { assertValidRequestOrigin } from "@/lib/server/security";
-import {
-  commitSessionCookie,
-  getOrCreateSession,
-  type BranchMindSession,
-} from "@/lib/server/session";
-import type { CurriculumStreamEvent } from "@/lib/agent-runtime/stream-events";
-import type { CurriculumRunResult } from "@/lib/agents/curriculum-builder/curriculum-runner";
+import { getOrCreateSession } from "@/lib/server/session";
 
 type AgentRunResumeRouteContext = {
   params: Promise<{ runId: string }>;
@@ -32,28 +28,12 @@ type AgentRunResumeRouteContext = {
 const AGENT_RUN_WRITE_LIMIT = 30;
 const AGENT_RUN_WINDOW_MS = 60_000;
 
-const encoder = new TextEncoder();
-
-function encodeSse(event: string, data: unknown) {
-  return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-}
-
-function createSseResponse(
-  stream: ReadableStream<Uint8Array>,
-  session: BranchMindSession,
-  requestId: string,
-) {
-  const response = new NextResponse(stream, {
-    headers: {
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "X-Accel-Buffering": "no",
-      "x-request-id": requestId,
-    },
-  });
-
-  return commitSessionCookie(response, session);
+// Mirrors BRANCHMIND_RAG_QUEUE_MODE: queue workers in production, detached
+// inline execution in dev where no queue infrastructure is running.
+function getCurriculumQueueMode() {
+  const value = process.env.BRANCHMIND_CURRICULUM_QUEUE_MODE?.trim().toLowerCase();
+  if (value === "inline" || value === "queue") return value;
+  return process.env.NODE_ENV === "development" ? "inline" : "queue";
 }
 
 export async function POST(request: NextRequest, context: AgentRunResumeRouteContext) {
@@ -117,43 +97,50 @@ export async function POST(request: NextRequest, context: AgentRunResumeRouteCon
     }
 
     const accountPlan = await getAccountPlanForModelAccess(principal);
-    const stream = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        let result: CurriculumRunResult | undefined;
-        try {
-          result = await runCurriculumBuilder({
-            runId,
-            ownerId: principal.id,
-            curriculumId: run.curriculumId!,
-            request: parsedInput.data,
-            idempotencyKey: newIdempotencyKey,
-            runtimeMode: "inline",
-            accountPlan,
-            emit: (event: CurriculumStreamEvent) => {
-              controller.enqueue(encodeSse(event.type, event));
-            },
-          });
-        } catch (error) {
-          const status = getSafeErrorStatus(error);
-          logApiError(error, status, requestId, {
-            action: "curriculum-resume",
-            runId,
-          });
-          controller.enqueue(
-            encodeSse("run_failed", {
-              runId: result?.runId ?? runId,
-              seq: 0,
-              code: getSafeErrorCode(error, status),
-              message: getSafeErrorMessage(status, error),
-            }),
-          );
-        } finally {
-          controller.close();
-        }
-      },
-    });
 
-    return createSseResponse(stream, session, requestId);
+    // Transitions failed/cancelled -> queued before any execution kicks off,
+    // so polling clients never observe the old terminal status. A retried
+    // resume with a fresh key 409s here once the run is active again.
+    const resumed = await resumeRun(principal.id, runId, newIdempotencyKey);
+
+    if (getCurriculumQueueMode() === "queue") {
+      const job: CurriculumProcessingJob = {
+        runId,
+        ownerId: principal.id,
+        curriculumId: run.curriculumId!,
+        request: parsedInput.data,
+        requestId,
+        accountPlan: accountPlan ?? null,
+      };
+      await send(CURRICULUM_PROCESSING_TOPIC, job, {
+        headers: { "x-request-id": requestId },
+        retentionSeconds: 24 * 60 * 60,
+      });
+    } else {
+      // Dev-only inline execution: detached so the route can return 202
+      // immediately; the runner persists run_failed events on its own.
+      void runCurriculumBuilder({
+        runId,
+        ownerId: principal.id,
+        curriculumId: run.curriculumId!,
+        request: parsedInput.data,
+        idempotencyKey: newIdempotencyKey,
+        runtimeMode: "inline",
+        accountPlan,
+      }).catch((error: unknown) => {
+        logApiError(error, getSafeErrorStatus(error), requestId, {
+          action: "curriculum-resume",
+          runId,
+        });
+      });
+    }
+
+    return jsonWithSession(
+      { runId: resumed.run.id, status: resumed.run.status },
+      session,
+      { status: 202 },
+      { requestId },
+    );
   } catch (error) {
     return safeErrorWithSession(error, fallbackSession, { requestId });
   }

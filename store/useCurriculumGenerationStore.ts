@@ -19,15 +19,15 @@ import {
   getAgentRunEvents,
   resumeAgentRun,
 } from "@/lib/client/curriculum-api";
-import { readCurriculumStreamEvents } from "@/lib/client/curriculum-streaming";
 import type { CurriculumBuildRequest } from "@/lib/curriculum/curriculum-types";
 
 const ACTIVE_RUN_POLL_INTERVAL_MS = 2_000;
 const STORAGE_KEY_PREFIX = "branchmind-curriculum-generation:";
 
-// A single browser tab has one active curriculum generation stream. Keeping
-// the controller outside Zustand lets the cancel action stop the local SSE
-// reader without making an AbortController part of the serializable UI state.
+// A single browser tab has one in-flight curriculum generation request.
+// Keeping the controller outside Zustand lets the cancel action abort the
+// pending start/resume fetch without making an AbortController part of the
+// serializable UI state.
 let activeStreamAbortController: AbortController | null = null;
 
 export type SearchRecord = {
@@ -317,58 +317,19 @@ export const useCurriculumGenerationStore = create<CurriculumGenerationStore>((s
 
     const abortController = new AbortController();
     activeStreamAbortController = abortController;
-    let runId: string | null = null;
 
     try {
-      const { response, runId: queuedRunId } = await generateCurriculum(curriculumId, request, {
+      const { runId } = await generateCurriculum(curriculumId, request, {
         signal: abortController.signal,
       });
 
-      if (queuedRunId) {
-        set({ runId: queuedRunId, status: "polling", isConnected: false });
-        writeStoredRun(curriculumId, queuedRunId, 0);
-        startPolling(curriculumId, queuedRunId, get, set);
-        return;
+      if (!runId) {
+        throw new Error("Generation did not return a run id.");
       }
 
-      const { events } = await readCurriculumStreamEvents(
-        response,
-        (event) => {
-          set((prev) => {
-            const next = applyStreamEvent(prev, event);
-            if (!runId && event.runId) runId = event.runId;
-            if (next.curriculumId && next.runId) {
-              writeStoredRun(next.curriculumId, next.runId, next.latestSeq);
-            }
-            return next;
-          });
-        },
-        {
-          signal: abortController.signal,
-        },
-      );
-
-      if (events.length > 0 && events[0]) {
-        runId = events[0].runId;
-      }
-
-      const finalEvent = events[events.length - 1];
-      if (finalEvent?.type === "run_completed") {
-        set({ status: "completed", isConnected: false });
-        clearStoredRun(curriculumId);
-      } else if (finalEvent?.type === "run_failed") {
-        set({
-          status: "failed",
-          error: { code: finalEvent.code, message: finalEvent.message },
-          isConnected: false,
-        });
-      } else if (finalEvent?.type === "run_cancelled") {
-        set({ status: "cancelled", isConnected: false });
-      } else if (runId) {
-        // Stream ended without terminal event; transition to polling.
-        set({ status: "polling", isConnected: false });
-        startPolling(curriculumId, runId, get, set);
-      }
+      set({ runId, status: "polling", isConnected: false });
+      writeStoredRun(curriculumId, runId, 0);
+      startPolling(curriculumId, runId, get, set);
     } catch (error) {
       if (abortController.signal.aborted && (get().status === "cancelling" || get().status === "cancelled")) {
         return;
@@ -397,34 +358,12 @@ export const useCurriculumGenerationStore = create<CurriculumGenerationStore>((s
     activeStreamAbortController = abortController;
 
     try {
-      const { response } = await resumeAgentRun(runId, { signal: abortController.signal });
-      const { events } = await readCurriculumStreamEvents(response, (event) => {
-        set((prev) => {
-          const next = applyStreamEvent(prev, event);
-          if (next.curriculumId && next.runId) {
-            writeStoredRun(next.curriculumId, next.runId, next.latestSeq);
-          }
-          return next;
-        });
-      }, { signal: abortController.signal });
-
-      const finalEvent = events[events.length - 1];
-      if (finalEvent?.type === "run_completed") {
-        set({ status: "completed", isConnected: false });
-        const curriculumId = get().curriculumId;
-        if (curriculumId) clearStoredRun(curriculumId);
-      } else if (finalEvent?.type === "run_failed") {
-        set({
-          status: "failed",
-          error: { code: finalEvent.code, message: finalEvent.message },
-          isConnected: false,
-        });
-      } else if (finalEvent?.type === "run_cancelled") {
-        set({ status: "cancelled", isConnected: false });
-      } else if (events.length > 0 && events[0]) {
-        const curriculumId = get().curriculumId ?? state.curriculumId;
-        set({ status: "polling", isConnected: false });
-        if (curriculumId) startPolling(curriculumId, events[0].runId, get, set);
+      await resumeAgentRun(runId, { signal: abortController.signal });
+      const curriculumId = get().curriculumId ?? state.curriculumId;
+      set({ status: "polling", isConnected: false });
+      if (curriculumId) {
+        writeStoredRun(curriculumId, runId, get().latestSeq);
+        startPolling(curriculumId, runId, get, set);
       }
     } catch (error) {
       if (abortController.signal.aborted && (get().status === "cancelling" || get().status === "cancelled")) {

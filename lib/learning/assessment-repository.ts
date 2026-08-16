@@ -3,6 +3,7 @@
 // older local data remains readable; Supabase uses the same owner-scoped
 // enrollment boundary as the learning repository.
 
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createId } from "@/lib/ids";
@@ -154,7 +155,7 @@ async function readData() {
 async function writeData(data: AssessmentDataFile) {
   const filePath = getDataFilePath();
   await mkdir(path.dirname(filePath), { recursive: true });
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
   await writeFile(tempPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
   await rename(tempPath, filePath);
 }

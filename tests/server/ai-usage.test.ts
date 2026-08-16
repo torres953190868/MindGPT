@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -60,19 +60,24 @@ function planInfoWithAiMessageLimit(limit: number | null) {
 
 describe("daily AI usage tracking", () => {
   let warnSpy: ReturnType<typeof vi.spyOn>;
+  let dataDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     hasSupabaseServerConfigMock.mockReset();
     getSupabaseAdminClientMock.mockReset();
     getSupabaseAccountPlanInfoMock.mockReset();
     hasSupabaseServerConfigMock.mockReturnValue(true);
     warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // The file backend must never touch the repo's real data/ directory.
+    dataDir = await mkdtemp(path.join(tmpdir(), "branchmind-ai-usage-test-"));
+    vi.stubEnv("BRANCHMIND_AI_USAGE_DATA_DIR", dataDir);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     warnSpy.mockRestore();
     vi.unstubAllEnvs();
     vi.useRealTimers();
+    await rm(dataDir, { recursive: true, force: true });
   });
 
   describe("trackDailyAiMessageUsage", () => {
@@ -314,6 +319,30 @@ describe("daily AI usage tracking", () => {
         agentRunsCount: 2,
       }]);
       await rm(dataDir, { recursive: true, force: true });
+    });
+
+    it("keeps same-millisecond concurrent increments parseable and complete", async () => {
+      vi.stubEnv("BRANCHMIND_AI_USAGE_BACKEND", "file");
+      vi.useFakeTimers({ now: new Date("2026-07-29T12:00:00.000Z") });
+
+      await Promise.all([
+        incrementDailyAgentUsage({ userId: "user_a", tokens: 10, runsCount: 1 }),
+        incrementDailyAgentUsage({ userId: "user_b", tokens: 20, runsCount: 1 }),
+      ]);
+
+      // Regression guard for the torn-write incident: writers in different
+      // worker threads share process.pid and can land on the same Date.now()
+      // millisecond, so the temp file name must carry a per-writer unique
+      // suffix — the published file must parse as one complete document.
+      const raw = await readFile(path.join(dataDir, "branchmind-ai-usage.json"), "utf8");
+      const parsed = JSON.parse(raw) as {
+        entries: Array<{ userId: string; agentTokensTotal?: number }>;
+      };
+      expect(
+        parsed.entries.map((entry) => `${entry.userId}:${entry.agentTokensTotal}`).sort(),
+      ).toEqual(["user_a:10", "user_b:20"]);
+      const leftovers = await readdir(dataDir);
+      expect(leftovers.filter((name) => name.endsWith(".tmp"))).toEqual([]);
     });
   });
 });

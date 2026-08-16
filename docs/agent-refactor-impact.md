@@ -130,7 +130,7 @@ spec §2.2 允许：项目未使用 AI SDK 时不照抄其 API。现有链路全
 
 1. **`/api/chat` 无测试** — Phase 0 先补，重构期间任何 llm-router 改动都有回归网。
 2. **zod v4**：新 schema 用 v4 语法（避免 `.passthrough()` 等新写 deprecated API）。
-3. **流式协议分叉**：旧聊天保留 `delta/complete/error`；新 Agent 用扩展事件（runId+seq 单调递增、事件先落库再推送）。两套协议共存，不合并。
+3. **流式协议分叉**：旧聊天保留 `delta/complete/error` SSE；Agent 运行进度已收敛为单一轮询协议——事件先落库（runId+seq 单调递增），generate/resume 均返回 202 `{runId, status}`，客户端统一轮询 `agent-runs/:id/events?after=seq`，不再向客户端推送 SSE。
 4. **限流并发缝隙**：agent run 创建等硬配额场景用原子 RPC（`increment_daily_ai_usage` 模式）而非 rate_limits 两步写法。
 5. **file 后端事务语义**：发布/派生等多步写在 file 实现里用单 writer 串行化，测试需覆盖「失败不产生半发布状态」。
 6. **Supabase 权限靠应用层**：新表所有查询必须带 owner 过滤，权限测试（spec §15.6）逐条落实。

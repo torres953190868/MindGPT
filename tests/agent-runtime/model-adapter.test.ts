@@ -45,6 +45,23 @@ function completionResponse(content: string, status = 200) {
   );
 }
 
+// Mimics real fetch abort semantics: never resolves, rejects with AbortError
+// when the passed signal aborts (immediately if already aborted).
+function neverResolvingAbortableFetch() {
+  return (_url: unknown, init: RequestInit) =>
+    new Promise<Response>((_resolve, reject) => {
+      const signal = init.signal as AbortSignal | null;
+      if (!signal) return;
+      const rejectAbort = () =>
+        reject(new DOMException("The operation was aborted.", "AbortError"));
+      if (signal.aborted) {
+        rejectAbort();
+        return;
+      }
+      signal.addEventListener("abort", rejectAbort, { once: true });
+    });
+}
+
 function readFetchBody(call: unknown[]) {
   return JSON.parse(String((call[1] as RequestInit).body)) as {
     max_tokens: number;
@@ -104,6 +121,33 @@ describe("MockModelAdapter (D6)", () => {
     await expect(adapter.completeAction(createRequest())).rejects.toMatchObject({
       code: "AGENT_INVALID_MODEL_OUTPUT",
     });
+  });
+
+  it("routes stage-keyed entries by request.stage, independent of prompt content", async () => {
+    const adapter = new MockModelAdapter([
+      { stage: "intake", action: { kind: "final", text: "intake-action" } },
+      { stage: "building_graph", action: { kind: "final", text: "skeleton-action" } },
+    ]);
+
+    // The prompts carry no markers at all: routing keys on the explicit
+    // stage, so prompt copy changes cannot break a stage-keyed script.
+    const intake = await adapter.completeAction(createRequest({ stage: "intake" }));
+    expect(intake.action).toEqual({ kind: "final", text: "intake-action" });
+    const skeleton = await adapter.completeAction(createRequest({ stage: "building_graph" }));
+    expect(skeleton.action).toEqual({ kind: "final", text: "skeleton-action" });
+  });
+
+  it("never matches stage-keyed entries without a matching request stage", async () => {
+    const adapter = new MockModelAdapter([
+      { stage: "intake", action: { kind: "final", text: "intake-action" } },
+    ]);
+
+    await expect(adapter.completeAction(createRequest())).rejects.toMatchObject({
+      code: "AGENT_MOCK_SCRIPT_EXHAUSTED",
+    });
+    await expect(
+      adapter.completeAction(createRequest({ stage: "planning" })),
+    ).rejects.toMatchObject({ code: "AGENT_MOCK_SCRIPT_EXHAUSTED" });
   });
 });
 
@@ -197,6 +241,77 @@ describe("LlmModelAdapter", () => {
 
     const result = await new LlmModelAdapter().completeAction(createRequest());
     expect(result.action).toEqual({ kind: "final", text: "fenced" });
+  });
+
+  it("composes a caller signal with the internal timeout signal", async () => {
+    fetchMock.mockResolvedValueOnce(
+      completionResponse(JSON.stringify({ kind: "final", text: "ok" })),
+    );
+
+    const caller = new AbortController();
+    const result = await new LlmModelAdapter().completeAction(
+      createRequest({ signal: caller.signal }),
+    );
+
+    expect(result.action).toEqual({ kind: "final", text: "ok" });
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    // Fetch always receives the internal controller's signal (never the raw
+    // caller signal), so the provider timeout stays armed.
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(init.signal).not.toBe(caller.signal);
+  });
+
+  it("treats a caller-initiated abort as cancellation, not a timeout", async () => {
+    fetchMock.mockImplementation(neverResolvingAbortableFetch());
+
+    const caller = new AbortController();
+    const promise = new LlmModelAdapter().completeAction(
+      createRequest({ signal: caller.signal }),
+    );
+    const rejection = expect(promise).rejects.toMatchObject({
+      code: "AGENT_RUN_CANCELLED",
+      retryable: false,
+    });
+    caller.abort();
+    await rejection;
+
+    // Cancellation is not retried, unlike a provider timeout.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("short-circuits an already-aborted caller signal without retrying", async () => {
+    fetchMock.mockImplementation(neverResolvingAbortableFetch());
+
+    const caller = new AbortController();
+    caller.abort();
+    await expect(
+      new LlmModelAdapter().completeAction(createRequest({ signal: caller.signal })),
+    ).rejects.toMatchObject({
+      code: "AGENT_RUN_CANCELLED",
+      retryable: false,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the provider timeout armed when a caller signal is present", async () => {
+    fetchMock.mockImplementation(neverResolvingAbortableFetch());
+    const caller = new AbortController();
+    vi.useFakeTimers();
+    try {
+      const promise = new LlmModelAdapter().completeAction(
+        createRequest({ signal: caller.signal }),
+      );
+      const rejection = expect(promise).rejects.toMatchObject({
+        code: "DEEPSEEK_TIMEOUT",
+        retryable: true,
+      });
+      // Two attempts per candidate: 30s timeout + 300ms retry delay + 30s.
+      await vi.advanceTimersByTimeAsync(70_000);
+      await rejection;
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

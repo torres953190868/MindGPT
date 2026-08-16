@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createId } from "@/lib/ids";
@@ -100,7 +101,7 @@ async function readData(): Promise<SecurityEventDataFile> {
 async function writeData(data: SecurityEventDataFile) {
   const filePath = getDataFilePath();
   await mkdir(path.dirname(filePath), { recursive: true });
-  const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  const temporary = `${filePath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
   await writeFile(temporary, `${JSON.stringify(data, null, 2)}\n`, "utf8");
   await rename(temporary, filePath);
 }

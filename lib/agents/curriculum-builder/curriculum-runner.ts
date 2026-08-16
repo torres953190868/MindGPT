@@ -6,13 +6,26 @@
 // - Each successful stage is checkpointed (agent_runs.output_json.checkpoints)
 //   immediately; never batched to the end (spec §2.2).
 // - Resume hydrates artifacts from checkpoints and continues from the first
-//   missing stage; completed stages are not re-executed.
+//   missing stage; completed stages are not re-executed. Budget consumption
+//   is likewise rehydrated from the persisted step rows so run-level budget
+//   caps hold across queue invocations (each invocation builds a fresh
+//   tracker).
 // - Repair loops consume repair budget, clear downstream checkpoints, and route
 //   back to searching/extracting_concepts/building_graph based on warning codes.
+// - Cancellation aborts in-flight model calls via a per-execution watcher
+//   polling the repository (shared state, so cross-process cancels are seen
+//   too); the stage safe-point check stays as the fallback.
 // - Source excerpts are buffered in memory and flushed after the draft version
 //   is persisted, when source clientIds can be mapped to server ids.
 // - All model/tool/validation/persistence steps are recorded via
 //   agent-run-service.completeStep.
+// - Independent unit work inside a stage (query batch, source fetch batch,
+//   per-module node synthesis) runs with bounded concurrency; results merge
+//   in input order so checkpoints and drafts match the serial pipeline.
+// - Fetched pages with prompt-injection signals are quarantined: they stay in
+//   checkpoints (marked, auditable) but their content is excluded from the
+//   extraction model input. The UNTRUSTED_WEB_CONTENT prompt wrapping stays
+//   as the second layer.
 //
 // D6 (mock convergence): when AI_MOCK_MODE is on and no dependencies are
 // injected, the runner wires a MockModelAdapter with a built-in script, a
@@ -37,7 +50,7 @@ import {
   resumeRun,
   startRun,
 } from "@/lib/agent-runtime/agent-run-service";
-import type { AgentRunDto } from "@/lib/agent-runtime/agent-run-types";
+import type { AgentRunDto, AgentStepDto } from "@/lib/agent-runtime/agent-run-types";
 import {
   AgentEventSequencer,
   type CurriculumRunStage,
@@ -61,17 +74,20 @@ import {
   type ModuleNodesOutput,
   type ResearchPlan,
 } from "@/lib/agents/curriculum-builder/curriculum-builder-schema";
-import { executeFetchWebPageTool } from "@/lib/agents/curriculum-builder/tools/fetch-web-page-tool";
 import {
   createDefaultProjectDocumentsSearcher,
-  executeSearchProjectDocumentsTool,
   type ProjectDocumentsSearcher,
 } from "@/lib/agents/curriculum-builder/tools/search-project-documents-tool";
 import {
   executeGetExistingCurriculumTool,
   type GetExistingCurriculumToolInput,
 } from "@/lib/agents/curriculum-builder/tools/get-existing-curriculum-tool";
-import { executeWebSearchTool } from "@/lib/agents/curriculum-builder/tools/web-search-tool";
+import {
+  CURRICULUM_TOOLS,
+  getCurriculumToolBudgetDimension,
+  type CurriculumToolDefinition,
+} from "@/lib/agents/curriculum-builder/tools/tool-registry";
+import type { ToolResult } from "@/lib/agents/curriculum-builder/tools/tool-result";
 import {
   CURRICULUM_LIMITS,
   type CurriculumBuildRequest,
@@ -93,6 +109,7 @@ import {
 import {
   createAgentModelAdapter,
   isAgentModelMockMode,
+  MockModelAdapter,
   type AgentModelAdapter,
   type AgentModelActionRequest,
   type AgentModelUsage,
@@ -108,7 +125,7 @@ import { MockSafeWebFetcher } from "@/lib/research/mock-safe-web-fetcher";
 import { getSafeWebFetcher, type SafeWebFetcher } from "@/lib/research/safe-web-fetcher";
 import { MockWebSearchProvider } from "@/lib/research/mock-web-search-provider";
 import { getWebSearchProvider, type WebSearchProvider, type WebSearchResult } from "@/lib/research/web-search-provider";
-import { buildIntakeUserPrompt, buildModuleNodesUserPrompt, buildResearchPlanUserPrompt, buildSkeletonUserPrompt, buildValidationScoresUserPrompt, buildConceptExtractionUserPrompt, CURRICULUM_BUILDER_SYSTEM_PROMPT } from "@/lib/agents/curriculum-builder/curriculum-builder-prompts";
+import { buildIntakeUserPrompt, buildModuleNodesUserPrompt, buildResearchPlanUserPrompt, buildSkeletonUserPrompt, buildValidationScoresUserPrompt, buildConceptExtractionUserPrompt, CURRICULUM_BUILDER_SYSTEM_PROMPT, moduleNodesModelStage } from "@/lib/agents/curriculum-builder/curriculum-builder-prompts";
 
 // ---------------------------------------------------------------------------
 // Public contracts.
@@ -124,6 +141,26 @@ export type CurriculumRunResult = {
   usage: AgentRunUsage;
 };
 
+// Observation-only lifecycle hooks (the runner's observability seam).
+// Payloads stay tiny — stage/task enums and usage numbers, never prompt
+// text. Hooks are notified, never consulted: they cannot gate or alter
+// execution, and a throwing hook is logged and swallowed (see invokeHook) so
+// observability can never break the pipeline. They live in deps — the same
+// place the runner reads every other behavior seam from — and public-API
+// callers pass them through options.deps.
+export type CurriculumRunnerHooks = {
+  preStage?: (stage: CurriculumRunStage) => void | Promise<void>;
+  postStage?: (
+    stage: CurriculumRunStage,
+    outcome: { ok: true } | { ok: false; code: string },
+  ) => void | Promise<void>;
+  preModelCall?: (meta: { task: string; stage: CurriculumRunStage }) => void | Promise<void>;
+  postModelCall?: (
+    meta: { task: string; stage: CurriculumRunStage },
+    result: { ok: true; usage: AgentModelUsage } | { ok: false; code: string },
+  ) => void | Promise<void>;
+};
+
 export type CurriculumRunnerDeps = {
   modelAdapter: AgentModelAdapter;
   webSearchProvider: WebSearchProvider;
@@ -136,6 +173,7 @@ export type CurriculumRunnerDeps = {
     input: GetExistingCurriculumToolInput,
   ) => ReturnType<typeof executeGetExistingCurriculumTool>;
   budget: AgentBudgetTracker;
+  hooks?: CurriculumRunnerHooks;
 };
 
 export type CurriculumRunService = {
@@ -179,6 +217,12 @@ export type CurriculumRunnerOptions = {
   initialRepairLoops?: number;
   /** Queue workers stop after a checkpoint and publish a fresh continuation. */
   maxStagesPerInvocation?: number;
+  /**
+   * How often the cancel watcher polls the repository for a cancellation.
+   * Between stage safe-points this is what aborts in-flight model calls.
+   * Defaults to RUN_CANCEL_POLL_INTERVAL_MS; tests may lower it.
+   */
+  cancelPollIntervalMs?: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -195,6 +239,57 @@ const STAGE_ORDER: CurriculumRunStage[] = [
   "validating",
   "saving_draft",
 ];
+
+// Default interval for the per-execution cancel watcher. The repository is
+// shared file/Supabase state, so polling sees cross-process cancels too.
+const RUN_CANCEL_POLL_INTERVAL_MS = 2_000;
+
+// Bounded-concurrency limits for independent calls inside one stage. Kept
+// small and static: every in-flight call consumes budget up front, and
+// provider rate limits sit behind these same code paths.
+const SEARCH_FETCH_CONCURRENCY = 3;
+const MODULE_SYNTHESIS_CONCURRENCY = 3;
+
+// Bounded-concurrency map over input indices (worker pool). Results land in
+// input order regardless of completion order, so merging matches the serial
+// loop exactly. The first rejection stops scheduling new items and fails the
+// whole map; already in-flight siblings run to completion.
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  let stopped = false;
+  const runWorker = async (): Promise<void> => {
+    while (!stopped && nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      try {
+        results[index] = await worker(items[index], index);
+      } catch (error) {
+        stopped = true;
+        throw error;
+      }
+    }
+  };
+  const laneCount = Math.min(Math.max(1, concurrency), items.length);
+  await Promise.all(Array.from({ length: laneCount }, runWorker));
+  return results;
+}
+
+// Invokes a lifecycle hook without ever letting it affect the run:
+// observability must not break the pipeline, so hook errors are logged and
+// swallowed. With no hooks configured the closures below short-circuit on
+// `deps.hooks?.`, keeping the overhead negligible.
+async function invokeHook(invoke: () => void | Promise<void>): Promise<void> {
+  try {
+    await invoke();
+  } catch (error) {
+    console.warn("[curriculum-runner] runner hook failed:", error);
+  }
+}
 
 // Mapping of repair target stage names to checkpoint stage keys. Used to clear
 // downstream checkpoints when a repair loop routes back to an earlier stage.
@@ -218,6 +313,12 @@ export type SourceCandidate = CurriculumSource & {
   pageContent?: string;
   /** whether this source came from project documents rather than web */
   fromProjectDocuments?: boolean;
+  /** injection signals crossed the detection threshold at fetch time: the
+   * source stays auditable in checkpoints but its content is quarantined
+   * from model inputs */
+  quarantined?: boolean;
+  /** signal category codes only (never matched text) */
+  injectionSignals?: string[];
 };
 
 export type RunnerCheckpoints = {
@@ -231,6 +332,9 @@ export type RunnerCheckpoints = {
     fetchedSources: SourceCandidate[];
     failedFetches: Array<{ url: string; code: string; message: string }>;
     bufferedExcerpts: Array<{ sourceClientId: string; content: string; fetchedAt: string }>;
+    /** clientIds of quarantined sources (audit trail for resume + trace);
+     * optional for checkpoints persisted before the quarantine policy */
+    quarantinedSourceIds?: string[];
   };
   extracting_concepts?: ConceptExtraction;
   building_graph?: {
@@ -264,6 +368,65 @@ function unwrapStageCheckpoints(persisted: Record<string, unknown>): RunnerCheck
     }
   }
   return unwrapped as RunnerCheckpoints;
+}
+
+// Reads the token usage persisted with a model step (usage_json holds the
+// ModelCallUsage verbatim; failed model calls persist null).
+function readStepTotalTokens(usage: unknown): number {
+  if (usage && typeof usage === "object") {
+    const totalTokens = (usage as { totalTokens?: unknown }).totalTokens;
+    if (typeof totalTokens === "number" && Number.isFinite(totalTokens) && totalTokens > 0) {
+      return totalTokens;
+    }
+  }
+  return 0;
+}
+
+// Rehydrates run-level budget consumption from persisted rows so caps hold
+// across queue invocations (each delivery creates a fresh tracker). Step rows
+// carry everything needed — no schema changes:
+// - every recorded model step consumed one agent step (consumeStep runs
+//   before the call, so failed calls count too); token usage is summed from
+//   successful model steps (consumeTokens runs after the call, so failed
+//   calls contribute no tokens);
+// - tool steps re-consume one unit of the budget dimension the tool registry
+//   assigns to their tool name (tools consume budget per attempt, before the
+//   provider call, and every attempt records a step);
+// - repair loops come from the persisted events (derived by the caller).
+// Sources are not in step rows: they restore from the checkpointed searching
+// artifacts. A repair-invalidated searching checkpoint loses its pre-repair
+// count — accepted, since the repaired run re-selects sources anyway.
+function restoreBudgetConsumption(
+  budget: AgentBudgetTracker,
+  steps: AgentStepDto[],
+  checkpoints: RunnerCheckpoints,
+  repairLoops: number,
+): void {
+  let agentSteps = 0;
+  let totalTokens = 0;
+  let searchQueries = 0;
+  let fetchedPages = 0;
+  for (const step of steps) {
+    if (step.stepType === "model") {
+      agentSteps += 1;
+      totalTokens += readStepTotalTokens(step.usage);
+    } else if (step.stepType === "tool" && step.toolName) {
+      const dimension = getCurriculumToolBudgetDimension(step.toolName);
+      if (dimension === "searchQueries") searchQueries += 1;
+      else if (dimension === "fetchedPages") fetchedPages += 1;
+    }
+  }
+  budget.restore({
+    agentSteps,
+    // callModel consumes totalTokens through consumeTokens, which books them
+    // as promptTokens — mirror that so restored accounting matches live runs.
+    promptTokens: totalTokens,
+    totalTokens,
+    searchQueries,
+    fetchedPages,
+    repairLoops,
+    sources: checkpoints.searching?.selectedSources.length ?? 0,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -306,10 +469,14 @@ export async function runCurriculumBuilder(
         (event) => event.event.type === "stage_started" && event.event.stage === "repairing",
       ).length;
     }
+    // Steps are listed unconditionally on resume/continuation: they continue
+    // step numbering AND rehydrate budget consumption into the fresh tracker
+    // so run-level caps hold across queue invocations.
+    const priorSteps = await runService.listRunSteps(run.id);
     if (options.initialStepNumber === undefined) {
-      const steps = await runService.listRunSteps(run.id);
-      stepNumber = steps.reduce((max, step) => Math.max(max, step.stepNumber), 0) + 1;
+      stepNumber = priorSteps.reduce((max, step) => Math.max(max, step.stepNumber), 0) + 1;
     }
+    restoreBudgetConsumption(deps.budget, priorSteps, checkpoints, initialRepairLoops);
   } else {
     const created = await runService.createRun({
       agentType: "curriculum_builder",
@@ -337,6 +504,20 @@ export async function runCurriculumBuilder(
 
   if (initialSeq === 0) await emitEvent({ type: "run_started" });
 
+  // One abort controller per execution: the cancel watcher aborts in-flight
+  // model calls on cancellation instead of waiting for the next stage
+  // safe-point (which stays as-is).
+  const executionAbort = new AbortController();
+  const cancelWatcher = setInterval(() => {
+    runService.isRunCancelled(run.id).then(
+      (cancelled) => {
+        if (cancelled) executionAbort.abort();
+      },
+      // A polling failure must not fail the run.
+      () => undefined,
+    );
+  }, options.cancelPollIntervalMs ?? RUN_CANCEL_POLL_INTERVAL_MS);
+
   try {
     const result = await executePipeline({
       run,
@@ -353,6 +534,7 @@ export async function runCurriculumBuilder(
       initialRepairLoops,
       stepCounter: { value: stepNumber },
       maxStagesPerInvocation: options.maxStagesPerInvocation,
+      cancelSignal: executionAbort.signal,
     });
     return result;
   } catch (error) {
@@ -399,6 +581,8 @@ export async function runCurriculumBuilder(
       errorMessage: agentError.message,
       usage: deps.budget.snapshot(),
     };
+  } finally {
+    clearInterval(cancelWatcher);
   }
 }
 
@@ -431,6 +615,7 @@ async function resolveRunnerDeps(
     webSearchProvider,
     safeWebFetcher,
     budget,
+    hooks: overrides?.hooks,
     runService: overrides?.runService ?? buildDefaultRunService(),
     curriculumService: overrides?.curriculumService ?? {
       getCurriculumForOwner,
@@ -484,6 +669,9 @@ type PipelineContext = {
   // a second attempt at the same prompt.
   repairFeedback?: StructuredWarning[];
   maxStagesPerInvocation?: number;
+  // Aborted by the cancel watcher when the run is cancelled; forwarded into
+  // model calls so in-flight requests stop instead of burning tokens.
+  cancelSignal: AbortSignal;
 };
 
 async function executePipeline(ctx: PipelineContext): Promise<CurriculumRunResult> {
@@ -541,74 +729,93 @@ async function executePipeline(ctx: PipelineContext): Promise<CurriculumRunResul
     await emitEvent({ type: "stage_started", stage });
 
     let stageResult: RunnerCheckpoints[keyof RunnerCheckpoints] | undefined;
-    switch (stage) {
-      case "intake":
-        stageResult = await runIntakeStage(ctx);
-        break;
-      case "planning":
-        stageResult = await runPlanningStage(ctx);
-        break;
-      case "searching":
-        stageResult = await runSearchingStage(ctx);
-        break;
-      case "fetching_sources":
-        stageResult = await runFetchingSourcesStage(
-          ctx,
-          checkpoints.searching?.selectedSources ?? [],
-          repairFallbackFetchedSources,
-        );
-        break;
-      case "extracting_concepts":
-        stageResult = await runExtractingConceptsStage(ctx, checkpoints);
-        break;
-      case "building_graph":
-        stageResult = await runBuildingGraphStage(ctx, checkpoints);
-        break;
-      case "validating":
-        stageResult = await runValidatingStage(ctx, checkpoints);
-        break;
-      case "saving_draft":
-        stageResult = await runSavingDraftStage(ctx, checkpoints);
-        break;
-      default:
-        throw new AgentError(`Unknown pipeline stage: ${stage}`, { code: "AGENT_STAGE_FAILED", status: 500 });
-    }
-
-    checkpoints[stage as keyof RunnerCheckpoints] = stageResult as never;
-    await runService.checkpointStage(run.id, stage, stageResult);
-    completedStages += 1;
-
-    // Repair loop handling for validating stage.
-    if (stage === "validating") {
-      const validationStage = stageResult as { validation: CurriculumValidationResult; scores: CurriculumValidationScoreAction };
-      if (!validationStage.validation.valid && repairLoops < (deps.budget.limits.maxRepairLoops ?? 0)) {
-        const repairTarget = pickRepairTarget(validationStage.validation.warnings);
-        if (repairTarget && DOWNSTREAM_STAGES[repairTarget]) {
-          repairLoops += 1;
-          deps.budget.consumeRepair();
-          await emitEvent({ type: "stage_started", stage: "repairing" });
-          repairFallbackFetchedSources = checkpoints.fetching_sources?.fetchedSources ?? repairFallbackFetchedSources;
-          ctx.repairFeedback = validationStage.validation.warnings.filter(
-            (warning) => warning.severity === "blocking",
+    // postStage(ok:false) fires only when the stage body itself throws; the
+    // post-repair-budget failure below happens after the validating stage
+    // already completed (ok:true fired), so it is not re-reported as one.
+    let postStageNotified = false;
+    try {
+      await invokeHook(() => deps.hooks?.preStage?.(stage));
+      switch (stage) {
+        case "intake":
+          stageResult = await runIntakeStage(ctx);
+          break;
+        case "planning":
+          stageResult = await runPlanningStage(ctx);
+          break;
+        case "searching":
+          stageResult = await runSearchingStage(ctx);
+          break;
+        case "fetching_sources":
+          stageResult = await runFetchingSourcesStage(
+            ctx,
+            checkpoints.searching?.selectedSources ?? [],
+            repairFallbackFetchedSources,
           );
-          // Clear downstream checkpoints so those stages re-run with feedback.
-          for (const clearStage of DOWNSTREAM_STAGES[repairTarget]) {
-            delete checkpoints[clearStage as keyof RunnerCheckpoints];
-          }
-          await runService.invalidateCheckpoints(run.id, DOWNSTREAM_STAGES[repairTarget]);
-          const targetIndex = STAGE_ORDER.indexOf(repairTarget as CurriculumRunStage);
-          if (targetIndex >= 0) {
-            i = targetIndex;
-            continue;
+          break;
+        case "extracting_concepts":
+          stageResult = await runExtractingConceptsStage(ctx, checkpoints);
+          break;
+        case "building_graph":
+          stageResult = await runBuildingGraphStage(ctx, checkpoints);
+          break;
+        case "validating":
+          stageResult = await runValidatingStage(ctx, checkpoints);
+          break;
+        case "saving_draft":
+          stageResult = await runSavingDraftStage(ctx, checkpoints);
+          break;
+        default:
+          throw new AgentError(`Unknown pipeline stage: ${stage}`, { code: "AGENT_STAGE_FAILED", status: 500 });
+      }
+
+      checkpoints[stage as keyof RunnerCheckpoints] = stageResult as never;
+      await runService.checkpointStage(run.id, stage, stageResult);
+      completedStages += 1;
+      postStageNotified = true;
+      await invokeHook(() => deps.hooks?.postStage?.(stage, { ok: true }));
+
+      // Repair loop handling for validating stage.
+      if (stage === "validating") {
+        const validationStage = stageResult as { validation: CurriculumValidationResult; scores: CurriculumValidationScoreAction };
+        if (!validationStage.validation.valid && repairLoops < (deps.budget.limits.maxRepairLoops ?? 0)) {
+          const repairTarget = pickRepairTarget(validationStage.validation.warnings);
+          if (repairTarget && DOWNSTREAM_STAGES[repairTarget]) {
+            repairLoops += 1;
+            deps.budget.consumeRepair();
+            await emitEvent({ type: "stage_started", stage: "repairing" });
+            repairFallbackFetchedSources = checkpoints.fetching_sources?.fetchedSources ?? repairFallbackFetchedSources;
+            ctx.repairFeedback = validationStage.validation.warnings.filter(
+              (warning) => warning.severity === "blocking",
+            );
+            // Clear downstream checkpoints so those stages re-run with feedback.
+            for (const clearStage of DOWNSTREAM_STAGES[repairTarget]) {
+              delete checkpoints[clearStage as keyof RunnerCheckpoints];
+            }
+            await runService.invalidateCheckpoints(run.id, DOWNSTREAM_STAGES[repairTarget]);
+            const targetIndex = STAGE_ORDER.indexOf(repairTarget as CurriculumRunStage);
+            if (targetIndex >= 0) {
+              i = targetIndex;
+              continue;
+            }
           }
         }
+        if (!validationStage.validation.valid) {
+          throw new AgentError(
+            `Validation failed after ${repairLoops} repair loops: ${validationStage.validation.blockingCount} blocking issues remain.`,
+            { code: "AGENT_STAGE_FAILED", status: 422, expose: true },
+          );
+        }
       }
-      if (!validationStage.validation.valid) {
-        throw new AgentError(
-          `Validation failed after ${repairLoops} repair loops: ${validationStage.validation.blockingCount} blocking issues remain.`,
-          { code: "AGENT_STAGE_FAILED", status: 422, expose: true },
+    } catch (error) {
+      if (!postStageNotified) {
+        await invokeHook(() =>
+          deps.hooks?.postStage?.(stage, {
+            ok: false,
+            code: isAgentError(error) ? error.code : "UNKNOWN",
+          }),
         );
       }
+      throw error;
     }
 
     // A queue delivery owns only one checkpointable stage.  This keeps every
@@ -697,13 +904,15 @@ async function runIntakeStage(ctx: PipelineContext): Promise<IntakeNormalization
 
 async function runPlanningStage(ctx: PipelineContext): Promise<ResearchPlan> {
   const { request, accountPlan, deps, ownerId } = ctx;
-  const existing = await deps.existingCurriculumGetter({ ownerId, subject: request.subject });
-  await recordToolStep(
+  // The injectable getter stands in for the tool's default executor (test
+  // seam); name/schema/budget mapping still come from the registry.
+  const existing = await dispatchCurriculumTool(
     ctx,
     "planning",
-    "getExistingCurriculum",
+    CURRICULUM_TOOLS.getExistingCurriculum,
     { ownerId, subject: request.subject },
-    existing.ok ? existing.data : { error: { code: existing.code, message: existing.message } },
+    {},
+    { execute: (input) => deps.existingCurriculumGetter(input) },
   );
   return callModel<ResearchPlan>(
     ctx,
@@ -735,26 +944,42 @@ async function runSearchingStage(ctx: PipelineContext): Promise<RunnerCheckpoint
   const plan = ctx.checkpoints.planning;
   if (!plan) throw new AgentError("Planning checkpoint missing.", { code: "AGENT_STAGE_FAILED", status: 500 });
 
+  // Queries are independent, so the batch runs with bounded concurrency.
+  // Events and tool steps may interleave across the batch (seqs stay
+  // monotonic via the central sequencer); hits are merged in input order
+  // afterwards, keeping source selection identical to the serial loop.
+  const outcomes = await mapWithConcurrency(
+    plan.queries.slice(0, budget.remainingSearches),
+    SEARCH_FETCH_CONCURRENCY,
+    async (item) => {
+      await emitEvent({ type: "search_started", query: item.query });
+
+      const result = await dispatchCurriculumTool(
+        ctx,
+        "searching",
+        CURRICULUM_TOOLS.webSearch,
+        { query: item.query, maxResults: 10 },
+        { provider: webSearchProvider, budget },
+      );
+      await emitEvent({
+        type: "search_completed",
+        query: item.query,
+        resultCount: result.ok ? result.data.results.length : 0,
+      });
+      return { item, result };
+    },
+  );
+
   const selectedSources = new Map<string, SourceCandidate>();
   const failedQueries: Array<{ query: string; code: string; message: string }> = [];
 
-  for (const item of plan.queries.slice(0, budget.remainingSearches)) {
-    await emitEvent({ type: "search_started", query: item.query });
-
-    const result = await executeWebSearchTool(
-      { query: item.query, maxResults: 10 },
-      { provider: webSearchProvider, budget },
-    );
-
+  // Merge in input order: the first query to surface a URL owns the candidate
+  // and equal quality scores keep query order, exactly like the serial loop.
+  for (const { item, result } of outcomes) {
     if (!result.ok) {
       failedQueries.push({ query: item.query, code: result.code, message: result.message });
-      await recordToolStep(ctx, "searching", "webSearch", { query: item.query }, { error: result });
-      await emitEvent({ type: "search_completed", query: item.query, resultCount: 0 });
       continue;
     }
-
-    await recordToolStep(ctx, "searching", "webSearch", { query: item.query }, result.data);
-    await emitEvent({ type: "search_completed", query: item.query, resultCount: result.data.results.length });
 
     for (const hit of result.data.results) {
       const canonical = canonicalizeUrl(hit.url);
@@ -821,14 +1046,22 @@ async function runFetchingSourcesStage(
   const { deps } = ctx;
   const { safeWebFetcher, budget } = deps;
   const seenUrls = new Set(selectedSources.map((s) => s.canonicalUrl));
-  const fetchedSources: SourceCandidate[] = [];
-  const failedFetches: Array<{ url: string; code: string; message: string }> = [];
-  const bufferedExcerpts: Array<{ sourceClientId: string; content: string; fetchedAt: string }> = [];
+  // The serial loop stopped once the fetch budget ran out; pre-slicing is
+  // equivalent because every dispatched fetch consumes exactly one budget
+  // unit (runner-selected URLs always pass the tool's URL/seenUrls checks).
+  const fetchableSources = selectedSources.slice(0, Math.max(0, budget.remainingFetches));
 
-  for (const source of selectedSources) {
-    if (budget.remainingFetches <= 0) break;
-
-    const result = await executeFetchWebPageTool(
+  // Fetches are independent and run with bounded concurrency; tool steps may
+  // interleave, while outcomes merge in source order so the checkpoint
+  // artifacts match the serial loop.
+  const outcomes = await mapWithConcurrency(fetchableSources, SEARCH_FETCH_CONCURRENCY, async (source) => {
+    // Buffered per source (not into a shared array) so the merged excerpt
+    // list below stays in source order.
+    let excerpt: { sourceClientId: string; content: string; fetchedAt: string } | undefined;
+    const result = await dispatchCurriculumTool(
+      ctx,
+      "fetching_sources",
+      CURRICULUM_TOOLS.fetchWebPage,
       { url: source.url, sourceId: source.id },
       {
         fetcher: safeWebFetcher,
@@ -836,30 +1069,50 @@ async function runFetchingSourcesStage(
         seenUrls,
         persistExcerpts: async (input) => {
           // Buffer until draft persistence maps source clientIds to server ids.
-          bufferedExcerpts.push({
+          excerpt = {
             sourceClientId: source.id,
             content: input.content,
             fetchedAt: input.fetchedAt ?? new Date().toISOString(),
-          });
+          };
           return { chunkCount: 1 };
         },
       },
+      {
+        // Step rows record page metadata only, never the fetched content.
+        recordOutput: (fetchResult) =>
+          fetchResult.ok
+            ? {
+                page: { title: fetchResult.data.page.title, url: fetchResult.data.page.url, truncated: fetchResult.data.page.truncated },
+                chunkCount: fetchResult.data.chunkCount,
+              }
+            : { error: { code: fetchResult.code, message: fetchResult.message } },
+      },
     );
+    return { source, result, excerpt };
+  });
 
+  const fetchedSources: SourceCandidate[] = [];
+  const failedFetches: Array<{ url: string; code: string; message: string }> = [];
+  const bufferedExcerpts: Array<{ sourceClientId: string; content: string; fetchedAt: string }> = [];
+
+  for (const { source, result, excerpt } of outcomes) {
     if (!result.ok) {
       failedFetches.push({ url: source.url, code: result.code, message: result.message });
       source.fetchErrorCode = result.code;
-      await recordToolStep(ctx, "fetching_sources", "fetchWebPage", { url: source.url }, { error: result });
       continue;
     }
 
-    await recordToolStep(ctx, "fetching_sources", "fetchWebPage", { url: source.url }, {
-      page: { title: result.data.page.title, url: result.data.page.url, truncated: result.data.page.truncated },
-      chunkCount: result.data.chunkCount,
-    });
-
     source.fetched = true;
     source.pageContent = result.data.page.content;
+    // Enforced injection policy (defense in depth on top of the
+    // UNTRUSTED_WEB_CONTENT wrapping): the detector fires categorically, so
+    // any signal quarantines the source — it stays auditable here but its
+    // content is excluded from the extraction model input.
+    if (result.data.page.injectionSignals?.length) {
+      source.quarantined = true;
+      source.injectionSignals = result.data.page.injectionSignals;
+    }
+    if (excerpt) bufferedExcerpts.push(excerpt);
     fetchedSources.push(source);
   }
 
@@ -870,10 +1123,16 @@ async function runFetchingSourcesStage(
       // Excerpts were already buffered during the original fetch; avoiding a
       // duplicate flush also keeps source-chunk persistence idempotent.
       bufferedExcerpts: [],
+      quarantinedSourceIds: [],
     };
   }
 
-  return { fetchedSources, failedFetches, bufferedExcerpts };
+  return {
+    fetchedSources,
+    failedFetches,
+    bufferedExcerpts,
+    quarantinedSourceIds: fetchedSources.flatMap((source) => (source.quarantined ? [source.id] : [])),
+  };
 }
 
 async function runExtractingConceptsStage(
@@ -890,16 +1149,12 @@ async function runExtractingConceptsStage(
     // Project retrieval shares maxSearchQueries with web search as a hard cap.
     ctx.deps.budget.consumeSearch();
     const input = { projectId: ctx.projectId, query: item.query, topK: 5 };
-    const result = await executeSearchProjectDocumentsTool(input, {
-      ownerId: ctx.ownerId,
-      searcher: ctx.deps.projectDocumentsSearcher,
-    });
-    await recordToolStep(
+    const result = await dispatchCurriculumTool(
       ctx,
       "extracting_concepts",
-      "searchProjectDocuments",
+      CURRICULUM_TOOLS.searchProjectDocuments,
       input,
-      result.ok ? result.data : { error: { code: result.code, message: result.message } },
+      { ownerId: ctx.ownerId, searcher: ctx.deps.projectDocumentsSearcher },
     );
     if (!result.ok) continue;
     projectDocumentExcerpts.push(
@@ -910,13 +1165,19 @@ async function runExtractingConceptsStage(
     );
   }
 
+  // Quarantined sources (injection signals detected at fetch time) stay in
+  // the checkpoint for audit, but their content never reaches the model. If
+  // everything is quarantined the prompt simply gets no sources — the
+  // existing validation/repair loop handles the outcome.
+  const usableSources = fetching.fetchedSources.filter((source) => !source.quarantined);
+
   const contextMessages: Array<{ role: "user" | "assistant"; content: string }> = [
     {
       role: "user",
       content: buildConceptExtractionUserPrompt({
         request: ctx.request,
         intake: checkpoints.intake!,
-        sources: fetching.fetchedSources.map((source) => ({
+        sources: usableSources.map((source) => ({
           id: source.id,
           title: source.title,
           sourceType: source.sourceType,
@@ -1000,16 +1261,10 @@ async function runBuildingGraphStage(
   const modules: CurriculumModule[] = [];
   const nodeByClientId = new Map<string, CurriculumNode>();
   const allNodes: CurriculumNode[] = [];
-
-  for (const moduleSkeleton of skeletonAction.modules) {
-    const moduleNodes = await synthesizeModuleNodes(
-      ctx,
-      skeletonAction,
-      moduleSkeleton,
-      extraction,
-      fetching.fetchedSources,
-      allNodes.map((node) => ({ clientId: node.clientId, title: node.title })),
-    );
+  const collectModule = (
+    moduleSkeleton: CurriculumSkeleton["modules"][number],
+    moduleNodes: CurriculumNode[],
+  ) => {
     const courseModule: CurriculumModule = {
       clientId: moduleSkeleton.clientId,
       title: moduleSkeleton.title,
@@ -1022,6 +1277,37 @@ async function runBuildingGraphStage(
     for (const node of moduleNodes) {
       nodeByClientId.set(node.clientId, node);
       allNodes.push(node);
+    }
+  };
+
+  // MockModelAdapter consumes a scripted queue, so parallel module calls
+  // would make script consumption order nondeterministic; mock runs keep the
+  // serial loop (and its accumulating existingNodes prompt) untouched.
+  if (ctx.deps.modelAdapter instanceof MockModelAdapter) {
+    for (const moduleSkeleton of skeletonAction.modules) {
+      const moduleNodes = await synthesizeModuleNodes(
+        ctx,
+        skeletonAction,
+        moduleSkeleton,
+        extraction,
+        fetching.fetchedSources,
+        allNodes.map((node) => ({ clientId: node.clientId, title: node.title })),
+      );
+      collectModule(moduleSkeleton, moduleNodes);
+    }
+  } else {
+    // Modules are synthesized with bounded concurrency and merged in skeleton
+    // order. Parallel calls cannot see earlier modules' nodes (they are still
+    // in flight), so existingNodes stays empty and cross-module title
+    // collisions remain covered by normalizeDuplicateNodeTitles.
+    const nodesPerModule = await mapWithConcurrency(
+      skeletonAction.modules,
+      MODULE_SYNTHESIS_CONCURRENCY,
+      (moduleSkeleton) =>
+        synthesizeModuleNodes(ctx, skeletonAction, moduleSkeleton, extraction, fetching.fetchedSources, []),
+    );
+    for (let index = 0; index < skeletonAction.modules.length; index += 1) {
+      collectModule(skeletonAction.modules[index], nodesPerModule[index]);
     }
   }
 
@@ -1106,6 +1392,9 @@ async function synthesizeModuleNodes(
         ctx,
         {
           task: "curriculum_synthesis",
+          // Finer key than the pipeline stage ("building_graph") so mock
+          // scripts route skeleton vs per-module calls without prompt markers.
+          stage: moduleNodesModelStage(moduleSkeleton.clientId),
           systemPrompt: CURRICULUM_BUILDER_SYSTEM_PROMPT,
           contextMessages: [
             {
@@ -1136,6 +1425,15 @@ async function synthesizeModuleNodes(
       );
       return action.nodes;
     } catch (error) {
+      // Run-terminal failures (budget exhausted, run cancelled) are not
+      // retried and never converted into AGENT_INVALID_MODEL_OUTPUT: they
+      // fail the stage — and the run — with their original code.
+      if (
+        isAgentError(error) &&
+        (error.code === "AGENT_BUDGET_EXHAUSTED" || error.code === "AGENT_RUN_CANCELLED")
+      ) {
+        throw error;
+      }
       lastError = error;
     }
   }
@@ -1285,7 +1583,10 @@ async function runSavingDraftStage(
   for (const excerpt of bufferedExcerpts) {
     // Find the original fetched source by matching clientId to url.
     const originalSource = checkpoints.fetching_sources?.fetchedSources.find((s) => s.id === excerpt.sourceClientId);
-    if (!originalSource) continue;
+    // Quarantined sources stay in draft.sources for audit, but their content
+    // is never persisted as retrievable chunks (it would otherwise resurface
+    // in tutor prompts via course-source retrieval).
+    if (!originalSource || originalSource.quarantined) continue;
     const serverSourceId = sourceUrlToId.get(canonicalizeUrl(originalSource.url));
     if (!serverSourceId) continue;
     await deps.sourceChunkService.saveSourceChunks({
@@ -1314,12 +1615,23 @@ async function callModel<T>(
   const { modelAdapter, budget } = deps;
 
   budget.consumeStep();
+  const hookMeta = { task: request.task, stage };
+  await invokeHook(() => deps.hooks?.preModelCall?.(hookMeta));
   const start = Date.now();
   let result: Awaited<ReturnType<AgentModelAdapter["completeAction"]>>;
   try {
-    result = await modelAdapter.completeAction(request);
+    // The execution-wide cancel signal lets an abort reach the in-flight
+    // fetch (call sites do not pass their own signal). An explicit
+    // request.stage (per-module synthesis) overrides the pipeline stage key.
+    result = await modelAdapter.completeAction({ stage, ...request, signal: ctx.cancelSignal });
   } catch (error) {
     const duration = Date.now() - start;
+    await invokeHook(() =>
+      deps.hooks?.postModelCall?.(hookMeta, {
+        ok: false,
+        code: isAgentError(error) ? error.code : "UNKNOWN",
+      }),
+    );
     await recordModelStep(ctx, stage, request.task, request.contextMessages, error as Error, duration);
     throw error;
   }
@@ -1332,6 +1644,7 @@ async function callModel<T>(
     durationMs: duration,
   });
   budget.recordModelCall(callUsage);
+  await invokeHook(() => deps.hooks?.postModelCall?.(hookMeta, { ok: true, usage: result.usage }));
   await recordModelStep(ctx, stage, request.task, request.contextMessages, result.action, duration, callUsage);
   return result.action as T;
 }
@@ -1362,12 +1675,49 @@ async function recordModelStep(
   });
 }
 
+// Single dispatch path for registry tools: validates the input against the
+// tool's schema, times the execution, records the tool step with the measured
+// duration, and returns the ToolResult. Budget pre-consume, permission checks
+// and error mapping stay inside the tool modules. `options.execute`
+// substitutes the executor (DI test seam); `options.recordOutput` customizes
+// what lands in the step row (e.g. page metadata instead of fetched content).
+async function dispatchCurriculumTool<TInput, TDeps, TData>(
+  ctx: PipelineContext,
+  stage: CurriculumRunStage,
+  tool: CurriculumToolDefinition<TInput, TDeps, TData>,
+  rawInput: unknown,
+  toolDeps: TDeps,
+  options: {
+    execute?: (input: TInput) => Promise<ToolResult<TData>>;
+    recordOutput?: (result: ToolResult<TData>) => unknown;
+  } = {},
+): Promise<ToolResult<TData>> {
+  const input = tool.inputSchema.parse(rawInput);
+  const start = Date.now();
+  const result = options.execute ? await options.execute(input) : await tool.execute(input, toolDeps);
+  const durationMs = Date.now() - start;
+  await recordToolStep(
+    ctx,
+    stage,
+    tool.name,
+    input,
+    options.recordOutput
+      ? options.recordOutput(result)
+      : result.ok
+        ? result.data
+        : { error: { code: result.code, message: result.message } },
+    durationMs,
+  );
+  return result;
+}
+
 async function recordToolStep(
   ctx: PipelineContext,
   stage: CurriculumRunStage,
   toolName: string,
   input: unknown,
   output: unknown,
+  durationMs: number,
 ): Promise<void> {
   const isError = output && typeof output === "object" && "error" in output;
   await recordStep(ctx, {
@@ -1377,7 +1727,7 @@ async function recordToolStep(
     input,
     output: isError ? null : output,
     status: isError ? "failed" : "succeeded",
-    durationMs: 0,
+    durationMs,
     usage: null,
     error: isError ? (output as { error: { code: string; message: string } }).error : null,
   });

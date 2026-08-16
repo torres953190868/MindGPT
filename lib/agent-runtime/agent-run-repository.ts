@@ -29,6 +29,7 @@
 //   { version: 1, runs, steps, events, idempotencyKeys }.
 // - BRANCHMIND_AGENT_RUNS_DATA_DIR overrides the data directory (tests).
 
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { AgentBudgetLimits, AgentRunUsage } from "@/lib/agent-runtime/agent-budget";
@@ -401,7 +402,7 @@ async function writeAgentRunDataNow(data: AgentRunDataFile) {
   const dataFile = getDataFilePath();
   await mkdir(path.dirname(dataFile), { recursive: true });
 
-  const tempFile = `${dataFile}.${process.pid}.${Date.now()}.tmp`;
+  const tempFile = `${dataFile}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
   await writeFile(tempFile, `${JSON.stringify(data, null, 2)}\n`, "utf8");
   await rename(tempFile, dataFile);
 }

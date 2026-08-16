@@ -31,6 +31,8 @@ beforeEach(async () => {
   // withIdempotency persists replay records through the agent-run repository;
   // keep that store inside the same isolated tmpdir.
   vi.stubEnv("BRANCHMIND_AGENT_RUNS_DATA_DIR", dataDir);
+  // Tutor chats account token usage into the daily AI-usage file.
+  vi.stubEnv("BRANCHMIND_AI_USAGE_DATA_DIR", dataDir);
   vi.stubEnv("AI_MOCK_MODE", "true");
   authState.principalId = "learner-route";
   authState.sessionId = "learner-route";

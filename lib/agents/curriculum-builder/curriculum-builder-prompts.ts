@@ -22,10 +22,11 @@ import type {
   IntakeNormalization,
 } from "@/lib/agents/curriculum-builder/curriculum-builder-schema";
 
-// Deterministic per-stage markers embedded in every user prompt. The mock
-// model adapter's script matchers key on these to route scripted actions to
-// the right stage (impact analysis D6), and they double as stage labels in
-// prompt logs. They carry no business meaning for real models.
+// Deterministic per-stage markers embedded in every user prompt. They
+// structure the model's task and double as stage labels in prompt logs; they
+// carry no business meaning for real models. Mock-script routing does NOT
+// read these anymore — it keys on the explicit AgentModelActionRequest.stage
+// (see moduleNodesModelStage), so prompt copy changes cannot break routing.
 export const CURRICULUM_STAGE_MARKERS = {
   intake: "【CB-STAGE:intake】",
   planning: "【CB-STAGE:planning】",
@@ -35,6 +36,14 @@ export const CURRICULUM_STAGE_MARKERS = {
   validation: "【CB-STAGE:validation-scores】",
   moduleNodes: (moduleClientId: string) => `【CB-MODULE:${moduleClientId}】`,
 } as const;
+
+// Explicit stage key stamped on per-module node-synthesis requests
+// (AgentModelActionRequest.stage). The other pipeline calls are keyed by
+// their CurriculumRunStage value verbatim; module calls share the
+// "building_graph" stage, so they need this finer key for mock routing.
+export function moduleNodesModelStage(moduleClientId: string): string {
+  return `building_graph:module:${moduleClientId}`;
+}
 
 // Spec §3.10, verbatim rules, plus the §11.1 untrusted-content boundary.
 export const CURRICULUM_BUILDER_SYSTEM_PROMPT = `你是 MindGPT 的教材编写 Agent。

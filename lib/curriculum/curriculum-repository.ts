@@ -25,6 +25,7 @@
 //   all-or-nothing semantics as the publish_curriculum_version RPC.
 // - BRANCHMIND_CURRICULUM_DATA_DIR overrides the data directory (tests).
 
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createId } from "@/lib/ids";
@@ -670,7 +671,7 @@ async function writeCurriculaDataNow(data: CurriculumDataFile) {
   const dataFile = getDataFilePath();
   await mkdir(path.dirname(dataFile), { recursive: true });
 
-  const tempFile = `${dataFile}.${process.pid}.${Date.now()}.tmp`;
+  const tempFile = `${dataFile}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
   await writeFile(tempFile, `${JSON.stringify(data, null, 2)}\n`, "utf8");
   await rename(tempFile, dataFile);
 }

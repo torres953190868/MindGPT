@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { mkdir, readFile, rename, writeFile } from "fs/promises";
 import path from "path";
 import type { MindNode, Project } from "@/lib/types";
@@ -71,7 +72,7 @@ async function writeProjectsNow(projects: Project[]) {
   await mkdir(DATA_DIR, { recursive: true });
 
   const payload: BranchMindDataFile = { version: 1, projects };
-  const tempFile = `${DATA_FILE}.${process.pid}.${Date.now()}.tmp`;
+  const tempFile = `${DATA_FILE}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
 
   await writeFile(tempFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   await rename(tempFile, DATA_FILE);

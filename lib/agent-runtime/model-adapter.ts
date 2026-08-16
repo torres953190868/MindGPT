@@ -42,6 +42,10 @@ export type AgentModelActionRequest<T> = {
   maxOutputTokens?: number;
   accountPlan?: string | null;
   signal?: AbortSignal;
+  // Explicit caller-stamped stage key (e.g. the curriculum pipeline stage).
+  // MockModelAdapter routes scripted entries on this instead of scraping
+  // marker strings out of prompt text; real adapters ignore it.
+  stage?: string;
 };
 
 export type AgentModelUsage = {
@@ -304,7 +308,20 @@ export class LlmModelAdapter implements AgentModelAdapter {
       ...provider.payloadOptions,
     };
 
+    // Always fetch with the internal controller so the provider timeout stays
+    // armed; a caller-supplied signal (run cancellation, race timeout) is
+    // forwarded into that same controller. Manual composition instead of
+    // AbortSignal.any keeps this working on the oldest supported Node.
     const controller = new AbortController();
+    const callerSignal = request.signal;
+    const onCallerAbort = () => controller.abort(callerSignal?.reason);
+    if (callerSignal) {
+      if (callerSignal.aborted) {
+        controller.abort(callerSignal.reason);
+      } else {
+        callerSignal.addEventListener("abort", onCallerAbort, { once: true });
+      }
+    }
     const timeout = setTimeout(() => controller.abort(), getLlmRequestTimeoutMs(provider));
 
     let response: Response;
@@ -316,10 +333,20 @@ export class LlmModelAdapter implements AgentModelAdapter {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify(payload),
-        signal: request.signal ?? controller.signal,
+        signal: controller.signal,
       });
     } catch (error) {
       if (isAbortError(error)) {
+        // A caller-initiated abort is a cancellation, not a provider timeout:
+        // it must not be retried or misreported as {PREFIX}_TIMEOUT.
+        if (callerSignal?.aborted) {
+          throw new AgentError(`${provider.displayName} request was cancelled.`, {
+            code: "AGENT_RUN_CANCELLED",
+            expose: true,
+            retryable: false,
+            status: 200,
+          });
+        }
         throw new AgentError(`${provider.displayName} request timed out.`, {
           code: `${provider.errorCodePrefix}_TIMEOUT`,
           expose: true,
@@ -334,6 +361,7 @@ export class LlmModelAdapter implements AgentModelAdapter {
       });
     } finally {
       clearTimeout(timeout);
+      callerSignal?.removeEventListener("abort", onCallerAbort);
     }
 
     const data: unknown = await response.json().catch(() => null);
@@ -375,14 +403,20 @@ export class LlmModelAdapter implements AgentModelAdapter {
 
 // ---------------------------------------------------------------------------
 // Mock adapter (D6): deterministic, script-driven, zero network. The script
-// is a consumed queue — each call takes the FIRST remaining entry whose
-// matcher passes (a missing matcher matches everything), so tests can use it
-// either as a simple ordered queue or as matcher→action rules. Registered
-// actions are validated against the request's actionSchema, so a broken
-// script fails loudly instead of leaking bad fixtures downstream.
+// is a consumed queue — each call takes the FIRST remaining matching entry.
+// Routing precedence per entry: an explicit `stage` key matches on
+// request.stage (decoupled from prompt copy; the curriculum mock script uses
+// this), otherwise a `match` predicate runs (generic test infra), otherwise
+// the entry matches everything. Registered actions are validated against the
+// request's actionSchema, so a broken script fails loudly instead of leaking
+// bad fixtures downstream.
 // ---------------------------------------------------------------------------
 
 export type MockActionScriptEntry = {
+  // Preferred routing key: matched strictly against request.stage. Entries
+  // with a stage key never match requests that carry no (or a different)
+  // stage.
+  stage?: string;
   match?: (request: AgentModelActionRequest<unknown>) => boolean;
   action: unknown;
   usage?: Partial<AgentModelUsage>;
@@ -414,9 +448,12 @@ export class MockModelAdapter implements AgentModelAdapter {
   ): Promise<AgentModelActionResult<T>> {
     this.calls.push(request as AgentModelActionRequest<unknown>);
 
-    const index = this.script.findIndex(
-      (entry) => !entry.match || entry.match(request as AgentModelActionRequest<unknown>),
-    );
+    const index = this.script.findIndex((entry) => {
+      // Stage-keyed entries route on the explicit request stage only.
+      if (entry.stage !== undefined) return entry.stage === request.stage;
+      if (entry.match) return entry.match(request as AgentModelActionRequest<unknown>);
+      return true;
+    });
     if (index < 0) {
       throw new AgentError(
         `Mock model adapter script exhausted: no scripted action left for task "${request.task}" (call #${this.calls.length}).`,

@@ -49,6 +49,10 @@ beforeEach(async () => {
   vi.stubEnv("BRANCHMIND_CURRICULUM_BACKEND", "file");
   vi.stubEnv("BRANCHMIND_CURRICULUM_DATA_DIR", dataDir);
   vi.stubEnv("BRANCHMIND_LEARNING_DATA_DIR", dataDir);
+  // Tutor chats now record agent runs; keep them in the isolated temp dir.
+  vi.stubEnv("BRANCHMIND_AGENT_RUNS_DATA_DIR", dataDir);
+  // finishRun also folds turn usage into the daily AI-usage file.
+  vi.stubEnv("BRANCHMIND_AI_USAGE_DATA_DIR", dataDir);
   vi.stubEnv("AI_MOCK_MODE", "true");
 });
 

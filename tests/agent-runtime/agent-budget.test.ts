@@ -167,4 +167,56 @@ describe("AgentBudgetTracker", () => {
       runtimeMs: 42,
     });
   });
+
+  it("restores prior consumption so run-level caps survive a fresh tracker", () => {
+    const tracker = createTracker({
+      maxAgentSteps: 10,
+      maxTotalTokens: 1_000,
+      maxSearchQueries: 10,
+      maxFetchedPages: 20,
+    });
+    tracker.restore({
+      agentSteps: 4,
+      searchQueries: 9,
+      fetchedPages: 3,
+      promptTokens: 576,
+      totalTokens: 576,
+    });
+
+    expect(tracker.remainingSteps).toBe(6);
+    expect(tracker.remainingSearches).toBe(1);
+    expect(tracker.remainingFetches).toBe(17);
+    expect(tracker.snapshot()).toMatchObject({
+      agentSteps: 4,
+      searchQueries: 9,
+      fetchedPages: 3,
+      promptTokens: 576,
+      totalTokens: 576,
+    });
+
+    // The next consume on a nearly-exhausted dimension is what fails the run.
+    tracker.consumeSearch();
+    expectBudgetExceeded(() => tracker.consumeSearch(), "maxSearchQueries");
+    expectBudgetExceeded(() => tracker.consumeTokens(500), "maxTotalTokens");
+  });
+
+  it("restores without throwing when prior consumption already reached a cap", () => {
+    const tracker = createTracker({ maxAgentSteps: 3, maxTotalTokens: 100 });
+    tracker.restore({ agentSteps: 3 });
+    expect(tracker.remainingSteps).toBe(0);
+    expectBudgetExceeded(() => tracker.consumeStep(), "maxAgentSteps");
+  });
+
+  it("restores absent dimensions as zero", () => {
+    const tracker = createTracker({ maxAgentSteps: 10, maxTotalTokens: 1_000 });
+    tracker.restore({});
+    expect(tracker.snapshot()).toMatchObject({
+      agentSteps: 0,
+      searchQueries: 0,
+      fetchedPages: 0,
+      repairLoops: 0,
+      sources: 0,
+      totalTokens: 0,
+    });
+  });
 });

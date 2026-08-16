@@ -1,8 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { TUTOR_AGENT_BUDGET } from "@/lib/agent-runtime/agent-budget";
 import {
   buildPrompt,
+  runTutorAgent,
   TUTOR_CONTEXT_MAX_CHARS,
   type TutorAgentInput,
 } from "@/lib/agents/tutor/tutor-agent";
@@ -11,6 +13,38 @@ import {
   createCurriculumNode,
   createValidCurriculumDraft,
 } from "../../curriculum/fixtures";
+
+const tutorAdapterState = vi.hoisted(() => ({
+  lastSignal: undefined as AbortSignal | undefined,
+}));
+
+// The tutor builds its adapter internally; stub the factory with an adapter
+// that blocks until the request signal aborts (like an in-flight fetch).
+vi.mock("@/lib/agent-runtime/model-adapter", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/agent-runtime/model-adapter")>();
+  return {
+    ...actual,
+    createAgentModelAdapter: () => ({
+      completeAction: (actionRequest: { signal?: AbortSignal }) => {
+        tutorAdapterState.lastSignal = actionRequest.signal;
+        return new Promise((_resolve, reject) => {
+          const signal = actionRequest.signal;
+          // No signal wired: hang like an in-flight request would.
+          if (!signal) return;
+          // Reject in a microtask like a real fetch rejection, so the
+          // tutor's own timeout rejection wins the race.
+          const rejectAbort = () =>
+            queueMicrotask(() => reject(new Error("The operation was aborted.")));
+          if (signal.aborted) {
+            rejectAbort();
+            return;
+          }
+          signal.addEventListener("abort", rejectAbort, { once: true });
+        });
+      },
+    }),
+  };
+});
 
 describe("Tutor system rules", () => {
   it("includes the ten required curriculum-boundary semantics", () => {
@@ -163,5 +197,37 @@ describe("Tutor dependency constraints (spec §15.5)", () => {
       expect(specifier).not.toMatch(/web-search-provider|safe-web-fetcher|tavily/i);
     }
     expect(tutorAgentSource).not.toMatch(/tavily/i);
+  });
+});
+
+describe("Tutor runtime budget", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("aborts the in-flight model call when the runtime race times out", async () => {
+    vi.useFakeTimers();
+    const draft = createValidCurriculumDraft();
+    const input = {
+      request: { message: "继续" },
+      context: {
+        currentNode: { ...draft.modules[0].nodes[0], moduleOrderIndex: 0 },
+        version: { draft },
+        path: { nodes: [] },
+      },
+      session: {},
+      recentMessages: [],
+      sources: [],
+    } as unknown as TutorAgentInput;
+
+    const promise = runTutorAgent(input);
+    const rejection = expect(promise).rejects.toMatchObject({
+      code: "AGENT_BUDGET_EXHAUSTED",
+    });
+    await vi.advanceTimersByTimeAsync(TUTOR_AGENT_BUDGET.maxRuntimeMs ?? 90_000);
+    await rejection;
+
+    // The race loss must close the underlying connection, not leave it running.
+    expect(tutorAdapterState.lastSignal?.aborted).toBe(true);
   });
 });

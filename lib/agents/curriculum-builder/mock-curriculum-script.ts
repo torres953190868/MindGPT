@@ -6,9 +6,11 @@
 // model calls (the E2E/development critical path).
 //
 // Contract with the runner (keep in sync when editing either side):
-// - every user prompt carries its CURRICULUM_STAGE_MARKERS marker; the
-//   matchers below route scripted actions on those markers, so stage retries
-//   and resumes consume the right entries;
+// - entries route on the explicit AgentModelActionRequest.stage the runner
+//   stamps on every model call — pipeline stage keys verbatim, except
+//   per-module node synthesis which uses moduleNodesModelStage(clientId)
+//   (skeleton + module calls all share the "building_graph" pipeline stage).
+//   Prompt markers play no role in routing anymore;
 // - source clientIds are runner-assigned as src-1, src-2, ... in fetch order;
 //   the mock plan issues 3 queries and the MockWebSearchProvider yields 3
 //   unique results per query, so src-1..src-8 always exist (fetch cap 8) —
@@ -17,14 +19,8 @@
 //   warnings (all mock sources infer as "other", hence FEW_SOURCE_TYPES).
 
 import type { MockActionScriptEntry } from "@/lib/agent-runtime/model-adapter";
-import type { AgentModelActionRequest } from "@/lib/agent-runtime/model-adapter";
 import type { CurriculumBuildRequest } from "@/lib/curriculum/curriculum-types";
-import { CURRICULUM_STAGE_MARKERS } from "@/lib/agents/curriculum-builder/curriculum-builder-prompts";
-
-function markerRequestMatcher(marker: string) {
-  return (request: AgentModelActionRequest<unknown>) =>
-    request.contextMessages.some((message) => message.content.includes(marker));
-}
+import { moduleNodesModelStage } from "@/lib/agents/curriculum-builder/curriculum-builder-prompts";
 
 export function buildMockCurriculumScript(
   request: CurriculumBuildRequest,
@@ -241,25 +237,13 @@ export function buildMockCurriculumScript(
   };
 
   const mainSequence = [
-    { match: markerRequestMatcher(CURRICULUM_STAGE_MARKERS.intake), action: intakeAction },
-    { match: markerRequestMatcher(CURRICULUM_STAGE_MARKERS.planning), action: planAction },
-    {
-      match: markerRequestMatcher(CURRICULUM_STAGE_MARKERS.extraction),
-      action: extractionAction,
-    },
-    { match: markerRequestMatcher(CURRICULUM_STAGE_MARKERS.skeleton), action: skeletonAction },
-    {
-      match: markerRequestMatcher(CURRICULUM_STAGE_MARKERS.moduleNodes("m-1")),
-      action: moduleOneNodesAction,
-    },
-    {
-      match: markerRequestMatcher(CURRICULUM_STAGE_MARKERS.moduleNodes("m-2")),
-      action: moduleTwoNodesAction,
-    },
-    {
-      match: markerRequestMatcher(CURRICULUM_STAGE_MARKERS.validation),
-      action: validationScoresAction,
-    },
+    { stage: "intake", action: intakeAction },
+    { stage: "planning", action: planAction },
+    { stage: "extracting_concepts", action: extractionAction },
+    { stage: "building_graph", action: skeletonAction },
+    { stage: moduleNodesModelStage("m-1"), action: moduleOneNodesAction },
+    { stage: moduleNodesModelStage("m-2"), action: moduleTwoNodesAction },
+    { stage: "validating", action: validationScoresAction },
   ];
 
   // Duplicate the post-research synthesis/validation entries so the mock script
@@ -267,11 +251,11 @@ export function buildMockCurriculumScript(
   // planning are not re-run during repair; searching/tool calls are deterministic
   // and do not consume model script entries.
   const repairSequence = [
-    { match: markerRequestMatcher(CURRICULUM_STAGE_MARKERS.extraction), action: extractionAction },
-    { match: markerRequestMatcher(CURRICULUM_STAGE_MARKERS.skeleton), action: skeletonAction },
-    { match: markerRequestMatcher(CURRICULUM_STAGE_MARKERS.moduleNodes("m-1")), action: moduleOneNodesAction },
-    { match: markerRequestMatcher(CURRICULUM_STAGE_MARKERS.moduleNodes("m-2")), action: moduleTwoNodesAction },
-    { match: markerRequestMatcher(CURRICULUM_STAGE_MARKERS.validation), action: validationScoresAction },
+    { stage: "extracting_concepts", action: extractionAction },
+    { stage: "building_graph", action: skeletonAction },
+    { stage: moduleNodesModelStage("m-1"), action: moduleOneNodesAction },
+    { stage: moduleNodesModelStage("m-2"), action: moduleTwoNodesAction },
+    { stage: "validating", action: validationScoresAction },
   ];
 
   return [...mainSequence, ...repairSequence];

@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { generateCurriculumDraft } from "@/lib/agents/curriculum-builder/curriculum-builder-agent";
-import { AgentBudgetTracker } from "@/lib/agent-runtime/agent-budget";
+import { AgentBudgetTracker, CURRICULUM_AGENT_BUDGET } from "@/lib/agent-runtime/agent-budget";
 import { AgentError } from "@/lib/agent-runtime/agent-errors";
 import { cancelRun, getRun } from "@/lib/agent-runtime/agent-run-service";
 import { getAgentRunRepository } from "@/lib/agent-runtime/agent-run-repository";
@@ -31,6 +31,7 @@ import type { CurriculumBuildRequest } from "@/lib/curriculum/curriculum-types";
 import { MockSafeWebFetcher } from "@/lib/research/mock-safe-web-fetcher";
 import { MockWebSearchProvider } from "@/lib/research/mock-web-search-provider";
 import { SafeWebFetchError, type SafeWebFetcher } from "@/lib/research/safe-web-fetcher";
+import type { WebSearchProvider } from "@/lib/research/web-search-provider";
 
 describe("CurriculumBuilderAgent runner", () => {
   let dataDir: string;
@@ -47,6 +48,7 @@ describe("CurriculumBuilderAgent runner", () => {
       BRANCHMIND_CURRICULUM_BACKEND: "file",
       BRANCHMIND_CURRICULUM_DATA_DIR: dataDir,
       BRANCHMIND_AGENT_RUNS_DATA_DIR: dataDir,
+      BRANCHMIND_AI_USAGE_DATA_DIR: dataDir,
     };
   });
 
@@ -71,8 +73,9 @@ describe("CurriculumBuilderAgent runner", () => {
     };
   }
 
-  // Finds a mock script entry by inspecting its scripted action. The entry
-  // matchers are opaque closures, so tests locate entries by content instead.
+  // Finds a mock script entry by inspecting its scripted action. Entries
+  // route on stage keys shared across stage duplicates (main + repair
+  // sequence), so tests locate entries by content instead.
   function findScriptEntry(
     script: ReturnType<typeof buildMockCurriculumScript>,
     predicate: (action: Record<string, unknown>) => boolean,
@@ -550,7 +553,7 @@ describe("CurriculumBuilderAgent runner", () => {
         (action.nodes as Array<{ clientId?: string }>).some((node) => node.clientId === "n-1-1"),
     );
     script.splice(script.indexOf(moduleOneEntry), 0, {
-      match: moduleOneEntry.match,
+      stage: moduleOneEntry.stage,
       action: { nodes: [{ clientId: "n-1-1", title: "被截断的输出" }] },
     });
     const modelAdapter = new MockModelAdapter(script);
@@ -605,7 +608,7 @@ describe("CurriculumBuilderAgent runner", () => {
       nodes: Array<{ clientId?: string; sourceIds?: string[] }>;
     };
     const brokenModuleOneEntry = {
-      match: moduleOneEntry.match,
+      stage: moduleOneEntry.stage,
       action: {
         ...moduleOneAction,
         nodes: moduleOneAction.nodes.map((node) =>
@@ -897,5 +900,243 @@ describe("CurriculumBuilderAgent runner", () => {
     // ...and their tool steps were not re-recorded either.
     expect(resumedSteps.filter((step) => step.stepType === "tool")).toEqual([]);
     expect(resumedSteps.some((step) => step.stepType === "persistence")).toBe(true);
+  });
+
+  it("restores token consumption on resume so the run-level cap holds across invocations", async () => {
+    const curriculum = await createCurriculumForOwner(ownerId, {
+      title: "预算恢复",
+      learningGoal: "预算恢复",
+    });
+    const request = buildRequest("预算恢复");
+
+    // First execution fails in building_graph: the skeleton output is invalid.
+    const failingScript = buildMockCurriculumScript(request);
+    const skeletonEntry = findScriptEntry(failingScript, (action) => Array.isArray(action.modules));
+    failingScript[failingScript.indexOf(skeletonEntry)] = {
+      match: skeletonEntry.match,
+      action: { title: "不合法的骨架输出" },
+    };
+    const first = await runCurriculumBuilder({
+      ownerId,
+      curriculumId: curriculum.id,
+      request,
+      idempotencyKey: `gen-budget-restore-first-${Date.now()}`,
+      deps: { modelAdapter: new MockModelAdapter(failingScript) },
+    });
+    expect(first.status).toBe("failed");
+
+    // Tokens consumed by the failed execution, summed from persisted step rows.
+    const priorSteps = await getAgentRunRepository().listSteps(first.runId);
+    const priorTokens = priorSteps
+      .filter((step) => step.stepType === "model")
+      .reduce(
+        (sum, step) => sum + ((step.usage as { totalTokens?: number } | null)?.totalTokens ?? 0),
+        0,
+      );
+    expect(priorTokens).toBeGreaterThan(0);
+
+    // Resume with a tracker whose token cap barely exceeds what the run
+    // already consumed: the first resumed model call must blow the run-level
+    // budget instead of restarting with a fresh per-invocation allowance.
+    const budget = new AgentBudgetTracker({
+      ...CURRICULUM_AGENT_BUDGET,
+      maxTotalTokens: priorTokens + 1,
+    });
+    const resumedAdapter = new MockModelAdapter(buildMockCurriculumScript(request));
+    const resumed = await runCurriculumBuilder({
+      runId: first.runId,
+      ownerId,
+      curriculumId: curriculum.id,
+      request,
+      idempotencyKey: `gen-budget-restore-second-${Date.now()}`,
+      deps: { modelAdapter: resumedAdapter, budget },
+    });
+
+    expect(resumed.status).toBe("failed");
+    expect(resumed.errorCode).toBe("AGENT_BUDGET_EXHAUSTED");
+    const callsFor = (marker: string) =>
+      resumedAdapter.calls.filter((call) =>
+        call.contextMessages.some((message) => message.content.includes(marker)),
+      );
+    // The budget blew on the first resumed model call; without restore the
+    // module-node calls would have run before the cap was hit.
+    expect(callsFor(CURRICULUM_STAGE_MARKERS.skeleton)).toHaveLength(1);
+    expect(callsFor(CURRICULUM_STAGE_MARKERS.moduleNodes("m-1"))).toHaveLength(0);
+  });
+
+  it("restores search consumption on resume so a spent search cap stays spent", async () => {
+    const curriculum = await createCurriculumForOwner(ownerId, {
+      title: "搜索预算恢复",
+      learningGoal: "搜索预算恢复",
+    });
+    const request = buildRequest("搜索预算恢复");
+    const projectId = "project_for_search_budget";
+
+    // First execution fails in extracting_concepts (schema-invalid output),
+    // after searching and the project-document lookups already ran.
+    const failingScript = buildMockCurriculumScript(request);
+    const extractionEntry = findScriptEntry(failingScript, (action) =>
+      Array.isArray(action.concepts),
+    );
+    failingScript[failingScript.indexOf(extractionEntry)] = {
+      match: extractionEntry.match,
+      action: { concepts: [] },
+    };
+    const first = await runCurriculumBuilder({
+      ownerId,
+      curriculumId: curriculum.id,
+      projectId,
+      request,
+      idempotencyKey: `gen-search-restore-first-${Date.now()}`,
+      deps: {
+        modelAdapter: new MockModelAdapter(failingScript),
+        projectDocumentsSearcher: async () => [],
+      },
+    });
+    expect(first.status).toBe("failed");
+
+    const priorSteps = await getAgentRunRepository().listSteps(first.runId);
+    const searchToolNames = new Set(["webSearch", "searchProjectDocuments"]);
+    const priorSearches = priorSteps.filter(
+      (step) => step.stepType === "tool" && searchToolNames.has(step.toolName ?? ""),
+    ).length;
+    // Sanity: both web searches and project lookups really ran pre-resume.
+    expect(priorSteps.some((step) => step.toolName === "searchProjectDocuments")).toBe(true);
+    expect(priorSearches).toBeGreaterThan(0);
+
+    // Resume with the search cap set to exactly the already-consumed amount:
+    // the re-run extraction stage must find zero remaining searches.
+    const budget = new AgentBudgetTracker({
+      ...CURRICULUM_AGENT_BUDGET,
+      maxSearchQueries: priorSearches,
+    });
+    const resumedAdapter = new MockModelAdapter(buildMockCurriculumScript(request));
+    const resumed = await runCurriculumBuilder({
+      runId: first.runId,
+      ownerId,
+      curriculumId: curriculum.id,
+      projectId,
+      request,
+      idempotencyKey: `gen-search-restore-second-${Date.now()}`,
+      deps: {
+        modelAdapter: resumedAdapter,
+        budget,
+        projectDocumentsSearcher: async () => [],
+      },
+    });
+
+    expect(resumed.status).toBe("succeeded");
+    // Restored consumption only: the resumed execution consumed no searches.
+    expect(budget.snapshot().searchQueries).toBe(priorSearches);
+    const maxPriorStepNumber = Math.max(...priorSteps.map((step) => step.stepNumber));
+    const resumedSteps = (await getAgentRunRepository().listSteps(first.runId)).filter(
+      (step) => step.stepNumber > maxPriorStepNumber,
+    );
+    expect(resumedSteps.filter((step) => step.toolName === "searchProjectDocuments")).toEqual([]);
+  });
+
+  it("aborts an in-flight model call when the run is cancelled", async () => {
+    const curriculum = await createCurriculumForOwner(ownerId, {
+      title: "取消中断",
+      learningGoal: "取消中断",
+    });
+    const request = buildRequest("取消中断");
+    let cancelAttempted = false;
+    // Blocks inside the first model call (intake) until the runner's
+    // execution signal aborts it; the run is cancelled from the outside
+    // while the call is in flight.
+    const blockingAdapter: AgentModelAdapter = {
+      async completeAction<T>(actionRequest: AgentModelActionRequest<T>) {
+        if (!cancelAttempted) {
+          cancelAttempted = true;
+          const runs = await getAgentRunRepository().listRunsForOwner(ownerId);
+          const active = runs.find((entry) => entry.status === "running");
+          expect(active).toBeTruthy();
+          await cancelRun(ownerId, active!.id);
+        }
+        const signal = actionRequest.signal;
+        if (!signal) {
+          // No execution signal wired: hang like an in-flight request would.
+          await new Promise<void>(() => undefined);
+        } else if (!signal.aborted) {
+          await new Promise<void>((resolve) => {
+            signal.addEventListener("abort", () => resolve(), { once: true });
+          });
+        }
+        throw new AgentError("DeepSeek request was cancelled.", {
+          code: "AGENT_RUN_CANCELLED",
+          status: 200,
+          expose: true,
+        });
+      },
+    };
+    const result = await runCurriculumBuilder({
+      ownerId,
+      curriculumId: curriculum.id,
+      request,
+      idempotencyKey: `gen-cancel-abort-${Date.now()}`,
+      cancelPollIntervalMs: 5,
+      deps: { modelAdapter: blockingAdapter },
+    });
+
+    expect(cancelAttempted).toBe(true);
+    expect(result.status).toBe("cancelled");
+    expect(result.errorCode).toBe("AGENT_RUN_CANCELLED");
+    const run = await getRun(ownerId, result.runId);
+    expect(run.status).toBe("cancelled");
+  });
+
+  it("records measured wall-clock durations for tool steps", async () => {
+    const curriculum = await createCurriculumForOwner(ownerId, {
+      title: "工具耗时",
+      learningGoal: "工具耗时",
+    });
+    const request = buildRequest("工具耗时");
+    const innerProvider = new MockWebSearchProvider();
+    const slowProvider: WebSearchProvider = {
+      id: "slow-mock",
+      async search(input) {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 30);
+        });
+        return innerProvider.search(input);
+      },
+    };
+    const result = await runCurriculumBuilder({
+      ownerId,
+      curriculumId: curriculum.id,
+      request,
+      idempotencyKey: `gen-tool-duration-${Date.now()}`,
+      deps: { webSearchProvider: slowProvider },
+    });
+    expect(result.status).toBe("succeeded");
+
+    const steps = await getAgentRunRepository().listSteps(result.runId);
+    const toolSteps = steps.filter((step) => step.stepType === "tool");
+    expect(toolSteps.length).toBeGreaterThan(0);
+    for (const step of toolSteps) {
+      expect(Number.isFinite(step.durationMs)).toBe(true);
+      expect(step.durationMs).toBeGreaterThanOrEqual(0);
+    }
+    // The artificially slowed provider proves the value is measured, not the
+    // old hardcoded 0 (a 30ms delay leaves a wide safe margin).
+    const searchSteps = toolSteps.filter((step) => step.toolName === "webSearch");
+    expect(searchSteps.length).toBeGreaterThan(0);
+    for (const step of searchSteps) {
+      expect(step.durationMs).toBeGreaterThanOrEqual(20);
+      expect(step.durationMs).toBeLessThan(10_000);
+    }
+  });
+
+  it("routes the built-in mock script by explicit stage keys, not prompt markers", () => {
+    // Stage-key routing (AgentModelActionRequest.stage) replaced marker
+    // matching: every scripted entry must carry a stage and no predicate, so
+    // prompt copy changes can never silently break mock routing.
+    const script = buildMockCurriculumScript(buildRequest("路由键"));
+    expect(script.length).toBeGreaterThan(0);
+    for (const entry of script) {
+      expect(typeof entry.stage).toBe("string");
+      expect(entry.match).toBeUndefined();
+    }
   });
 });

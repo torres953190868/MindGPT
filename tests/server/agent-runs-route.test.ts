@@ -23,6 +23,7 @@ describe("agent-runs routes", () => {
       BRANCHMIND_CURRICULUM_BACKEND: "file",
       BRANCHMIND_CURRICULUM_DATA_DIR: dataDir,
       BRANCHMIND_AGENT_RUNS_DATA_DIR: dataDir,
+      BRANCHMIND_AI_USAGE_DATA_DIR: dataDir,
       NODE_ENV: "test",
     };
   });

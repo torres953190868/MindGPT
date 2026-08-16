@@ -49,10 +49,17 @@ export type SourcePreview = {
   qualityScore: number;
 };
 
-// Spec §8.2 — the ten stream events. `validation` uses the deterministic
-// validation result shape (CurriculumValidation in the spec).
-export type CurriculumStreamEvent =
+// Generic run-level lifecycle events shared by every agent type — the
+// bookends of any agent run regardless of domain. Agent-specific progress
+// events layer on top of these.
+export type AgentRunLifecycleEvent =
   | { type: "run_started"; runId: string; seq: number }
+  | { type: "run_completed"; runId: string; seq: number; curriculumVersionId: string }
+  | { type: "run_failed"; runId: string; seq: number; code: string; message: string }
+  | { type: "run_cancelled"; runId: string; seq: number };
+
+// Curriculum-builder progress events emitted between the lifecycle bookends.
+export type CurriculumRunProgressEvent =
   | { type: "stage_started"; runId: string; seq: number; stage: CurriculumRunStage }
   | { type: "search_started"; runId: string; seq: number; query: string }
   | {
@@ -69,10 +76,11 @@ export type CurriculumStreamEvent =
       seq: number;
       validation: CurriculumValidationResult;
     }
-  | { type: "draft_saved"; runId: string; seq: number; curriculumVersionId: string }
-  | { type: "run_completed"; runId: string; seq: number; curriculumVersionId: string }
-  | { type: "run_failed"; runId: string; seq: number; code: string; message: string }
-  | { type: "run_cancelled"; runId: string; seq: number };
+  | { type: "draft_saved"; runId: string; seq: number; curriculumVersionId: string };
+
+// Spec §8.2 — the ten stream events. `validation` uses the deterministic
+// validation result shape (CurriculumValidation in the spec).
+export type CurriculumStreamEvent = AgentRunLifecycleEvent | CurriculumRunProgressEvent;
 
 // Same shape minus the sequencing fields — what runners hand to the
 // sequencer; seq is assigned centrally so ordering can never drift.

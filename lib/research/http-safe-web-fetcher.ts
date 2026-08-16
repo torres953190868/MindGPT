@@ -33,7 +33,7 @@ import {
   type SafeFetchedPage,
   type SafeWebFetcher,
 } from "@/lib/research/safe-web-fetcher";
-import { logPromptInjectionSignals } from "@/lib/research/prompt-injection";
+import { detectPromptInjectionSignals, logPromptInjectionSignals } from "@/lib/research/prompt-injection";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_REDIRECTS = 4;
@@ -342,6 +342,11 @@ export class HttpSafeWebFetcher implements SafeWebFetcher {
     }
 
     const cleanedContent = cleanHtmlToText(body.text);
+    // Detection is synchronous heuristics: attach the signal categories to
+    // the result so callers can enforce policy (quarantine) instead of
+    // relying on the fire-and-forget security-event log alone. The log path
+    // stays as-is.
+    const injectionSignals = detectPromptInjectionSignals(cleanedContent, canonicalUrl);
     logPromptInjectionSignals(cleanedContent, canonicalUrl);
 
     return {
@@ -351,6 +356,9 @@ export class HttpSafeWebFetcher implements SafeWebFetcher {
       content: cleanedContent,
       fetchedAt: new Date().toISOString(),
       truncated: body.truncated,
+      ...(injectionSignals.length > 0
+        ? { injectionSignals: injectionSignals.map((signal) => signal.code) }
+        : {}),
     };
   }
 }
