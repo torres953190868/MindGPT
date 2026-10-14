@@ -487,6 +487,33 @@ async function dragResizeHandle(page: Page, handle: Locator, deltaX: number) {
   await page.mouse.up();
 }
 
+async function getHomeVisibleCanvasLayout(page: Page) {
+  return page.evaluate(() => {
+    const rect = (selector: string) =>
+      document.querySelector(selector)?.getBoundingClientRect() ?? null;
+    const canvas = rect('[data-testid="mind-map-canvas"]');
+    const sidebar = rect('[data-testid="workspace-sidebar"]');
+    const composer = rect('[data-testid="branch-node-card"][data-home-composer="true"]');
+    const title = rect('[data-testid="home-hero"] .branchmind-home-logo');
+    if (!canvas || !composer || !title) throw new Error("Expected home layout to be measurable.");
+
+    // The desktop sidebar floats over the canvas, so the visible canvas starts at its right edge.
+    const visibleLeft = sidebar ? sidebar.right : canvas.left;
+    const visibleRight = canvas.right;
+    const visibleCenter = (visibleLeft + visibleRight) / 2;
+
+    return Math.max(
+      Math.abs((composer.left + composer.right) / 2 - visibleCenter),
+      Math.abs((title.left + title.right) / 2 - visibleCenter),
+      visibleLeft - composer.left,
+      composer.right - visibleRight,
+      visibleLeft - title.left,
+      title.right - visibleRight,
+      0,
+    );
+  });
+}
+
 async function expectNoHorizontalOverflow(page: Page) {
   const overflow = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
@@ -1233,6 +1260,48 @@ test("home launcher can create an account from the auth prompt and continue", as
   expect(signUpRequests).toBe(1);
   const payload = syncPayload as { project: Project };
   expect(payload.project.title).toBe(instruction);
+});
+
+test("home hero and composer stay centered in the visible canvas when side panels open", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "Desktop home layout is covered once.");
+
+  const mindMapCanvas = page.getByTestId("mind-map-canvas");
+  const expectHomeCenteredInVisibleCanvas = () =>
+    expect.poll(() => getHomeVisibleCanvasLayout(page)).toBeLessThanOrEqual(2);
+
+  for (const viewport of [
+    { width: 1600, height: 1000 },
+    { width: 1366, height: 768 },
+    { width: 1024, height: 768 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/new");
+    await expect(
+      page.locator('[data-testid="branch-node-card"][data-home-composer="true"]'),
+    ).toBeVisible();
+    await expect(mindMapCanvas.locator(".react-flow__controls")).toHaveCount(0);
+    await expectHomeCenteredInVisibleCanvas();
+
+    await mindMapCanvas.getByTestId("expand-workspace-sidebar-button").click();
+    await expect(page.getByTestId("workspace-sidebar")).toBeVisible();
+    await expectHomeCenteredInVisibleCanvas();
+
+    await mindMapCanvas.getByTestId("expand-node-detail-panel-button").click();
+    await expect(page.getByTestId("node-detail-panel")).toBeVisible();
+    await expectHomeCenteredInVisibleCanvas();
+
+    if (viewport.width === 1600) {
+      await dragResizeHandle(page, page.getByTestId("resize-workspace-sidebar"), 120);
+      await expectHomeCenteredInVisibleCanvas();
+    }
+
+    await page.getByTestId("collapse-workspace-sidebar-button").click();
+    await expect(page.getByTestId("workspace-sidebar")).toHaveCount(0);
+    await expectHomeCenteredInVisibleCanvas();
+    await expect(mindMapCanvas.locator(".react-flow__controls")).toHaveCount(0);
+  }
 });
 
 test("home draft workspace sidebars resize and snap like workspace", async ({
@@ -3255,6 +3324,9 @@ test("loads a seeded workspace with stable test ids", async ({ page }) => {
     await expect(page.getByTestId("conversation-outline")).toBeVisible();
     await expect(page.getByTestId("conversation-outline-item")).toHaveCount(1);
     await expect(page.getByTestId("mind-map-canvas")).toBeVisible();
+    await expect(
+      page.getByTestId("mind-map-canvas").locator(".react-flow__controls"),
+    ).toBeVisible();
     await expect(page.getByTestId("branch-node-card")).toHaveCount(1);
     await expect(page.getByTestId("node-detail-panel")).toBeVisible();
     await expect(page.getByTestId("conversation-history")).toBeVisible();

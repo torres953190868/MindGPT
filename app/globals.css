@@ -980,10 +980,12 @@ textarea {
   transform: none;
 }
 
+[data-theme="warm-limestone"] .branch-node-quick-action-continue,
 [data-theme="warm-limestone"] .branch-node-quick-action-branch {
   color: var(--theme-brand-900);
 }
 
+[data-theme="warm-limestone"] .branch-node-quick-action-continue:hover,
 [data-theme="warm-limestone"] .branch-node-quick-action-branch:hover {
   border-color: var(--theme-brand-500);
   background: var(--theme-brand-50);
@@ -1812,4 +1814,29 @@ textarea {
 @keyframes skeleton-shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
+}
+
+/* Desktop home: size the hero and composer to the canvas area not covered by the left sidebar. */
+@media (min-width: 1024px) {
+  .branchmind-home-workspace-grid .branchmind-map-shell {
+    container-type: inline-size;
+    --home-canvas-visible-width: calc(100cqw - var(--home-canvas-left-inset, 0px));
+    --home-composer-width: min(760px, calc(var(--home-canvas-visible-width) * 0.92 - 16px));
+    --home-hero-title-size: min(6rem, calc(var(--home-canvas-visible-width) * 0.14));
+  }
+}
+
+/* Home first-visit demo (HomeOnboardingDemo): the demo card stands in for the real composer
+   until the user clicks it or moves focus into the composer. */
+[data-home-demo] .branch-node-card-surface[data-home-composer="true"] {
+  pointer-events: none;
+}
+
+[data-home-demo="playing"] .branch-node-card-surface[data-home-composer="true"] {
+  opacity: 0;
+}
+
+[data-home-demo="closing"] .branch-node-card-surface[data-home-composer="true"] {
+  opacity: 1;
+  transition: opacity 250ms ease-out 550ms;
 }

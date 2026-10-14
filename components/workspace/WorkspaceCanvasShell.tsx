@@ -366,6 +366,10 @@ export function WorkspaceCanvasShell({
   const usesMobileDrawers = mobileNavigationMode === "drawers";
   const usesHomeDrawerLayout = usesMobileDrawers && dataDraftWorkspace;
   const usesMobileOnlyDrawers = usesMobileDrawers && !dataDraftWorkspace;
+  // On desktop home the left sidebar floats over the canvas instead of taking a grid column.
+  // Expose its width so the hero and composer can center in the part of the canvas that stays visible.
+  const homeCanvasLeftInset =
+    usesHomeDrawerLayout && !isWorkspaceSidebarCollapsed ? workspaceSidebarWidth : 0;
   const hasProjectNotes = Boolean(projectNotesConfig);
   const isWorkspaceSidebarMobileDrawerOpen =
     usesMobileDrawers && mobileDrawerView === "outline";
@@ -425,9 +429,12 @@ export function WorkspaceCanvasShell({
     "--project-notes-panel-width": `${projectNotesPanelWidth}px`,
     "--workspace-side-panel-layout-width": `${SIDE_PANEL_LAYOUT_WIDTH}px`,
     "--workspace-grid-columns": desktopGridColumns,
+    "--home-canvas-left-inset": `${homeCanvasLeftInset}px`,
   } as CSSProperties;
+  // The home onboarding demo writes these two variables while it moves the camera.
   const canvasIntroStyle = {
-    transform: `translate3d(0, ${canvasIntroPanOffsetY}px, 0)`,
+    transform: `translate3d(0, calc(${canvasIntroPanOffsetY}px + var(--home-demo-hero-offset-y, 0px)), 0)`,
+    opacity: "var(--home-demo-hero-opacity, 1)",
   } as CSSProperties;
   const workspaceGridClassName = usesHomeDrawerLayout
     ? "branchmind-workspace-grid branchmind-home-workspace-grid relative grid min-h-0 min-w-0 flex-1 grid-cols-1 overflow-hidden bg-transparent lg:h-full lg:flex-1 lg:grid-cols-[var(--workspace-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-0"
@@ -458,7 +465,7 @@ export function WorkspaceCanvasShell({
         mobileWorkspaceView === "map" ? "" : "hidden lg:block"
       }`;
   const canvasIntroClassName = usesMobileDrawers
-    ? "branchmind-canvas-intro branchmind-canvas-intro-floating pointer-events-none absolute inset-x-14 top-16 z-10 flex justify-center px-0 lg:inset-x-4 lg:top-24"
+    ? "branchmind-canvas-intro branchmind-canvas-intro-floating pointer-events-none absolute inset-x-14 top-16 z-10 flex justify-center px-0 lg:left-[calc(var(--home-canvas-left-inset,0px)+1rem)] lg:right-4 lg:top-24"
     : "branchmind-canvas-intro relative z-10 flex justify-center px-3 pt-4 sm:px-4 sm:pt-6 lg:pointer-events-none lg:absolute lg:inset-x-4 lg:top-24 lg:p-0";
   const mindMapFrameClassName =
     canvasIntro && !usesMobileDrawers
@@ -1144,6 +1151,7 @@ export function WorkspaceCanvasShell({
           </h2>
           {canvasIntro && (
             <div
+              data-home-canvas-intro
               className={canvasIntroClassName}
               style={canvasIntroStyle}
             >
@@ -1192,6 +1200,7 @@ export function WorkspaceCanvasShell({
               onHomeCanvasPanOffsetChange={
                 canvasIntro ? setCanvasIntroPanOffsetY : undefined
               }
+              homeCanvasLeftInset={canvasIntro ? homeCanvasLeftInset : 0}
             />
           </div>
         </section>

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type FocusEvent as ReactFocusEvent,
   type MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
@@ -16,6 +17,7 @@ import {
   ReactFlow,
   applyNodeChanges,
   getBezierPath,
+  getViewportForBounds,
   type Edge,
   type EdgeProps,
   type EdgeTypes,
@@ -34,9 +36,12 @@ import {
   type InlineNodeComposerData,
   type MobileLongPressStart,
 } from "./BranchNodeCard";
+import { HomeOnboardingDemo, type HomeOnboardingDemoPhase } from "./HomeOnboardingDemo";
 
 const HOME_CANVAS_PAN_RANGE_RATIO = 1 / 5;
 const HOME_COMPOSER_INITIAL_OFFSET_Y = 16;
+const HOME_COMPOSER_FIT_PADDING = 0.1;
+const MIND_MAP_MIN_ZOOM = 0.25;
 const HOME_CANVAS_WHEEL_PAN_SPEED = 0.5;
 const HOME_HERO_MIN_VISIBLE_TOP = 16;
 const HOME_CANVAS_PAN_ACTIVATION_DISTANCE = 6;
@@ -115,6 +120,7 @@ type MindMapProps = {
   streamingNodeId: string | null;
   inlineNodeComposer?: InlineNodeComposerData;
   onHomeCanvasPanOffsetChange?: (offsetY: number) => void;
+  homeCanvasLeftInset?: number;
 };
 
 type HomeCanvasGesture = {
@@ -152,12 +158,14 @@ export function MindMap({
   streamingNodeId,
   inlineNodeComposer,
   onHomeCanvasPanOffsetChange,
+  homeCanvasLeftInset = 0,
 }: MindMapProps) {
   const flowContainerRef = useRef<HTMLDivElement | null>(null);
   const homeCanvasPanOffsetYRef = useRef(0);
   const homeCanvasGestureRef = useRef<HomeCanvasGesture | null>(null);
   const homeViewportBaselineXRef = useRef<number | null>(null);
   const homeViewportBaselineYRef = useRef<number | null>(null);
+  const homeCenterRequestRef = useRef(0);
   const previousFlowBoundsRef = useRef<DOMRectReadOnly | null>(null);
   const previousProjectIdRef = useRef<string | null>(null);
   const previousNodeIdsRef = useRef<Set<string>>(new Set());
@@ -180,6 +188,14 @@ export function MindMap({
   const draggingNodeIdRef = useRef<string | null>(null);
   const isHomeInlineComposer = inlineNodeComposer?.variant === "home";
   const homeComposerNodeId = isHomeInlineComposer ? inlineNodeComposer?.nodeId : null;
+  const homeOnboardingDemo = isHomeInlineComposer ? inlineNodeComposer?.onboardingDemo : undefined;
+  const hasHomeOnboardingDemo = Boolean(homeOnboardingDemo);
+  const [homeDemoPhase, setHomeDemoPhase] = useState<HomeOnboardingDemoPhase | "off">("off");
+  // Read by the native pointer/wheel listeners and by centerHomeComposer, which must not
+  // wait for a re-render after the demo is dismissed.
+  const homeDemoPhaseRef = useRef<HomeOnboardingDemoPhase | "off">("off");
+  const homeDemoStartedRef = useRef(false);
+  const homeDemoDismissRef = useRef<(() => void) | null>(null);
   const mobileLongPressDragEnabled =
     isMobileViewport && !isHomeInlineComposer;
 
@@ -263,6 +279,11 @@ export function MindMap({
         position: node.position,
         selected: selectedNodeId === node.id,
         dragHandle: ".branch-node-edge-hit-area",
+        // While the onboarding demo runs, clicks must reach the demo card under this node.
+        // React Flow sets pointer-events inline on the node wrapper, so override it via style.
+        ...(homeDemoPhase !== "off" && node.id === homeComposerNodeId
+          ? { className: "home-demo-composer-node", style: { pointerEvents: "none" as const } }
+          : {}),
         data: {
           mindNode: node,
           selected: selectedNodeId === node.id,
@@ -282,6 +303,8 @@ export function MindMap({
       }));
   }, [
     creatingNodeId,
+    homeComposerNodeId,
+    homeDemoPhase,
     inlineNodeComposer,
     consumeMobileNodeClickSuppression,
     handleMobileNodeLongPressStart,
@@ -340,9 +363,47 @@ export function MindMap({
     [],
   );
 
+  const offsetHomeViewport = useCallback(
+    (viewport: Viewport): Viewport => {
+      const leftInset = window.matchMedia("(min-width: 1024px)").matches
+        ? homeCanvasLeftInset
+        : 0;
+      return {
+        ...viewport,
+        x: viewport.x + leftInset / 2,
+        y: viewport.y + HOME_COMPOSER_INITIAL_OFFSET_Y,
+      };
+    },
+    [homeCanvasLeftInset],
+  );
+
+  // Same result as centerHomeComposer, computed synchronously so the onboarding demo can
+  // read it every frame without touching the real viewport.
+  const getHomeDemoViewport = useCallback(() => {
+    const container = flowContainerRef.current;
+    if (!reactFlowInstance || !homeComposerNodeId || !container) return null;
+    const bounds = reactFlowInstance.getNodesBounds([homeComposerNodeId]);
+    if (bounds.width <= 0 || bounds.height <= 0) return null;
+    return offsetHomeViewport(
+      getViewportForBounds(
+        bounds,
+        container.clientWidth,
+        container.clientHeight,
+        MIND_MAP_MIN_ZOOM,
+        1,
+        HOME_COMPOSER_FIT_PADDING,
+      ),
+    );
+  }, [homeComposerNodeId, offsetHomeViewport, reactFlowInstance]);
+
   const centerHomeComposer = useCallback(() => {
     if (!reactFlowInstance || !homeComposerNodeId) return;
+    // The onboarding demo drives the camera itself and returns it to this same viewport.
+    if (homeDemoPhaseRef.current !== "off") return;
 
+    // React Flow shares one pending fitView promise between calls. Only the latest call may
+    // apply the offsets below, otherwise each queued caller adds them again.
+    const requestId = ++homeCenterRequestRef.current;
     void reactFlowInstance
       .fitView({
         nodes: [{ id: homeComposerNodeId }],
@@ -350,11 +411,9 @@ export function MindMap({
         duration: 0,
       })
       .then(() => {
-        const viewport = reactFlowInstance.getViewport();
-        const initialViewport = {
-          ...viewport,
-          y: viewport.y + HOME_COMPOSER_INITIAL_OFFSET_Y,
-        };
+        if (requestId !== homeCenterRequestRef.current) return;
+        if (homeDemoPhaseRef.current !== "off") return;
+        const initialViewport = offsetHomeViewport(reactFlowInstance.getViewport());
 
         homeViewportBaselineYRef.current = initialViewport.y;
         homeViewportBaselineXRef.current = initialViewport.x;
@@ -362,7 +421,64 @@ export function MindMap({
         onHomeCanvasPanOffsetChange?.(0);
         void reactFlowInstance.setViewport(initialViewport, { duration: 0 });
       });
-  }, [homeComposerNodeId, onHomeCanvasPanOffsetChange, reactFlowInstance]);
+  }, [homeComposerNodeId, offsetHomeViewport, onHomeCanvasPanOffsetChange, reactFlowInstance]);
+
+  useLayoutEffect(() => {
+    homeDemoDismissRef.current = homeOnboardingDemo?.onDismiss ?? null;
+  });
+
+  // Layout effect: switch to "playing" before the first paint so the real composer never
+  // flashes before the demo card covers it.
+  useLayoutEffect(() => {
+    if (!hasHomeOnboardingDemo || homeDemoStartedRef.current) return;
+    homeDemoStartedRef.current = true;
+    homeDemoPhaseRef.current = "playing";
+    setHomeDemoPhase("playing");
+  }, [hasHomeOnboardingDemo]);
+
+  const getFlowContainer = useCallback(() => flowContainerRef.current, []);
+
+  const focusHomeComposerInput = useCallback(() => {
+    flowContainerRef.current
+      ?.querySelector<HTMLTextAreaElement>(
+        ".branch-node-card-surface[data-home-composer='true'] textarea[data-testid='message-instruction-input']",
+      )
+      ?.focus({ preventScroll: true });
+  }, []);
+
+  const dismissHomeDemo = useCallback(() => {
+    if (homeDemoPhaseRef.current !== "playing") return;
+    homeDemoPhaseRef.current = "closing";
+    setHomeDemoPhase("closing");
+    homeDemoDismissRef.current?.();
+  }, []);
+
+  const handleHomeDemoCardPointerDown = useCallback(() => {
+    dismissHomeDemo();
+    focusHomeComposerInput();
+  }, [dismissHomeDemo, focusHomeComposerInput]);
+
+  const handleHomeDemoFocusCapture = useCallback(
+    (event: ReactFocusEvent<HTMLDivElement>) => {
+      if (homeDemoPhaseRef.current !== "playing") return;
+      if (!(event.target instanceof Element)) return;
+      if (!event.target.closest(".home-demo-composer-node, [data-home-composer='true']")) return;
+      dismissHomeDemo();
+    },
+    [dismissHomeDemo],
+  );
+
+  const handleHomeDemoFinished = useCallback(() => {
+    homeDemoPhaseRef.current = "off";
+    setHomeDemoPhase("off");
+  }, []);
+
+  useEffect(() => {
+    if (homeDemoPhase !== "off" || !homeDemoStartedRef.current) return undefined;
+    // Re-sync the pan baseline once the demo has handed the camera back.
+    const animationFrame = window.requestAnimationFrame(centerHomeComposer);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [centerHomeComposer, homeDemoPhase]);
 
   const getHomeCanvasPanBounds = useCallback(() => {
     const containerHeight = flowContainerRef.current?.clientHeight ?? window.innerHeight;
@@ -832,6 +948,8 @@ export function MindMap({
   const handleViewportChange = useCallback(
     (viewport: Viewport) => {
       if (!isHomeInlineComposer) return;
+      // setViewport from the demo also lands here; do not clamp or record it as a pan.
+      if (homeDemoPhaseRef.current !== "off") return;
 
       if (homeViewportBaselineYRef.current === null) {
         homeViewportBaselineYRef.current = viewport.y;
@@ -893,6 +1011,7 @@ export function MindMap({
 
       event.preventDefault();
       event.stopPropagation();
+      if (homeDemoPhaseRef.current !== "off") return;
 
       const viewport = reactFlowInstance.getViewport();
       const baselineX = homeViewportBaselineXRef.current ?? viewport.x;
@@ -959,6 +1078,7 @@ export function MindMap({
 
     const handlePointerDown = (event: PointerEvent) => {
       if (!event.isPrimary || event.button !== 0) return;
+      if (homeDemoPhaseRef.current !== "off") return;
 
       const viewport = reactFlowInstance.getViewport();
       const baselineX = homeViewportBaselineXRef.current ?? viewport.x;
@@ -1085,6 +1205,8 @@ export function MindMap({
       role="region"
       aria-label="Mind map"
       data-testid="mind-map"
+      data-home-demo={homeDemoPhase === "off" ? undefined : homeDemoPhase}
+      onFocusCapture={homeDemoPhase === "playing" ? handleHomeDemoFocusCapture : undefined}
       className="h-full min-h-[360px]"
     >
       <ReactFlow
@@ -1103,7 +1225,7 @@ export function MindMap({
         onNodeDragStop={handleNodeDragStop}
         fitView
         fitViewOptions={fitViewOptions}
-        minZoom={0.25}
+        minZoom={MIND_MAP_MIN_ZOOM}
         maxZoom={1.7}
         nodeDragThreshold={
           isMobileViewport
@@ -1115,11 +1237,21 @@ export function MindMap({
         panOnDrag={!isHomeInlineComposer}
         className="branchmind-grid h-full rounded-[28px] lg:rounded-none"
       >
-        <Controls
-          className={`!rounded-[18px] !border-white/80 !bg-white/80 !shadow-lg ${
-            isHomeInlineComposer ? "!hidden lg:!flex" : ""
-          }`}
-        />
+        {!isHomeInlineComposer && (
+          <Controls className="!rounded-[18px] !border-white/80 !bg-white/80 !shadow-lg" />
+        )}
+        {homeComposerNodeId && homeDemoPhase !== "off" && (
+          <HomeOnboardingDemo
+            rootNodeId={homeComposerNodeId}
+            phase={homeDemoPhase}
+            canvasLeftInset={homeCanvasLeftInset}
+            getContainer={getFlowContainer}
+            getHomeViewport={getHomeDemoViewport}
+            onCardPointerDown={handleHomeDemoCardPointerDown}
+            onCardClick={focusHomeComposerInput}
+            onFinished={handleHomeDemoFinished}
+          />
+        )}
       </ReactFlow>
     </div>
   );

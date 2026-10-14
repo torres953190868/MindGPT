@@ -89,26 +89,21 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
     streamingMessageId ??
     (isProjectSyncBlocking ? pendingProjectSync.assistantMessageId : null);
 
+  // Both quick actions create an empty child with an inline composer for its first message.
   const handleQuickCreate = useCallback(
-    async (nodeId: string, mode: "continue" | "branch") => {
-      if (mode === "branch") {
-        const creation = createBlankChildNode(nodeId, mode);
-        if (!creation) return;
+    (nodeId: string, mode: "continue" | "branch") => {
+      const creation = createBlankChildNode(nodeId, mode);
+      if (!creation) return;
 
-        setQuickBranchNodeId(creation.nodeId);
-        setQuickBranchPersistingNodeId(creation.nodeId);
-        void creation.persisted.then(() => {
-          setQuickBranchPersistingNodeId((current) =>
-            current === creation.nodeId ? null : current,
-          );
-        });
-        return;
-      }
-
-      const instruction = copy.workspace.initialInstruction;
-      await createChildNode(nodeId, mode, instruction);
+      setQuickBranchNodeId(creation.nodeId);
+      setQuickBranchPersistingNodeId(creation.nodeId);
+      void creation.persisted.then(() => {
+        setQuickBranchPersistingNodeId((current) =>
+          current === creation.nodeId ? null : current,
+        );
+      });
     },
-    [copy.workspace.initialInstruction, createBlankChildNode, createChildNode],
+    [createBlankChildNode],
   );
 
   const handleCreateFromPanel = useCallback(

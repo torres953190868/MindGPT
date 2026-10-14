@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AuthPromptDialog } from "@/components/auth/AuthPromptDialog";
 import { useLanguage } from "@/components/language/LanguageProvider";
 import { ROOT_POSITION } from "@/lib/graph";
+import { HOME_DEMO_DISMISSED_STORAGE_KEY } from "@/lib/home-onboarding-demo";
 import type {
   ChatAttachment,
   ChatModelSelection,
@@ -68,6 +69,24 @@ async function ignoreMessageMutation() {
 
 function ignoreNodeMutation() {}
 
+function shouldShowHomeOnboardingDemo() {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+  try {
+    return window.localStorage.getItem(HOME_DEMO_DISMISSED_STORAGE_KEY) !== "1";
+  } catch {
+    // Storage blocked: skip the demo rather than show it on every visit.
+    return false;
+  }
+}
+
+function rememberHomeOnboardingDemoDismissed() {
+  try {
+    window.localStorage.setItem(HOME_DEMO_DISMISSED_STORAGE_KEY, "1");
+  } catch {
+    // Nothing to do; the demo simply shows again next time.
+  }
+}
+
 export function HomeDraftWorkspace() {
   const { copy } = useLanguage();
   const router = useRouter();
@@ -76,6 +95,7 @@ export function HomeDraftWorkspace() {
   const [taglineIndex, setTaglineIndex] = useState(0);
   const [taglinePhase, setTaglinePhase] = useState<HomeTaglinePhase>("idle");
   const [isAuthPromptOpen, setIsAuthPromptOpen] = useState(false);
+  const [showOnboardingDemo, setShowOnboardingDemo] = useState(false);
   const pendingSubmitRef = useRef<(() => void) | null>(null);
   const sessionStatus = useAuthStore((state) => state.sessionStatus);
   const ensureSessionLoaded = useAuthStore((state) => state.ensureSessionLoaded);
@@ -91,6 +111,11 @@ export function HomeDraftWorkspace() {
   useEffect(() => {
     hydrate();
   }, [hydrate]);
+
+  // Decided on the client before the first paint; the server render never includes the demo.
+  useLayoutEffect(() => {
+    if (shouldShowHomeOnboardingDemo()) setShowOnboardingDemo(true);
+  }, []);
 
   useEffect(() => {
     void ensureSessionLoaded();
@@ -210,7 +235,7 @@ export function HomeDraftWorkspace() {
             data-testid="home-hero"
             className="branchmind-home-hero max-w-[min(760px,calc(100vw-36px))] text-center sm:max-w-[min(760px,calc(100vw-48px))]"
           >
-            <p className="branchmind-home-logo home-title-soft text-[42px] font-black leading-none text-neutral-900 sm:text-7xl lg:text-8xl">
+            <p className="branchmind-home-logo home-title-soft text-[42px] font-black leading-none text-neutral-900 sm:text-7xl lg:text-[length:var(--home-hero-title-size,6rem)]">
               BranchMind
             </p>
             <p
@@ -235,6 +260,9 @@ export function HomeDraftWorkspace() {
           variant: "home",
           suggestions: promptSuggestions,
           suggestionsAnimationPhase: taglinePhase,
+          onboardingDemo: showOnboardingDemo
+            ? { onDismiss: rememberHomeOnboardingDemoDismissed }
+            : undefined,
         }}
         nodeDetailOptions={{
           initialSubmit: true,

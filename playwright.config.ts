@@ -33,6 +33,18 @@ export default defineConfig({
       args: ["--no-proxy-server"],
     },
     testIdAttribute: "data-testid",
+    // Mark the first-visit home demo as already seen so it does not cover the
+    // home composer in unrelated tests. e2e/home-onboarding-demo.spec.ts
+    // starts from an empty storage state to test the demo itself.
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: new URL(baseURL).origin,
+          localStorage: [{ name: "branchmind-home-demo-dismissed", value: "1" }],
+        },
+      ],
+    },
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",

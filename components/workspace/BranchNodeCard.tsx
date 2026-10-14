@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { GitBranch, Loader2, Send, Sparkles, Ribbon } from "lucide-react";
+import { GitBranch, Loader2, Send, Sparkles, Sprout, Ribbon } from "lucide-react";
 import {
   ActiveSkillChip,
   AttachmentMenuButton,
@@ -36,6 +36,8 @@ export type InlineNodeComposerData = {
   variant?: "default" | "home";
   suggestions?: string[];
   suggestionsAnimationPhase?: "idle" | "leaving" | "entering";
+  /** Home only: play the first-visit demo over this composer until the user engages with it. */
+  onboardingDemo?: { onDismiss: () => void };
   autoPreparePdfAttachments?: boolean;
   onBeforeSubmit?: (resumeSubmit: () => void) => boolean | Promise<boolean>;
   onSubmit: (
@@ -70,7 +72,7 @@ export type BranchNodeData = {
   inlineComposer?: InlineNodeComposerData;
 };
 
-type QuickActionItem = "branch" | "fold";
+type QuickActionItem = "continue" | "branch" | "fold";
 
 function isBlockedMobileLongPressTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return true;
@@ -118,6 +120,7 @@ export function BranchNodeCard({ data }: NodeProps) {
   const hasInlineComposer = Boolean(inlineComposer);
   const isHomeInlineComposer = inlineComposer?.variant === "home";
   const quickActionHighlight = useHighlightedAction<QuickActionItem>();
+  const isContinueQuickActionHighlighted = quickActionHighlight.isHighlighted("continue");
   const isBranchQuickActionHighlighted = quickActionHighlight.isHighlighted("branch");
   const isFoldQuickActionHighlighted = quickActionHighlight.isHighlighted("fold");
   const canLongPressDragNode =
@@ -203,7 +206,7 @@ export function BranchNodeCard({ data }: NodeProps) {
         canLongPressDragNode ? "branch-node-mobile-long-press-root " : ""
       }${
         isHomeInlineComposer
-          ? `w-[min(312px,calc(100vw-72px))] rounded-xl border border-neutral-200/90 bg-white/92 p-2.5 shadow-lg backdrop-blur sm:w-[360px] sm:rounded-[18px] sm:p-5 md:w-[400px] lg:w-[min(760px,calc(100vw-48px))] lg:p-6 ${
+          ? `w-[min(312px,calc(100vw-72px))] rounded-xl border border-neutral-200/90 bg-white/92 p-2.5 shadow-lg backdrop-blur sm:w-[360px] sm:rounded-[18px] sm:p-5 md:w-[400px] lg:w-[var(--home-composer-width,min(760px,calc(100vw-48px)))] lg:p-6 ${
               selected
                 ? "ring-2 ring-brand-200/70"
                 : "hover:shadow-xl"
@@ -343,8 +346,29 @@ export function BranchNodeCard({ data }: NodeProps) {
         {!hasInlineComposer && (
         <div
           onMouseLeave={quickActionHighlight.clearHighlightedAction}
-          className="mt-4 hidden items-center gap-2 sm:flex"
+          className="mt-4 flex items-center gap-2"
         >
+          <button
+            type="button"
+            disabled={creationDisabled}
+            data-testid="continue-below-button"
+            data-node-id={mindNode.id}
+            data-highlighted={quickActionHighlight.getDataHighlighted("continue")}
+            {...quickActionHighlight.getHoverHandlers("continue")}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelect(mindNode.id);
+              onCreate(mindNode.id, "continue");
+            }}
+            aria-label={copy.workspace.newContinueBelow}
+            title={copy.workspace.newContinueBelow}
+            className={`branch-node-quick-action branch-node-quick-action-continue nodrag nopan grid h-9 w-9 place-items-center rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-50 ${getHighlightedActionClass(
+              isContinueQuickActionHighlighted,
+              "bg-brand-100 text-brand-700",
+            )}`}
+          >
+            <Sprout size={17} />
+          </button>
           <button
             type="button"
             disabled={creationDisabled}
