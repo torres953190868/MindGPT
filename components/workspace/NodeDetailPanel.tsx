@@ -7,6 +7,7 @@ import {
   type MouseEvent,
   type PointerEvent,
   type ReactNode,
+  Fragment,
   useCallback,
   useEffect,
   useId,
@@ -361,6 +362,7 @@ export function NodeDetailPanel({
             inherited: false,
           }))
         : [];
+  const inheritedMessageCount = displayMessages.filter((item) => item.inherited).length;
   const shouldShowNodeBrief = Boolean(node && node.messages.length === 0);
   let lastNodeUserMessage: ChatMessage | null = null;
   let lastNodeAssistantMessage: ChatMessage | null = null;
@@ -1185,8 +1187,11 @@ export function NodeDetailPanel({
         ) : (
           <>
             {shouldShowNodeBrief && node && <NodeBriefCard node={node} />}
-            {displayMessages.map(({ sourceNodeId, message, inherited }) => {
+            {displayMessages.map(({ sourceNodeId, message, inherited }, messageIndex) => {
             const messageKey = `${sourceNodeId}:${message.id}`;
+            const previousMessage = messageIndex > 0 ? displayMessages[messageIndex - 1] : null;
+            const startsInheritedGroup = inherited && !previousMessage?.inherited;
+            const startsCurrentGroup = !inherited && previousMessage?.inherited === true;
             const isStreamingAssistant =
               isCreating &&
               sourceNodeId === node.id &&
@@ -1197,8 +1202,19 @@ export function NodeDetailPanel({
             const isCopied = copiedMessageKey === messageKey;
 
             return (
+              <Fragment key={messageKey}>
+                {(startsInheritedGroup || startsCurrentGroup) && (
+                  <p
+                    className="conversation-group-label"
+                    data-testid="conversation-group-label"
+                    data-group={startsInheritedGroup ? "inherited" : "current"}
+                  >
+                    {startsInheritedGroup
+                      ? copy.workspace.conversationInheritedGroup(inheritedMessageCount)
+                      : copy.workspace.conversationCurrentGroup}
+                  </p>
+                )}
                   <div
-                key={messageKey}
                 data-testid="conversation-message"
                 data-message-id={message.id}
                 data-source-node-id={sourceNodeId}
@@ -1325,6 +1341,7 @@ export function NodeDetailPanel({
                   </div>
                 )}
               </div>
+              </Fragment>
             );
           })}
           </>

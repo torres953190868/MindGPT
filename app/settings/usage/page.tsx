@@ -33,7 +33,7 @@ function UsageCard({
   const ratio = hasLimit && limit > 0 ? used / limit : 0;
   const percentage = Math.min(Math.round(ratio * 100), 100);
   const isNearLimit = hasLimit && percentage >= 80;
-  const barColor = percentage >= 95 ? "bg-red-500" : percentage >= 80 ? "bg-amber-500" : tone.bar;
+  const barColor = percentage >= 95 ? "bg-danger-500" : percentage >= 80 ? "bg-warning-500" : tone.bar;
 
   return (
     <div className="rounded-lg border border-neutral-200 bg-surface-elevated p-5 shadow-md">
@@ -55,10 +55,10 @@ function UsageCard({
             <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${percentage}%` }} />
           </div>
           <div className="mt-1 flex justify-between">
-            <span className={`text-[11px] font-semibold ${isNearLimit ? "text-amber-600" : "text-neutral-500"}`}>
+            <span className={`text-[11px] font-semibold ${isNearLimit ? "text-warning-600" : "text-neutral-500"}`}>
               {usedLabel(percentage)}
             </span>
-            {percentage >= 95 && <span className="text-[11px] font-bold text-red-500">{limitReachedLabel}</span>}
+            {percentage >= 95 && <span className="text-[11px] font-bold text-danger-500">{limitReachedLabel}</span>}
           </div>
         </div>
       )}

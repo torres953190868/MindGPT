@@ -39,7 +39,7 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
             backgroundColor: "#ffffff",
             border: "1px solid #ece5da",
             borderRadius: 24,
-            boxShadow: "0 24px 60px rgba(41, 37, 47, 0.12)",
+            boxShadow: "0 24px 60px rgba(60, 45, 30, 0.12)",
             padding: "36px 28px",
             textAlign: "center",
           }}

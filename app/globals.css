@@ -33,6 +33,18 @@
   --color-danger-600: var(--theme-danger-600);
   --color-danger-700: var(--theme-danger-700);
 
+  --color-warning-50: var(--theme-warning-50);
+  --color-warning-100: var(--theme-warning-100);
+  --color-warning-200: var(--theme-warning-200);
+  --color-warning-300: var(--theme-warning-300);
+  --color-warning-400: var(--theme-warning-400);
+  --color-warning-500: var(--theme-warning-500);
+  --color-warning-600: var(--theme-warning-600);
+  --color-warning-700: var(--theme-warning-700);
+  --color-warning-800: var(--theme-warning-800);
+  --color-warning-900: var(--theme-warning-900);
+  --color-warning-950: var(--theme-warning-950);
+
   --color-neutral-50: var(--theme-neutral-50);
   --color-neutral-100: var(--theme-neutral-100);
   --color-neutral-200: var(--theme-neutral-200);
@@ -136,6 +148,18 @@
   --theme-danger-600: #883933;
   --theme-danger-700: #71312d;
 
+  --theme-warning-50: #fffbeb;
+  --theme-warning-100: #fef3c7;
+  --theme-warning-200: #fde68a;
+  --theme-warning-300: #fcd34d;
+  --theme-warning-400: #fbbf24;
+  --theme-warning-500: #f59e0b;
+  --theme-warning-600: #d97706;
+  --theme-warning-700: #b45309;
+  --theme-warning-800: #92400e;
+  --theme-warning-900: #78350f;
+  --theme-warning-950: #451a03;
+
   --theme-neutral-50: #f7faf9;
   --theme-neutral-100: #eef3f1;
   --theme-neutral-200: #dfe8e4;
@@ -194,6 +218,7 @@
 }
 
 [data-theme="warm-limestone"] {
+  /* 暖石灰：所有颜色统一在暖色相（约 25°–40°），不再混用紫灰。 */
   --color-white: var(--warm-limestone-white);
 
   --theme-brand-50: #f7f3ec;
@@ -207,15 +232,16 @@
   --theme-brand-800: #312b26;
   --theme-brand-900: #2b2622;
 
-  --theme-success-50: #f3efe4;
-  --theme-success-100: #e9dfcc;
-  --theme-success-200: #d8c6aa;
-  --theme-success-300: #c0aa80;
-  --theme-success-400: #9f885c;
-  --theme-success-500: #7d6b45;
-  --theme-success-600: #675737;
-  --theme-success-700: #4f422d;
-  --theme-success-800: #3c3226;
+  /* 成功 / 确认：鼠尾草绿，和橄榄色强调区分开 */
+  --theme-success-50: #eef3ea;
+  --theme-success-100: #e2eadb;
+  --theme-success-200: #c9d7bf;
+  --theme-success-300: #a8bd9a;
+  --theme-success-400: #829d72;
+  --theme-success-500: #627f55;
+  --theme-success-600: #4f6b4a;
+  --theme-success-700: #3f5640;
+  --theme-success-800: #314233;
 
   --theme-danger-50: #f7eee8;
   --theme-danger-100: #eddcd2;
@@ -226,67 +252,90 @@
   --theme-danger-600: #704034;
   --theme-danger-700: #5a352d;
 
+  /* 警告：琥珀陶土色 */
+  --theme-warning-50: #f9f0df;
+  --theme-warning-100: #f3e3c4;
+  --theme-warning-200: #e6cc9c;
+  --theme-warning-300: #d4ad6c;
+  --theme-warning-400: #bf8f45;
+  --theme-warning-500: #a8742a;
+  --theme-warning-600: #8a5d22;
+  --theme-warning-700: #6e4a1f;
+  --theme-warning-800: #573b1c;
+  --theme-warning-900: #46301a;
+  --theme-warning-950: #2e1f11;
+
   --warm-limestone-fold-50: #f5f0e7;
   --warm-limestone-fold-100: #eadfce;
   --warm-limestone-fold-200: #d8c8b4;
   --warm-limestone-fold-500: #7b6c5c;
   --warm-limestone-fold-600: #5b5045;
   --warm-limestone-fold-700: #463d35;
-  --warm-limestone-white: #f8f1e7;
+  /* 瓷白：卡片、面板、bg-white 都用这个，比背景亮一档 */
+  --warm-limestone-white: #fcf9f4;
 
-  --theme-neutral-50: #fbf8f2;
-  --theme-neutral-100: #f3f0ea;
-  --theme-neutral-200: #e6dfd5;
-  --theme-neutral-300: #d8cec0;
-  --theme-neutral-400: #c4b8aa;
-  --theme-neutral-500: #9a9187;
-  --theme-neutral-600: #746b65;
-  --theme-neutral-700: #5f584f;
-  --theme-neutral-800: #403943;
-  --theme-neutral-900: #29252f;
+  --theme-neutral-50: #faf6f0;
+  --theme-neutral-100: #f3ede4;
+  --theme-neutral-200: #e4dace;
+  --theme-neutral-300: #d6cab9;
+  --theme-neutral-400: #bfb2a1;
+  --theme-neutral-500: #7b7064;
+  --theme-neutral-600: #6b6056;
+  --theme-neutral-700: #554b42;
+  --theme-neutral-800: #3d342d;
+  --theme-neutral-900: #2a2420;
 
-  --theme-text-primary: #29252f;
-  --theme-text-secondary: #6f665d;
-  --theme-text-muted: #6e655c;
-  --theme-border-default: #d8ccbb;
-  --theme-border-hover: #c8baaa;
-  --theme-surface-bg: #f1ebe1;
-  --theme-surface-canvas: #e9e1d5;
+  /* 文字三级：正文 / 次要 / 弱化，彼此拉开 */
+  --theme-text-primary: #2a2420;
+  --theme-text-secondary: #5f554b;
+  --theme-text-muted: #73685c;
+  --theme-border-default: #d9cdbb;
+  --theme-border-hover: #c6b7a2;
+  --theme-surface-bg: #f1eadf;
+  --theme-surface-canvas: #ebe3d6;
   --theme-surface-elevated: var(--warm-limestone-white);
-  --theme-surface-muted: #f2eadf;
-  --theme-surface-soft: #f6efe4;
+  --theme-surface-muted: #f3ece1;
+  --theme-surface-soft: #f7f2ea;
 
-  --theme-shadow-sm: 0 1px 2px rgb(52 45 35 / 0.045);
-  --theme-shadow-md: 0 10px 28px rgb(52 45 35 / 0.055), 0 1px 2px rgb(52 45 35 / 0.045);
-  --theme-shadow-lg: 0 18px 42px rgb(52 45 35 / 0.075), 0 2px 6px rgb(52 45 35 / 0.04);
-  --theme-shadow-xl: 0 24px 60px rgb(52 45 35 / 0.1);
-  --theme-shadow-2xl: 0 32px 80px rgb(52 45 35 / 0.14);
+  --theme-shadow-sm: 0 1px 2px rgb(60 45 30 / 0.06);
+  --theme-shadow-md: 0 8px 24px rgb(60 45 30 / 0.08), 0 1px 2px rgb(60 45 30 / 0.06);
+  --theme-shadow-lg: 0 18px 40px rgb(60 45 30 / 0.11), 0 2px 6px rgb(60 45 30 / 0.06);
+  --theme-shadow-xl: 0 24px 60px rgb(60 45 30 / 0.14);
+  --theme-shadow-2xl: 0 32px 80px rgb(60 45 30 / 0.18);
 
-  --background: #f1ebe1;
-  --foreground: #29252f;
+  --background: #f1eadf;
+  --foreground: #2a2420;
   --app-background:
-    linear-gradient(180deg, rgb(248 241 231 / 0.62) 0%, rgb(248 241 231 / 0.2) 40%, rgb(248 241 231 / 0) 100%),
-    linear-gradient(180deg, #f1ebe1 0%, #e8dfd2 100%);
-  --branchmind-grid-line: rgb(64 57 67 / 0.055);
-  --projects-surface-background: #f3f0ea;
-  --projects-grid-line: rgb(64 57 67 / 0.045);
+    linear-gradient(180deg, rgb(252 249 244 / 0.5) 0%, rgb(252 249 244 / 0.16) 40%, rgb(252 249 244 / 0) 100%),
+    linear-gradient(180deg, #f1eadf 0%, #e9e0d2 100%);
+  --branchmind-grid-line: rgb(74 60 46 / 0.06);
+  --projects-surface-background: #f3ede4;
+  --projects-grid-line: rgb(74 60 46 / 0.05);
   --settings-shell-background:
-    linear-gradient(180deg, rgb(248 241 231 / 0.64) 0%, rgb(248 241 231 / 0.14) 34%, rgb(248 241 231 / 0) 100%),
-    repeating-linear-gradient(135deg, rgb(64 57 67 / 0.035) 0 1px, transparent 1px 9px),
-    linear-gradient(180deg, #f1ebe1 0%, #e8dfd2 100%);
+    linear-gradient(180deg, rgb(252 249 244 / 0.56) 0%, rgb(252 249 244 / 0.12) 34%, rgb(252 249 244 / 0) 100%),
+    repeating-linear-gradient(135deg, rgb(74 60 46 / 0.035) 0 1px, transparent 1px 9px),
+    linear-gradient(180deg, #f1eadf 0%, #e9e0d2 100%);
   --home-canvas-background:
-    linear-gradient(180deg, rgb(248 241 231 / 0.66) 0%, rgb(248 241 231 / 0.16) 42%, rgb(248 241 231 / 0) 100%),
-    linear-gradient(180deg, #f1ebe1 0%, #e8dfd2 100%);
-  --home-title-shadow: 0 10px 28px rgb(52 45 35 / 0.08);
-  --editor-bg: rgb(248 241 231 / 0.9);
+    linear-gradient(180deg, rgb(252 249 244 / 0.56) 0%, rgb(252 249 244 / 0.14) 42%, rgb(252 249 244 / 0) 100%),
+    linear-gradient(180deg, #f1eadf 0%, #e9e0d2 100%);
+  --home-title-shadow: 0 10px 28px rgb(60 45 30 / 0.08);
+  --editor-bg: rgb(252 249 244 / 0.92);
   --editor-focus-ring: #ece5da;
-  --editor-details-bg: rgb(246 241 233 / 0.82);
-  --editor-code-bg: rgb(242 234 223 / 0.92);
-  --menu-shadow: 0 18px 45px rgb(52 45 35 / 0.14);
-  --popover-shadow: 0 22px 55px rgb(52 45 35 / 0.18);
-  --node-handle-branch: #403943;
-  --node-handle-continue: #7d6b45;
-  --shadow-color-ambient: rgb(52 45 35 / 0.09);
+  --editor-details-bg: rgb(247 242 234 / 0.9);
+  --editor-code-bg: rgb(243 236 225 / 0.95);
+  --menu-shadow: 0 18px 45px rgb(60 45 30 / 0.15);
+  --popover-shadow: 0 22px 55px rgb(60 45 30 / 0.19);
+  /* 连线：主线（继续）橄榄金实线，分支深棕虚线 */
+  --node-handle-branch: #5a4d42;
+  --node-handle-continue: #8a7448;
+  --shadow-color-ambient: rgb(60 45 30 / 0.09);
+
+  /* 对话气泡 */
+  --chat-assistant-bg: #f4eee4;
+  --chat-assistant-border: #e2d7c7;
+  --chat-user-bg: #ece1cf;
+  --chat-user-border: #d6c6ae;
+  --chat-user-label: #6b5a44;
 }
 
 [data-theme="classic-purple"] {
@@ -319,6 +368,18 @@
   --theme-danger-500: #9a413d;
   --theme-danger-600: #833531;
   --theme-danger-700: #6d2f2c;
+
+  --theme-warning-50: #fffbeb;
+  --theme-warning-100: #fef3c7;
+  --theme-warning-200: #fde68a;
+  --theme-warning-300: #fcd34d;
+  --theme-warning-400: #fbbf24;
+  --theme-warning-500: #f59e0b;
+  --theme-warning-600: #d97706;
+  --theme-warning-700: #b45309;
+  --theme-warning-800: #92400e;
+  --theme-warning-900: #78350f;
+  --theme-warning-950: #451a03;
 
   --theme-neutral-50: #fbfafc;
   --theme-neutral-100: #f7f5fa;
@@ -619,16 +680,6 @@ textarea {
 
 [data-theme="warm-limestone"] .branchmind-workspace-surface {
   background: var(--app-background);
-}
-
-[data-theme="warm-limestone"] [class*="bg-[#fffdf8]"],
-[data-theme="warm-limestone"] [class*="bg-[#fffdf9]"] {
-  background-color: var(--theme-surface-elevated) !important;
-}
-
-[data-theme="warm-limestone"] [class*="text-[#fffdf8]"],
-[data-theme="warm-limestone"] [class*="text-[#fffdf9]"] {
-  color: var(--warm-limestone-white) !important;
 }
 
 [data-theme="warm-limestone"] .branchmind-projects-surface {
@@ -991,23 +1042,79 @@ textarea {
 
 [data-theme="warm-limestone"] .node-brief-card,
 [data-theme="warm-limestone"] .node-detail-panel-surface [data-role="assistant"] {
-  border-color: var(--theme-neutral-200);
-  background: color-mix(
-    in srgb,
-    var(--theme-surface-soft) 68%,
-    var(--theme-surface-elevated)
-  );
+  border-color: var(--chat-assistant-border);
+  background: var(--chat-assistant-bg);
   color: var(--theme-text-primary);
 }
 
 [data-theme="warm-limestone"] .node-detail-panel-surface [data-role="user"] {
-  border-color: var(--warm-limestone-fold-200);
-  background: color-mix(
-    in srgb,
-    var(--warm-limestone-fold-100) 72%,
-    var(--theme-surface-elevated)
-  );
+  border-color: var(--chat-user-border);
+  background: var(--chat-user-bg);
   color: var(--theme-text-primary);
+}
+
+[data-theme="warm-limestone"] .node-detail-panel-surface [data-role="user"] > p:first-child {
+  color: var(--chat-user-label);
+}
+
+/* 对话分组：上级节点继承来的消息和本节点消息之间加一条带文字的分隔线 */
+.conversation-group-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.25rem 0 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--theme-text-muted);
+}
+
+.conversation-group-label::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--theme-border-default);
+}
+
+.conversation-group-label:first-child {
+  margin-top: 0;
+}
+
+/* 继承来的消息：文字降一级、底色更浅，和本节点对话区分开 */
+[data-testid="conversation-message"][data-inherited="true"] > article {
+  color: var(--theme-text-secondary);
+}
+
+[data-theme="warm-limestone"] .node-detail-panel-surface [data-inherited="true"] > [data-role="assistant"] {
+  border-color: color-mix(in srgb, var(--chat-assistant-border) 70%, var(--theme-surface-elevated));
+  background: color-mix(in srgb, var(--chat-assistant-bg) 50%, var(--theme-surface-elevated));
+  color: var(--theme-text-secondary);
+}
+
+[data-theme="warm-limestone"] .node-detail-panel-surface [data-inherited="true"] > [data-role="user"] {
+  border-color: color-mix(in srgb, var(--chat-user-border) 70%, var(--theme-surface-elevated));
+  background: color-mix(in srgb, var(--chat-user-bg) 55%, var(--theme-surface-elevated));
+  color: var(--theme-text-secondary);
+}
+
+/* 节点类型标签前的色点：根节点=墨色，继续=主线色，分支=分支色 */
+.branch-node-kind-dot {
+  background: var(--theme-text-muted);
+}
+
+.branch-node-kind-label[data-kind="root"] .branch-node-kind-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--theme-brand-900);
+  width: 0.4375rem;
+  height: 0.4375rem;
+}
+
+.branch-node-kind-label[data-kind="continue"] .branch-node-kind-dot {
+  background: var(--node-handle-continue);
+}
+
+.branch-node-kind-label[data-kind="branch"] .branch-node-kind-dot {
+  background: var(--node-handle-branch);
 }
 
 [data-theme="warm-limestone"] .node-detail-composer-box {

@@ -14,21 +14,21 @@ const PAGE_SIZE = 50;
 const PASSWORD_MIN_LENGTH = 8;
 
 const cardClassName =
-  "rounded-lg border border-[#e4ddd4] bg-[#fffdf9] shadow-[0_14px_34px_rgba(35,31,26,0.06)]";
+  "rounded-lg border border-neutral-200 bg-surface-elevated shadow-[0_14px_34px_rgba(35,31,26,0.06)]";
 
 const fieldClassName =
-  "min-h-10 w-full rounded-lg border border-[#ded6cc] bg-[#fffdf9] px-3 py-2 text-sm font-semibold text-[#28242d] outline-none transition placeholder:text-[#aaa19a] focus:border-[#6f6256] focus:ring-2 focus:ring-[#e8dfd3] disabled:cursor-not-allowed disabled:border-[#e5dfd7] disabled:bg-[#f4f1eb] disabled:text-[#9a928a]";
+  "min-h-10 w-full rounded-lg border border-neutral-200 bg-surface-elevated px-3 py-2 text-sm font-semibold text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-neutral-600 focus:ring-2 focus:ring-neutral-200 disabled:cursor-not-allowed disabled:border-neutral-200 disabled:bg-surface-muted disabled:text-text-muted";
 
 const primaryButtonClassName =
-  "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#25222b] px-4 text-sm font-black text-white shadow-[0_12px_26px_rgba(37,34,43,0.2)] transition hover:-translate-y-0.5 hover:bg-[#17151b] disabled:cursor-not-allowed disabled:bg-[#d9d3ca] disabled:text-[#8a8178] disabled:shadow-none disabled:hover:translate-y-0";
+  "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-brand-900 px-4 text-sm font-black text-white shadow-[0_12px_26px_rgba(60,45,30,0.2)] transition hover:-translate-y-0.5 hover:bg-brand-800 disabled:cursor-not-allowed disabled:bg-neutral-300 disabled:text-text-muted disabled:shadow-none disabled:hover:translate-y-0";
 
 const secondaryButtonClassName =
-  "inline-flex min-h-9 items-center gap-2 rounded-lg border border-[#ddd5cb] bg-[#fffdf9] px-3 text-sm font-bold text-[#4f4650] shadow-[0_1px_2px_rgba(35,31,26,0.05)] transition hover:border-[#cfc5b8] hover:bg-white disabled:cursor-not-allowed disabled:text-[#a39a92] disabled:hover:border-[#ddd5cb] disabled:hover:bg-[#fffdf9]";
+  "inline-flex min-h-9 items-center gap-2 rounded-lg border border-border-default bg-surface-elevated px-3 text-sm font-bold text-text-secondary shadow-[0_1px_2px_rgba(35,31,26,0.05)] transition hover:border-border-default hover:bg-white disabled:cursor-not-allowed disabled:text-text-muted disabled:hover:border-border-default disabled:hover:bg-surface-elevated";
 
 const PLAN_BADGE_CLASSNAMES: Record<AdminUserDto["plan"], string> = {
-  free: "bg-[#ebe6dd] text-[#6f6670]",
-  pro: "bg-[#e8f0f2] text-[#3b7d8b]",
-  max: "bg-[#efe9f6] text-[#6e5a94]",
+  free: "bg-neutral-100 text-text-muted",
+  pro: "bg-success-50 text-success-600",
+  max: "bg-brand-50 text-brand-600",
 };
 
 async function readError(response: Response) {
@@ -145,14 +145,14 @@ export function AdminUsersClient() {
     <div className="space-y-5">
       <section className={`${cardClassName} flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between`}>
         <div>
-          <h2 className="text-base font-black text-[#25222b]">Users</h2>
-          <p className="mt-1 text-sm font-semibold text-[#7b717f]">
+          <h2 className="text-base font-black text-neutral-900">Users</h2>
+          <p className="mt-1 text-sm font-semibold text-text-muted">
             Accounts, plans, and AI usage across BranchMind.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-56 flex-1 sm:flex-none">
-            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#9a909f]" />
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
             <input
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
@@ -189,8 +189,8 @@ export function AdminUsersClient() {
         <div
           className={`rounded-lg border px-4 py-3 text-sm font-bold ${
             error
-              ? "border-[#f0cfcb] bg-[#fff0ef] text-[#8f3f3a]"
-              : "border-[#d6e4dc] bg-[#edf3ef] text-[#2f6651]"
+              ? "border-danger-200 bg-danger-50 text-danger-600"
+              : "border-success-200 bg-success-50 text-success-700"
           }`}
         >
           {error ?? message}
@@ -198,19 +198,19 @@ export function AdminUsersClient() {
       )}
 
       {truncated && !error && (
-        <div className="rounded-lg border border-[#f0d9ad] bg-[#fff8ea] px-4 py-3 text-sm font-bold text-[#8a6735]">
+        <div className="rounded-lg border border-warning-200 bg-warning-50 px-4 py-3 text-sm font-bold text-warning-600">
           Search only covers the first 1,000 accounts. Refine your search to narrow the results.
         </div>
       )}
 
       {loading ? (
         <div className={`${cardClassName} grid min-h-80 place-items-center`}>
-          <Loader2 size={24} className="animate-spin text-[#7b717f]" />
+          <Loader2 size={24} className="animate-spin text-text-muted" />
         </div>
       ) : users.length === 0 ? (
         <div className={`${cardClassName} p-8 text-center`}>
-          <p className="font-black text-[#25222b]">No users found.</p>
-          <p className="mt-1 text-sm font-semibold text-[#7b717f]">
+          <p className="font-black text-neutral-900">No users found.</p>
+          <p className="mt-1 text-sm font-semibold text-text-muted">
             {activeQuery ? "Try a different search." : "Once people sign up, they will show up here."}
           </p>
         </div>
@@ -219,7 +219,7 @@ export function AdminUsersClient() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[960px] text-sm">
               <thead>
-                <tr className="border-b border-[#e4ddd4] text-left text-xs uppercase tracking-[0.12em] text-[#8c828f]">
+                <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-[0.12em] text-text-muted">
                   <th className="px-4 py-3">Account</th>
                   <th className="px-4 py-3">Plan</th>
                   <th className="px-4 py-3">Subscription</th>
@@ -233,14 +233,14 @@ export function AdminUsersClient() {
               </thead>
               <tbody>
                 {users.map((user) => (
-                  <tr key={user.userId} className="border-b border-[#eee7df] last:border-0">
+                  <tr key={user.userId} className="border-b border-neutral-200 last:border-0">
                     <td className="px-4 py-3">
-                      <p className="font-bold text-[#25222b]">{userLabel(user)}</p>
+                      <p className="font-bold text-neutral-900">{userLabel(user)}</p>
                       {user.email && user.accountName && (
-                        <p className="mt-0.5 font-mono text-xs text-[#8c828f]">{user.email}</p>
+                        <p className="mt-0.5 font-mono text-xs text-text-muted">{user.email}</p>
                       )}
                       {user.displayName && (
-                        <p className="mt-0.5 text-xs font-semibold text-[#9a909f]">{user.displayName}</p>
+                        <p className="mt-0.5 text-xs font-semibold text-text-muted">{user.displayName}</p>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -248,14 +248,14 @@ export function AdminUsersClient() {
                         {user.plan}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-semibold text-[#5c5360]">
+                    <td className="px-4 py-3 font-semibold text-text-secondary">
                       {user.subscriptionStatus ?? "inactive"}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-[#5c5360]">{formatDate(user.createdAt)}</td>
-                    <td className="px-4 py-3 font-semibold text-[#5c5360]">{formatDate(user.lastSignInAt)}</td>
-                    <td className="px-4 py-3 text-right font-bold text-[#4f4650]">{user.aiMessagesToday}</td>
-                    <td className="px-4 py-3 text-right font-bold text-[#4f4650]">{user.aiMessages30d}</td>
-                    <td className="px-4 py-3 text-right font-bold text-[#4f4650]">{user.projectCount}</td>
+                    <td className="px-4 py-3 font-semibold text-text-secondary">{formatDate(user.createdAt)}</td>
+                    <td className="px-4 py-3 font-semibold text-text-secondary">{formatDate(user.lastSignInAt)}</td>
+                    <td className="px-4 py-3 text-right font-bold text-text-secondary">{user.aiMessagesToday}</td>
+                    <td className="px-4 py-3 text-right font-bold text-text-secondary">{user.aiMessages30d}</td>
+                    <td className="px-4 py-3 text-right font-bold text-text-secondary">{user.projectCount}</td>
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"
@@ -271,8 +271,8 @@ export function AdminUsersClient() {
               </tbody>
             </table>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e4ddd4] px-4 py-3">
-            <p className="text-xs font-bold text-[#8c828f]">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 px-4 py-3">
+            <p className="text-xs font-bold text-text-muted">
               {total} user{total === 1 ? "" : "s"} · Page {page} of {pageCount}
             </p>
             <div className="flex items-center gap-2">
@@ -298,11 +298,11 @@ export function AdminUsersClient() {
       )}
 
       {resetTarget && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-[#25222b]/40 px-4" role="dialog" aria-modal="true" aria-label="Reset password">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-brand-900/40 px-4" role="dialog" aria-modal="true" aria-label="Reset password">
           <div className={`${cardClassName} w-full max-w-md p-5`}>
-            <h3 className="text-lg font-black text-[#25222b]">Reset password</h3>
-            <p className="mt-1 text-sm font-semibold text-[#7b717f]">
-              Set a new password for <span className="font-black text-[#25222b]">{userLabel(resetTarget)}</span>. Minimum {PASSWORD_MIN_LENGTH} characters.
+            <h3 className="text-lg font-black text-neutral-900">Reset password</h3>
+            <p className="mt-1 text-sm font-semibold text-text-muted">
+              Set a new password for <span className="font-black text-neutral-900">{userLabel(resetTarget)}</span>. Minimum {PASSWORD_MIN_LENGTH} characters.
             </p>
             <input
               type="password"
@@ -314,7 +314,7 @@ export function AdminUsersClient() {
               className={`${fieldClassName} mt-4`}
             />
             {resetError && (
-              <p className="mt-2 rounded-lg border border-[#f0cfcb] bg-[#fff0ef] px-3 py-2 text-xs font-bold text-[#8f3f3a]">
+              <p className="mt-2 rounded-lg border border-danger-200 bg-danger-50 px-3 py-2 text-xs font-bold text-danger-600">
                 {resetError}
               </p>
             )}

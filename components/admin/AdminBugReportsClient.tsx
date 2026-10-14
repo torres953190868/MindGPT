@@ -12,16 +12,16 @@ const FILTERS: Array<BugReportStatus | "all"> = ["open", "triaged", "fixed", "cl
 const STATUSES: BugReportStatus[] = ["open", "triaged", "fixed", "closed"];
 
 const cardClassName =
-  "rounded-lg border border-[#e4ddd4] bg-[#fffdf9] shadow-[0_14px_34px_rgba(35,31,26,0.06)]";
+  "rounded-lg border border-neutral-200 bg-surface-elevated shadow-[0_14px_34px_rgba(35,31,26,0.06)]";
 
 const fieldClassName =
-  "min-h-10 w-full rounded-lg border border-[#ded6cc] bg-[#fffdf9] px-3 py-2 text-sm font-semibold text-[#28242d] outline-none transition placeholder:text-[#aaa19a] focus:border-[#6f6256] focus:ring-2 focus:ring-[#e8dfd3] disabled:cursor-not-allowed disabled:border-[#e5dfd7] disabled:bg-[#f4f1eb] disabled:text-[#9a928a]";
+  "min-h-10 w-full rounded-lg border border-neutral-200 bg-surface-elevated px-3 py-2 text-sm font-semibold text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-neutral-600 focus:ring-2 focus:ring-neutral-200 disabled:cursor-not-allowed disabled:border-neutral-200 disabled:bg-surface-muted disabled:text-text-muted";
 
 const primaryButtonClassName =
-  "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-[#25222b] px-4 text-sm font-black text-white shadow-[0_12px_26px_rgba(37,34,43,0.2)] transition hover:-translate-y-0.5 hover:bg-[#17151b] disabled:cursor-not-allowed disabled:bg-[#d9d3ca] disabled:text-[#8a8178] disabled:shadow-none disabled:hover:translate-y-0";
+  "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-brand-900 px-4 text-sm font-black text-white shadow-[0_12px_26px_rgba(60,45,30,0.2)] transition hover:-translate-y-0.5 hover:bg-brand-800 disabled:cursor-not-allowed disabled:bg-neutral-300 disabled:text-text-muted disabled:shadow-none disabled:hover:translate-y-0";
 
 const secondaryButtonClassName =
-  "inline-flex min-h-9 items-center gap-2 rounded-lg border border-[#ddd5cb] bg-[#fffdf9] px-3 text-sm font-bold text-[#4f4650] shadow-[0_1px_2px_rgba(35,31,26,0.05)] transition hover:border-[#cfc5b8] hover:bg-white";
+  "inline-flex min-h-9 items-center gap-2 rounded-lg border border-border-default bg-surface-elevated px-3 text-sm font-bold text-text-secondary shadow-[0_1px_2px_rgba(35,31,26,0.05)] transition hover:border-border-default hover:bg-white";
 
 async function readError(response: Response) {
   const data = await response.json().catch(() => null);
@@ -107,8 +107,8 @@ export function AdminBugReportsClient() {
     <div className="space-y-5">
       <section className={`${cardClassName} flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between`}>
         <div>
-          <h2 className="text-base font-black text-[#25222b]">Bug reports</h2>
-          <p className="mt-1 text-sm font-semibold text-[#7b717f]">Reports submitted from the user menu.</p>
+          <h2 className="text-base font-black text-neutral-900">Bug reports</h2>
+          <p className="mt-1 text-sm font-semibold text-text-muted">Reports submitted from the user menu.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {FILTERS.map((item) => (
@@ -118,8 +118,8 @@ export function AdminBugReportsClient() {
               onClick={() => setFilter(item)}
               className={`min-h-9 rounded-lg px-3 text-sm font-black capitalize transition ${
                 filter === item
-                  ? "bg-[#25222b] text-white shadow-[0_10px_24px_rgba(37,34,43,0.18)]"
-                  : "border border-[#ddd5cb] bg-[#fffdf9] text-[#5d5363] hover:border-[#cfc5b8] hover:bg-white"
+                  ? "bg-brand-900 text-white shadow-[0_10px_24px_rgba(60,45,30,0.18)]"
+                  : "border border-border-default bg-surface-elevated text-text-secondary hover:border-border-default hover:bg-white"
               }`}
             >
               {item}
@@ -140,8 +140,8 @@ export function AdminBugReportsClient() {
         <div
           className={`rounded-lg border px-4 py-3 text-sm font-bold ${
             error
-              ? "border-[#f0cfcb] bg-[#fff0ef] text-[#8f3f3a]"
-              : "border-[#d6e4dc] bg-[#edf3ef] text-[#2f6651]"
+              ? "border-danger-200 bg-danger-50 text-danger-600"
+              : "border-success-200 bg-success-50 text-success-700"
           }`}
         >
           {error ?? message}
@@ -150,12 +150,12 @@ export function AdminBugReportsClient() {
 
       {loading ? (
         <div className={`${cardClassName} grid min-h-80 place-items-center`}>
-          <Loader2 size={24} className="animate-spin text-[#7b717f]" />
+          <Loader2 size={24} className="animate-spin text-text-muted" />
         </div>
       ) : reports.length === 0 ? (
         <div className={`${cardClassName} p-8 text-center`}>
-          <p className="font-black text-[#25222b]">No reports in this queue.</p>
-          <p className="mt-1 text-sm font-semibold text-[#7b717f]">That is the kind of quiet we like.</p>
+          <p className="font-black text-neutral-900">No reports in this queue.</p>
+          <p className="mt-1 text-sm font-semibold text-text-muted">That is the kind of quiet we like.</p>
         </div>
       ) : (
         <div className="grid gap-4">
@@ -170,13 +170,13 @@ export function AdminBugReportsClient() {
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-[#eaf4ef] px-2.5 py-1 text-xs font-black uppercase text-[#2f6651]">
+                      <span className="rounded-full bg-success-50 px-2.5 py-1 text-xs font-black uppercase text-success-700">
                         {report.status}
                       </span>
-                      <span className="font-mono text-xs text-[#8c828f]">{new Date(report.createdAt).toLocaleString()}</span>
+                      <span className="font-mono text-xs text-text-muted">{new Date(report.createdAt).toLocaleString()}</span>
                     </div>
-                    <h3 className="mt-3 text-lg font-black text-[#25222b]">{report.title}</h3>
-                    <p className="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-[#5c5360]">{report.description}</p>
+                    <h3 className="mt-3 text-lg font-black text-neutral-900">{report.title}</h3>
+                    <p className="mt-2 whitespace-pre-wrap text-sm font-semibold leading-6 text-text-secondary">{report.description}</p>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2">
                     {report.currentUrl && (
@@ -194,16 +194,16 @@ export function AdminBugReportsClient() {
                   </div>
                 </div>
 
-                <dl className="mt-4 grid gap-3 border-t border-[#e4ddd4] pt-4 text-sm md:grid-cols-2">
+                <dl className="mt-4 grid gap-3 border-t border-neutral-200 pt-4 text-sm md:grid-cols-2">
                   <div>
-                    <dt className="text-xs font-black uppercase tracking-[0.12em] text-[#8c828f]">Reporter</dt>
-                    <dd className="mt-1 font-semibold text-[#5c5360]">
+                    <dt className="text-xs font-black uppercase tracking-[0.12em] text-text-muted">Reporter</dt>
+                    <dd className="mt-1 font-semibold text-text-secondary">
                       {report.reporterEmail ?? report.contactEmail ?? "Anonymous"}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-black uppercase tracking-[0.12em] text-[#8c828f]">User agent</dt>
-                    <dd className="mt-1 truncate font-mono text-xs text-[#716675]">{report.userAgent ?? "unknown"}</dd>
+                    <dt className="text-xs font-black uppercase tracking-[0.12em] text-text-muted">User agent</dt>
+                    <dd className="mt-1 truncate font-mono text-xs text-text-muted">{report.userAgent ?? "unknown"}</dd>
                   </div>
                 </dl>
 

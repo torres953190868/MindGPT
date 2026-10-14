@@ -84,20 +84,20 @@ export default function TermsPage() {
         <section
           aria-labelledby="terms-title"
           data-testid="terms-content"
-          className="rounded-lg border border-white/80 bg-white/78 p-4 shadow-lg shadow-[#e8dcef]/30 sm:p-6 md:p-8"
+          className="rounded-lg border border-white/80 bg-white/78 p-4 shadow-lg shadow-neutral-300/30 sm:p-6 md:p-8"
         >
           <div className="mb-6 flex items-start gap-3 sm:mb-8 sm:gap-4">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[#f7d8e5] text-[#7c4e70] shadow-sm sm:h-12 sm:w-12">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-100 text-brand-700 shadow-sm sm:h-12 sm:w-12">
               <FileCheck size={23} />
             </div>
             <div className="space-y-2 sm:space-y-3">
-              <p className="text-sm font-extrabold uppercase tracking-[0.08em] text-[#6a5d74]">
+              <p className="text-sm font-extrabold uppercase tracking-[0.08em] text-text-secondary">
                 Beta terms
               </p>
-              <h1 id="terms-title" className="text-3xl font-black text-[#312737] sm:text-4xl">
+              <h1 id="terms-title" className="text-3xl font-black text-neutral-900 sm:text-4xl">
                 Terms of Use
               </h1>
-              <p className="text-sm font-bold text-[#7c7184]">Last updated: July 17, 2026</p>
+              <p className="text-sm font-bold text-text-muted">Last updated: July 17, 2026</p>
             </div>
           </div>
 
@@ -109,11 +109,11 @@ export default function TermsPage() {
                 <section key={section.title} aria-labelledby={sectionId}>
                   <h2
                     id={sectionId}
-                    className="text-xl font-extrabold text-[#382f41]"
+                    className="text-xl font-extrabold text-neutral-900"
                   >
                     {section.title}
                   </h2>
-                  <div className="mt-3 space-y-3 text-base leading-8 text-[#695d72]">
+                  <div className="mt-3 space-y-3 text-base leading-8 text-text-secondary">
                     {section.body.map((paragraph) => (
                       <p key={paragraph}>{paragraph}</p>
                     ))}

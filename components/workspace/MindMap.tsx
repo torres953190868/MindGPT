@@ -306,6 +306,7 @@ export function MindMap({
           const child = project.nodes[childId];
           const isBranchChild = child?.branchType === "branch";
           const isEntering = enteringNodeIds.has(childId);
+          const isHighlighted = selectedNodeId === node.id || selectedNodeId === childId;
           return {
             id: `${node.id}-${childId}`,
             type: "branchEdge",
@@ -313,14 +314,16 @@ export function MindMap({
             target: childId,
             sourceHandle: isBranchChild ? "branch-source" : "continue-source",
             targetHandle: isBranchChild ? "branch-target" : "continue-target",
-            animated: selectedNodeId === node.id || selectedNodeId === childId,
+            animated: isHighlighted,
             data: { isEntering },
             style: {
               stroke: isBranchChild
                 ? "var(--node-handle-branch)"
                 : "var(--node-handle-continue)",
-              strokeWidth: 2,
-              strokeDasharray: isEntering ? 1 : "6 5",
+              // 主线（继续）用实线，分支用虚线，不只靠颜色区分。
+              // 主线选中时没有流动虚线，改为加粗一点作为提示。
+              strokeWidth: isHighlighted && !isBranchChild ? 2.5 : 2,
+              strokeDasharray: isEntering ? 1 : isBranchChild ? "6 5" : "none",
               ...(isEntering ? { strokeDashoffset: 1 } : {}),
             },
           };

@@ -288,7 +288,11 @@ export function BranchNodeCard({ data }: NodeProps) {
           >
             <span className="flex items-start justify-between gap-3">
               <span>
-                <span className="block text-xs font-black uppercase tracking-[0.16em] text-neutral-500">
+                <span
+                  className="branch-node-kind-label flex items-center gap-1.5 text-xs font-black uppercase tracking-[0.16em] text-neutral-500"
+                  data-kind={mindNode.branchType}
+                >
+                  <span aria-hidden="true" className="branch-node-kind-dot h-1.5 w-1.5 shrink-0 rounded-full" />
                   {mindNode.branchType === "root"
                     ? copy.workspace.root
                     : mindNode.branchType === "branch"

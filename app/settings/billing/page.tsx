@@ -13,7 +13,7 @@ const PLANS = [
     price: "$0",
     period: "",
     icon: Zap,
-    iconColor: "bg-[#fff4d6] text-[#8a6a20] ring-1 ring-[#ead8a7]",
+    iconColor: "bg-warning-50 text-warning-600 ring-1 ring-warning-200",
     ctaDisabled: true,
   },
   {
@@ -22,7 +22,7 @@ const PLANS = [
     price: "$9",
     period: "/month",
     icon: Crown,
-    iconColor: "bg-[#ebe4f8] text-[#5a3d88] ring-1 ring-[#d8caef]",
+    iconColor: "bg-brand-50 text-brand-600 ring-1 ring-brand-200",
     ctaDisabled: false,
     popular: true,
   },
@@ -32,7 +32,7 @@ const PLANS = [
     price: "$29",
     period: "/month",
     icon: Crown,
-    iconColor: "bg-[#deebe4] text-[#315d4f] ring-1 ring-[#c8ded4]",
+    iconColor: "bg-success-100 text-success-700 ring-1 ring-success-200",
     ctaDisabled: true,
   },
 ];
@@ -75,7 +75,7 @@ export default function BillingSettingsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 size={24} className="animate-spin text-[#766d78]" />
+        <Loader2 size={24} className="animate-spin text-text-muted" />
       </div>
     );
   }
@@ -121,30 +121,30 @@ export default function BillingSettingsPage() {
   const isActiveSubscription = account?.subscriptionStatus === "active";
 
   return (
-    <div className="space-y-5 text-[#29252f]">
-      <div className="overflow-hidden rounded-lg border border-[#ddd4c7] bg-[#fffdf8] shadow-[0_18px_42px_rgba(52,45,35,0.055)]">
+    <div className="space-y-5 text-neutral-900">
+      <div className="overflow-hidden rounded-lg border border-border-default bg-surface-elevated shadow-[0_18px_42px_rgba(52,45,35,0.055)]">
         <div className="flex flex-col gap-5 p-5 md:p-6 lg:flex-row lg:items-stretch lg:justify-between">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${currentPlanMeta.iconColor}`}>
                 <CurrentPlanIcon size={18} />
               </span>
-              <span className="text-xs font-black uppercase tracking-[0.14em] text-[#766d78]">
+              <span className="text-xs font-black uppercase tracking-[0.14em] text-text-muted">
                 {copy.billing.currentPlan}
               </span>
               <span
                 className={`rounded-full px-2.5 py-1 text-xs font-extrabold ${
-                  isActiveSubscription ? "bg-[#deebe4] text-[#315d4f]" : "bg-[#f4efe7] text-[#5e5661]"
+                  isActiveSubscription ? "bg-success-100 text-success-700" : "bg-surface-muted text-text-secondary"
                 }`}
               >
                 {isActiveSubscription ? copy.billing.activeSubscription : copy.billing.noBillingRequired}
               </span>
             </div>
 
-            <h2 className="mt-4 text-2xl font-black capitalize tracking-normal text-[#29252f]">
+            <h2 className="mt-4 text-2xl font-black capitalize tracking-normal text-neutral-900">
               {copy.billing.currentPlanTitle(currentPlanMeta.name)}
             </h2>
-            <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-[#766d78]">
+            <p className="mt-1 max-w-2xl text-sm font-semibold leading-6 text-text-muted">
               {isFreePlan
                 ? copy.billing.freePlanBody
                 : copy.billing.upgradedBody}
@@ -153,39 +153,39 @@ export default function BillingSettingsPage() {
             {isFreePlan && (
               <div className="mt-4 grid gap-2 sm:grid-cols-3">
                 {freeLimits.map((limit) => (
-                  <div key={limit.label} className="rounded-lg border border-[#ddd4c7] bg-[#f6f1e9] px-3 py-2.5">
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-[#766d78]">{limit.label}</p>
-                    <p className="mt-0.5 text-sm font-black text-[#29252f]">{limit.value}</p>
+                  <div key={limit.label} className="rounded-lg border border-border-default bg-surface-muted px-3 py-2.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-text-muted">{limit.label}</p>
+                    <p className="mt-0.5 text-sm font-black text-neutral-900">{limit.value}</p>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          <div className="rounded-lg border border-[#ddd4c7] bg-[#f6f1e9] p-4 lg:w-72">
-            <div className="flex items-center gap-2 text-sm font-black text-[#29252f]">
-              <ShieldCheck size={17} className="text-[#315d4f]" />
+          <div className="rounded-lg border border-border-default bg-surface-muted p-4 lg:w-72">
+            <div className="flex items-center gap-2 text-sm font-black text-neutral-900">
+              <ShieldCheck size={17} className="text-success-700" />
               {copy.billing.upgradePath}
             </div>
-            <p className="mt-2 text-sm font-semibold leading-6 text-[#766d78]">
+            <p className="mt-2 text-sm font-semibold leading-6 text-text-muted">
               {copy.billing.proBody}
             </p>
             <button
               type="button"
               onClick={() => handleUpgrade("pro")}
               disabled={!isFreePlan}
-              className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#28242d] px-4 text-sm font-black text-[#fffdf8] shadow-[0_12px_24px_rgba(40,36,45,0.18)] transition hover:-translate-y-0.5 hover:bg-[#1e1a24] disabled:cursor-default disabled:bg-[#d8d0c5] disabled:text-[#8a8178] disabled:shadow-none disabled:hover:translate-y-0"
+              className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-brand-900 px-4 text-sm font-black text-white shadow-[0_12px_24px_rgba(60,45,30,0.18)] transition hover:-translate-y-0.5 hover:bg-brand-800 disabled:cursor-default disabled:bg-neutral-300 disabled:text-text-muted disabled:shadow-none disabled:hover:translate-y-0"
             >
               {isFreePlan ? copy.billing.upgradeToPro : copy.billing.planActive}
               {isFreePlan && <ArrowRight size={16} />}
             </button>
-            <p className="mt-2 text-xs font-semibold text-[#8d838d]">{copy.billing.checkoutComing}</p>
+            <p className="mt-2 text-xs font-semibold text-text-muted">{copy.billing.checkoutComing}</p>
           </div>
         </div>
       </div>
 
       {upgradeMessage && (
-        <div className="rounded-lg border border-[#e7c777] bg-[#fff4d6] px-4 py-3 text-sm font-bold text-[#8a6a20] shadow-sm">
+        <div className="rounded-lg border border-warning-200 bg-warning-50 px-4 py-3 text-sm font-bold text-warning-600 shadow-sm">
           {upgradeMessage}
         </div>
       )}
@@ -199,12 +199,12 @@ export default function BillingSettingsPage() {
               key={plan.key}
               className={`relative flex min-h-[350px] flex-col rounded-lg border p-5 transition ${
                 plan.popular
-                  ? "border-[#28242d] bg-[#fffdf8] shadow-[0_20px_46px_rgba(40,36,45,0.12)] ring-1 ring-[#28242d]/10 md:-translate-y-1"
-                  : "border-[#ddd4c7] bg-[#fffdf8] shadow-[0_14px_34px_rgba(52,45,35,0.045)]"
+                  ? "border-neutral-900 bg-surface-elevated shadow-[0_20px_46px_rgba(60,45,30,0.12)] ring-1 ring-neutral-900/10 md:-translate-y-1"
+                  : "border-border-default bg-surface-elevated shadow-[0_14px_34px_rgba(52,45,35,0.045)]"
               }`}
             >
               {plan.popular && (
-                <span className="absolute -top-3 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-[#28242d] px-3 py-1 text-[10px] font-black uppercase tracking-wider text-[#fffdf8] shadow-lg shadow-[#28242d]/15">
+                <span className="absolute -top-3 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-brand-900 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white shadow-lg shadow-neutral-900/15">
                   <Sparkles size={11} />
                   {copy.billing.recommended}
                 </span>
@@ -215,26 +215,26 @@ export default function BillingSettingsPage() {
                     <Icon size={18} />
                   </span>
                   <div>
-                    <p className="text-[11px] font-black uppercase tracking-[0.14em] text-[#766d78]">
+                    <p className="text-[11px] font-black uppercase tracking-[0.14em] text-text-muted">
                       {plan.eyebrow}
                     </p>
-                    <h3 className="mt-0.5 text-base font-black text-[#29252f]">{plan.name}</h3>
+                    <h3 className="mt-0.5 text-base font-black text-neutral-900">{plan.name}</h3>
                   </div>
                 </div>
                 {isCurrent && (
-                  <span className="rounded-full bg-[#deebe4] px-2.5 py-1 text-[11px] font-extrabold text-[#315d4f]">
+                  <span className="rounded-full bg-success-100 px-2.5 py-1 text-[11px] font-extrabold text-success-700">
                     {copy.billing.current}
                   </span>
                 )}
               </div>
 
-              <p className="mt-4 min-h-10 text-sm font-semibold leading-5 text-[#766d78]">{plan.description}</p>
+              <p className="mt-4 min-h-10 text-sm font-semibold leading-5 text-text-muted">{plan.description}</p>
 
               <div className="mt-5">
-                <span className={`${plan.popular ? "text-4xl" : "text-3xl"} font-black text-[#29252f]`}>
+                <span className={`${plan.popular ? "text-4xl" : "text-3xl"} font-black text-neutral-900`}>
                   {plan.price}
                 </span>
-                <span className="text-sm font-bold text-[#8d838d]">{plan.period}</span>
+                <span className="text-sm font-bold text-text-muted">{plan.period}</span>
               </div>
 
               <ul className="mt-5 space-y-3">
@@ -243,11 +243,11 @@ export default function BillingSettingsPage() {
                     key={feature.label}
                     className={`flex items-start gap-2 text-sm ${
                       "highlight" in feature && feature.highlight
-                        ? "font-black text-[#29252f]"
-                        : "font-semibold text-[#5e5661]"
+                        ? "font-black text-neutral-900"
+                        : "font-semibold text-text-secondary"
                     }`}
                   >
-                    <Check size={15} className="mt-0.5 shrink-0 text-[#315d4f]" />
+                    <Check size={15} className="mt-0.5 shrink-0 text-success-700" />
                     {feature.label}
                   </li>
                 ))}
@@ -260,10 +260,10 @@ export default function BillingSettingsPage() {
                   disabled={plan.ctaDisabled || isCurrent}
                   className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-black transition ${
                     isCurrent
-                      ? "cursor-default bg-[#f4efe7] text-[#8d838d]"
+                      ? "cursor-default bg-surface-muted text-text-muted"
                       : plan.popular && !plan.ctaDisabled
-                        ? "bg-[#28242d] text-[#fffdf8] shadow-[0_12px_24px_rgba(40,36,45,0.18)] hover:-translate-y-0.5 hover:bg-[#1e1a24]"
-                        : "border border-[#d9d0c2] bg-[#fffdf8] text-[#5e5661] hover:border-[#c7bcad] hover:bg-[#fffaf3]"
+                        ? "bg-brand-900 text-white shadow-[0_12px_24px_rgba(60,45,30,0.18)] hover:-translate-y-0.5 hover:bg-brand-800"
+                        : "border border-border-default bg-surface-elevated text-text-secondary hover:border-border-default hover:bg-surface-elevated"
                   } disabled:opacity-75`}
                 >
                   {isCurrent ? copy.billing.currentPlanCta : plan.cta}
@@ -275,11 +275,11 @@ export default function BillingSettingsPage() {
         })}
       </div>
 
-      <div className="rounded-lg border border-[#ddd4c7] bg-[#fffdf8] p-5 shadow-[0_18px_42px_rgba(52,45,35,0.055)]">
-        <h2 className="text-base font-black text-[#29252f]">{copy.billing.invoices}</h2>
-        <p className="mt-0.5 text-sm font-semibold text-[#766d78]">{copy.billing.invoicesDescription}</p>
-        <div className="mt-4 rounded-lg border border-dashed border-[#d9d0c2] bg-[#f6f1e9] py-8 text-center">
-          <p className="text-sm font-bold text-[#8d838d]">{copy.billing.noInvoices}</p>
+      <div className="rounded-lg border border-border-default bg-surface-elevated p-5 shadow-[0_18px_42px_rgba(52,45,35,0.055)]">
+        <h2 className="text-base font-black text-neutral-900">{copy.billing.invoices}</h2>
+        <p className="mt-0.5 text-sm font-semibold text-text-muted">{copy.billing.invoicesDescription}</p>
+        <div className="mt-4 rounded-lg border border-dashed border-border-default bg-surface-muted py-8 text-center">
+          <p className="text-sm font-bold text-text-muted">{copy.billing.noInvoices}</p>
         </div>
       </div>
     </div>

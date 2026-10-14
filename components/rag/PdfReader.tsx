@@ -1478,7 +1478,7 @@ export function PdfReader() {
       ref={readerGridRef}
       data-testid="pdf-reader"
       style={pdfReaderGridStyle}
-      className="grid min-h-0 w-full min-w-0 overflow-visible rounded-xl border border-neutral-200 bg-white shadow-xl shadow-[rgba(44,35,62,0.08)] lg:h-[calc(100svh-92px)] lg:min-h-[calc(100svh-92px)] lg:grid-cols-[var(--pdf-reader-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:overflow-hidden"
+      className="grid min-h-0 w-full min-w-0 overflow-visible rounded-xl border border-neutral-200 bg-white shadow-xl shadow-[rgba(60,45,30,0.08)] lg:h-[calc(100svh-92px)] lg:min-h-[calc(100svh-92px)] lg:grid-cols-[var(--pdf-reader-grid-columns)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:overflow-hidden"
     >
       <aside
         data-testid="pdf-documents-sidebar"
@@ -1852,7 +1852,7 @@ export function PdfReader() {
               <canvas
                 ref={canvasRef}
                 data-testid="pdf-page-canvas"
-                className={`rounded-sm bg-white shadow-lg shadow-[rgba(44,35,62,0.1)] ${
+                className={`rounded-sm bg-white shadow-lg shadow-[rgba(60,45,30,0.1)] ${
                   pdfLoading || pdfError ? "invisible" : "visible"
                 }`}
               />

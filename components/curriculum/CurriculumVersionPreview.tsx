@@ -319,12 +319,12 @@ export function CurriculumVersionPreview({ curriculumId }: { curriculumId: strin
             </div>
           </div>
 
-          <div data-testid="curriculum-version-conflicts" className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-            <h3 className="text-xs font-black text-amber-900">{copySection.conflicts}</h3>
+          <div data-testid="curriculum-version-conflicts" className="rounded-lg border border-warning-200 bg-warning-50 p-3">
+            <h3 className="text-xs font-black text-warning-900">{copySection.conflicts}</h3>
             {content.version.conflicts.length > 0 ? (
               <div className="mt-2 space-y-2">
                 {content.version.conflicts.map((conflict, index) => (
-                  <div key={`${conflict.topic}-${index}`} className="rounded-md bg-white/70 p-2 text-xs text-amber-950">
+                  <div key={`${conflict.topic}-${index}`} className="rounded-md bg-white/70 p-2 text-xs text-warning-950">
                     <p className="font-bold">{conflict.topic}</p>
                     <p className="mt-1">{conflict.summary}</p>
                     <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1">
@@ -335,14 +335,14 @@ export function CurriculumVersionPreview({ curriculumId }: { curriculumId: strin
                   </div>
                 ))}
               </div>
-            ) : <p className="mt-1 text-xs text-amber-900">{copySection.noItems}</p>}
+            ) : <p className="mt-1 text-xs text-warning-900">{copySection.noItems}</p>}
           </div>
 
           {getWarnings(content).length > 0 && (
-            <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-              <h3 className="text-xs font-black text-amber-900">{copySection.warnings}</h3>
+            <div className="space-y-2 rounded-lg border border-warning-200 bg-warning-50 p-3">
+              <h3 className="text-xs font-black text-warning-900">{copySection.warnings}</h3>
               {getWarnings(content).map((warning, index) => (
-                <p key={`${warning.code ?? "warning"}-${index}`} className="text-xs text-amber-900">
+                <p key={`${warning.code ?? "warning"}-${index}`} className="text-xs text-warning-900">
                   <strong>{warning.severity === "blocking" ? copySection.blocking : copySection.advisory}:</strong> {warning.message}
                 </p>
               ))}
@@ -429,7 +429,7 @@ export function CurriculumVersionPreview({ curriculumId }: { curriculumId: strin
                   </div>
                   <button type="button" aria-label={copy.common.close} onClick={() => setIsPublishDialogOpen(false)} disabled={busy === "publish"} className="grid h-8 w-8 place-items-center rounded-full text-neutral-500 hover:bg-neutral-100 disabled:opacity-50"><X size={16} /></button>
                 </div>
-                <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">{copySection.publishDialogBlockingWarnings(getBlockingWarningCount(content))}</p>
+                <p className="mt-4 rounded-lg border border-warning-200 bg-warning-50 px-3 py-2 text-xs font-bold text-warning-900">{copySection.publishDialogBlockingWarnings(getBlockingWarningCount(content))}</p>
                 <p className="mt-3 text-sm leading-6 text-neutral-700">{copySection.publishDialogImmutable}</p>
                 <div className="mt-5 flex justify-end gap-2">
                   <button type="button" onClick={() => setIsPublishDialogOpen(false)} disabled={busy === "publish"} className="h-9 rounded-lg border border-neutral-200 px-3 text-xs font-bold text-neutral-700 disabled:opacity-50">{copySection.publishDialogCancel}</button>
