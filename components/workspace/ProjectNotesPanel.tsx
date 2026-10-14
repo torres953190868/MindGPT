@@ -10,7 +10,11 @@ import {
 } from "lucide-react";
 import { useLanguage } from "@/components/language/LanguageProvider";
 import { exportProjectNotesPdf } from "@/lib/client/project-notes-pdf";
-import { PROJECT_NOTES_MAX_LENGTH } from "@/lib/project-notes";
+import {
+  formatLatestReplyNoteSection,
+  getNodeTitlePath,
+  PROJECT_NOTES_MAX_LENGTH,
+} from "@/lib/project-notes";
 import type { MindNode } from "@/lib/types";
 import { ProjectNotesEditor, type ProjectNotesEditorHandle } from "./ProjectNotesEditor";
 
@@ -18,6 +22,7 @@ type ProjectNotesPanelProps = {
   projectId: string;
   projectTitle: string;
   projectNotes: string;
+  projectNodes: Record<string, MindNode>;
   node: MindNode | null;
   isCreating: boolean;
   onUpdateProjectNotes: (projectId: string, notes: string) => Promise<boolean>;
@@ -44,10 +49,6 @@ function getLatestAssistantContent(node: MindNode | null) {
   return "";
 }
 
-function formatLatestReplyNote(node: MindNode, content: string, untitledLabel: string) {
-  return `## ${node.title.trim() || untitledLabel}\n\n${content.trim()}`;
-}
-
 function getNotesStatusLabel(
   status: NotesSaveStatus,
   labels: {
@@ -69,13 +70,14 @@ export function ProjectNotesPanel({
   projectId,
   projectTitle,
   projectNotes,
+  projectNodes,
   node,
   isCreating,
   onUpdateProjectNotes,
   onClose,
   backAction,
 }: ProjectNotesPanelProps) {
-  const { copy } = useLanguage();
+  const { copy, language } = useLanguage();
   const panelId = useId();
   const titleId = `${panelId}-title`;
   const notesErrorId = `${panelId}-notes-error`;
@@ -182,7 +184,14 @@ export function ProjectNotesPanel({
   function handleAppendLatestAiReply() {
     if (!node || !canAppendLatestAiReply) return;
 
-    const section = formatLatestReplyNote(node, latestAssistantContent, copy.workspace.untitledNode);
+    const untitledLabel = copy.workspace.untitledNode;
+    const pathTitles = getNodeTitlePath(projectNodes, node.id, untitledLabel);
+    const dateLabel = new Date().toLocaleDateString(language === "zh" ? "zh-CN" : "en-US");
+    const section = formatLatestReplyNoteSection({
+      content: latestAssistantContent,
+      sourceLabel: copy.workspace.notesReplySource(pathTitles.join(" → "), dateLabel),
+      title: node.title.trim() || untitledLabel,
+    });
     const nextNotes = notesDraft.trim()
       ? `${notesDraft.trimEnd()}\n\n${section}`
       : section;

@@ -688,6 +688,34 @@ export function WorkspaceCanvasShell({
     restoreAutoCollapsedSidebarForNotes();
   }, [restoreAutoCollapsedSidebarForNotes, usesMobileDrawers]);
 
+  const handleOpenProjectNotesPanel = useCallback(() => {
+    if (!hasProjectNotes) return;
+
+    if (isMobileWorkspaceViewport()) {
+      setIsProjectNotesPanelOpen(false);
+      restoreAutoCollapsedSidebarForNotes();
+      if (usesMobileDrawers) {
+        setMobileDrawerView("notes");
+        return;
+      }
+      setMobileWorkspaceView("notes");
+      return;
+    }
+
+    if (isNodeDetailPanelCollapsed) {
+      handleExpandNodeDetailPanel();
+    }
+    autoCollapseSidebarForNotesIfNeeded();
+    setIsProjectNotesPanelOpen(true);
+  }, [
+    autoCollapseSidebarForNotesIfNeeded,
+    handleExpandNodeDetailPanel,
+    hasProjectNotes,
+    isNodeDetailPanelCollapsed,
+    restoreAutoCollapsedSidebarForNotes,
+    usesMobileDrawers,
+  ]);
+
   const handleReturnToChatFromProjectNotes = useCallback(() => {
     setIsProjectNotesPanelOpen(false);
     if (usesMobileDrawers) {
@@ -1093,6 +1121,7 @@ export function WorkspaceCanvasShell({
               selectedNodeId={selectedNodeId}
               onSelectNode={handleSelectNodeFromOutline}
               onCollapse={handleCloseWorkspaceSidebar}
+              onOpenNotes={hasProjectNotes ? handleOpenProjectNotesPanel : undefined}
             />
           </div>
         )}
@@ -1231,6 +1260,7 @@ export function WorkspaceCanvasShell({
               projectId={project.id}
               projectTitle={project.title}
               projectNotes={projectNotesConfig.projectNotes}
+              projectNodes={project.nodes}
               node={selectedNode}
               isCreating={isSelectedNodeCreating}
               onUpdateProjectNotes={projectNotesConfig.onUpdateProjectNotes}

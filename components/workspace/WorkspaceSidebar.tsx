@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Folder,
   GitBranch,
+  NotebookPen,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
@@ -18,6 +19,7 @@ import {
   useHighlightedAction,
 } from "@/components/ui/highlighted-action";
 import { useLanguage } from "@/components/language/LanguageProvider";
+import { getNotesSearchSnippet } from "@/lib/project-notes";
 import type { MindNode, Project } from "@/lib/types";
 
 type WorkspaceSidebarProps = {
@@ -26,6 +28,7 @@ type WorkspaceSidebarProps = {
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
   onCollapse: () => void;
+  onOpenNotes?: () => void;
 };
 
 type OutlineRow = {
@@ -131,6 +134,7 @@ export function WorkspaceSidebar({
   selectedNodeId,
   onSelectNode,
   onCollapse,
+  onOpenNotes,
 }: WorkspaceSidebarProps) {
   const { copy } = useLanguage();
   const [query, setQuery] = useState("");
@@ -151,7 +155,11 @@ export function WorkspaceSidebar({
     () => getVisibleOutlineRows(project, effectiveExpandedNodeIds, normalized),
     [effectiveExpandedNodeIds, normalized, project],
   );
-  const hasMatches = outlineRows.length > 0;
+  const notesSearchSnippet = useMemo(
+    () => (onOpenNotes ? getNotesSearchSnippet(project.notes, normalized) : null),
+    [normalized, onOpenNotes, project.notes],
+  );
+  const hasMatches = outlineRows.length > 0 || notesSearchSnippet !== null;
   const isOutlineNavHighlighted = navHighlight.isHighlighted("outline");
   const isProjectsNavHighlighted = navHighlight.isHighlighted("projects");
 
@@ -239,6 +247,19 @@ export function WorkspaceSidebar({
         </span>
       </div>
 
+      {onOpenNotes && (
+        <button
+          type="button"
+          onClick={onOpenNotes}
+          aria-label={copy.workspace.openProjectNotes}
+          data-testid="project-notes-open-button-sidebar"
+          className="workspace-sidebar-nav-link inline-flex h-11 w-full items-center gap-2 rounded-xl bg-neutral-100 px-3.5 text-sm font-black text-neutral-700 transition hover:bg-neutral-200 focus:outline-none focus:ring-2 focus:ring-brand-200"
+        >
+          <NotebookPen size={16} />
+          {copy.common.notes}
+        </button>
+      )}
+
       <nav
         aria-label={copy.workspace.views}
         onMouseLeave={navHighlight.clearHighlightedAction}
@@ -282,23 +303,49 @@ export function WorkspaceSidebar({
             <p className="mt-2 text-sm font-bold text-neutral-600">{copy.workspace.noMatchingNodes}</p>
           </div>
         ) : (
-          outlineRows.map(({ node, depth }) => (
-            <OutlineItem
-              key={node.id}
-              node={node}
-              depth={depth}
-              expanded={effectiveExpandedNodeIds.has(node.id)}
-              selected={selectedNodeId === node.id}
-              onSelectNode={onSelectNode}
-              onToggleNode={toggleOutlineNode}
-              labels={{
-                childCount: copy.workspace.childCount,
-                collapseChildrenFor: copy.workspace.collapseChildrenFor,
-                expandChildrenFor: copy.workspace.expandChildrenFor,
-                openNode: copy.workspace.openNode,
-              }}
-            />
-          ))
+          <>
+            {notesSearchSnippet !== null && onOpenNotes && (
+              <button
+                type="button"
+                onClick={onOpenNotes}
+                aria-label={copy.workspace.openProjectNotes}
+                data-testid="sidebar-search-result-notes"
+                className="workspace-outline-row relative flex w-full items-start gap-2 rounded-xl bg-white/65 px-1.5 py-1 text-left text-neutral-700 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-200"
+              >
+                <span
+                  aria-hidden="true"
+                  className="workspace-outline-icon mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/80 text-neutral-500 lg:mt-1"
+                >
+                  <NotebookPen size={14} />
+                </span>
+                <span className="min-w-0 py-0.5">
+                  <span className="line-clamp-1 text-sm font-black leading-5">
+                    {copy.common.notes}
+                  </span>
+                  <span className="mt-0.5 line-clamp-2 block text-xs font-semibold leading-4 opacity-75">
+                    {notesSearchSnippet}
+                  </span>
+                </span>
+              </button>
+            )}
+            {outlineRows.map(({ node, depth }) => (
+              <OutlineItem
+                key={node.id}
+                node={node}
+                depth={depth}
+                expanded={effectiveExpandedNodeIds.has(node.id)}
+                selected={selectedNodeId === node.id}
+                onSelectNode={onSelectNode}
+                onToggleNode={toggleOutlineNode}
+                labels={{
+                  childCount: copy.workspace.childCount,
+                  collapseChildrenFor: copy.workspace.collapseChildrenFor,
+                  expandChildrenFor: copy.workspace.expandChildrenFor,
+                  openNode: copy.workspace.openNode,
+                }}
+              />
+            ))}
+          </>
         )}
       </nav>
       {footer && (
