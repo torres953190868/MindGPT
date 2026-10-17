@@ -367,3 +367,10 @@ Tables include `branchmind_projects`, `branchmind_nodes`, `branchmind_messages`,
 - **Add a client feature:** update the relevant Zustand store, call API routes, keep optimistic state in sync with server shape.
 - **Add RAG logic:** keep modules isolated under `lib/server/rag/` (parser, cleaner, headings, chunker, embeddings, indexer, retriever, answer, store) and add tests under `tests/server/rag/`.
 - **Database changes:** add a new migration in `supabase/migrations/` with a UTC-ish timestamp prefix; update `lib/supabase/database.types.ts` if needed.
+
+## Cursor Cloud specific instructions
+
+- Dev server: `npm run dev` (Next.js on `127.0.0.1:3002`).
+- Local work does not need Supabase or provider API keys. Start the server with `AI_MOCK_MODE=true`, `BRANCHMIND_PROJECTS_BACKEND=file`, `BRANCHMIND_RAG_BACKEND=file`, and `EMBEDDING_PROVIDER=mock`.
+- `npm test` runs the Vitest suite without Supabase or provider keys. `GET /api/health` returns `checks.supabase: "not_configured"` when Supabase env vars are absent, and that is a healthy local result.
+- Creating a project is `POST /api/projects` with `{ "topic": "..." }` and `Origin: http://127.0.0.1:3002`, then `POST /api/projects/{id}/nodes/{nodeId}/regenerate` with the session cookie from the create response. Mock mode returns a deterministic assistant reply.
