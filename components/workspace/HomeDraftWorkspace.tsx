@@ -95,7 +95,7 @@ export function HomeDraftWorkspace() {
   const [taglineIndex, setTaglineIndex] = useState(0);
   const [taglinePhase, setTaglinePhase] = useState<HomeTaglinePhase>("idle");
   const [isAuthPromptOpen, setIsAuthPromptOpen] = useState(false);
-  const [showOnboardingDemo, setShowOnboardingDemo] = useState(false);
+  const [showOnboardingDemo, setShowOnboardingDemo] = useState<boolean | null>(null);
   const pendingSubmitRef = useRef<(() => void) | null>(null);
   const sessionStatus = useAuthStore((state) => state.sessionStatus);
   const ensureSessionLoaded = useAuthStore((state) => state.ensureSessionLoaded);
@@ -112,9 +112,9 @@ export function HomeDraftWorkspace() {
     hydrate();
   }, [hydrate]);
 
-  // Decided on the client before the first paint; the server render never includes the demo.
+  // Keep the server-rendered composer hidden until the client knows whether to play the demo.
   useLayoutEffect(() => {
-    if (shouldShowHomeOnboardingDemo()) setShowOnboardingDemo(true);
+    setShowOnboardingDemo(shouldShowHomeOnboardingDemo());
   }, []);
 
   useEffect(() => {
@@ -207,7 +207,10 @@ export function HomeDraftWorkspace() {
   ].join(" ");
 
   return (
-    <>
+    <div
+      className="contents"
+      data-home-demo-pending={showOnboardingDemo === null ? "true" : undefined}
+    >
       <WorkspaceCanvasShell
         project={draftProject}
         selectedNodeId={selectedNodeId}
@@ -260,9 +263,9 @@ export function HomeDraftWorkspace() {
           variant: "home",
           suggestions: promptSuggestions,
           suggestionsAnimationPhase: taglinePhase,
-          onboardingDemo: showOnboardingDemo
-            ? { onDismiss: rememberHomeOnboardingDemoDismissed }
-            : undefined,
+          onboardingDemo: showOnboardingDemo === null
+            ? undefined
+            : { autoPlay: showOnboardingDemo, onDismiss: rememberHomeOnboardingDemoDismissed },
         }}
         nodeDetailOptions={{
           initialSubmit: true,
@@ -279,6 +282,6 @@ export function HomeDraftWorkspace() {
         onOpenChange={handleAuthPromptOpenChange}
         onAuthenticated={handleAuthPromptAuthenticated}
       />
-    </>
+    </div>
   );
 }

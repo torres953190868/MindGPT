@@ -29,6 +29,7 @@ import {
   type Viewport,
 } from "@xyflow/react";
 import { getVisibleNodeIds } from "@/lib/graph";
+import { HOME_DEMO_IDLE_REPLAY_MS } from "@/lib/home-onboarding-demo";
 import type { NodePosition, Project } from "@/lib/types";
 import {
   BranchNodeCard,
@@ -190,6 +191,8 @@ export function MindMap({
   const homeComposerNodeId = isHomeInlineComposer ? inlineNodeComposer?.nodeId : null;
   const homeOnboardingDemo = isHomeInlineComposer ? inlineNodeComposer?.onboardingDemo : undefined;
   const hasHomeOnboardingDemo = Boolean(homeOnboardingDemo);
+  const autoPlayHomeDemo = homeOnboardingDemo?.autoPlay ?? false;
+  const isHomeComposerBusy = inlineNodeComposer?.isBusy ?? false;
   const [homeDemoPhase, setHomeDemoPhase] = useState<HomeOnboardingDemoPhase | "off">("off");
   // Read by the native pointer/wheel listeners and by centerHomeComposer, which must not
   // wait for a re-render after the demo is dismissed.
@@ -427,14 +430,19 @@ export function MindMap({
     homeDemoDismissRef.current = homeOnboardingDemo?.onDismiss ?? null;
   });
 
-  // Layout effect: switch to "playing" before the first paint so the real composer never
-  // flashes before the demo card covers it.
-  useLayoutEffect(() => {
-    if (!hasHomeOnboardingDemo || homeDemoStartedRef.current) return;
+  const startHomeDemo = useCallback(() => {
+    if (homeDemoPhaseRef.current !== "off") return;
     homeDemoStartedRef.current = true;
     homeDemoPhaseRef.current = "playing";
     setHomeDemoPhase("playing");
-  }, [hasHomeOnboardingDemo]);
+  }, []);
+
+  // Layout effect: switch to "playing" before the first paint so the real composer never
+  // flashes before the demo card covers it.
+  useLayoutEffect(() => {
+    if (!autoPlayHomeDemo || homeDemoStartedRef.current) return;
+    startHomeDemo();
+  }, [autoPlayHomeDemo, startHomeDemo]);
 
   const getFlowContainer = useCallback(() => flowContainerRef.current, []);
 
@@ -479,6 +487,63 @@ export function MindMap({
     const animationFrame = window.requestAnimationFrame(centerHomeComposer);
     return () => window.cancelAnimationFrame(animationFrame);
   }, [centerHomeComposer, homeDemoPhase]);
+
+  useEffect(() => {
+    if (!hasHomeOnboardingDemo || homeDemoPhase !== "off" || isHomeComposerBusy) return;
+
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let timerId: number | undefined;
+    let isComposing = false;
+
+    const scheduleReplay = () => {
+      window.clearTimeout(timerId);
+      if (document.visibilityState !== "visible" || reducedMotion.matches) return;
+
+      timerId = window.setTimeout(() => {
+        if (document.visibilityState !== "visible" || reducedMotion.matches || isComposing) return;
+        const container = flowContainerRef.current;
+        const workspace = container?.closest("[data-draft-workspace='true']");
+        if (!container || !workspace) return;
+        const hasDraft = Array.from(workspace.querySelectorAll("textarea"))
+          .some((input) => input.value.trim().length > 0);
+        const hasAttachment = workspace.querySelector("[data-testid='pending-attachment-chip']");
+        const hasOpenOverlay = document.querySelector("[role='dialog'], [role='menu']");
+        if (hasDraft || hasAttachment || hasOpenOverlay) return;
+
+        if (document.activeElement instanceof HTMLElement && container.contains(document.activeElement)) {
+          document.activeElement.blur();
+        }
+        startHomeDemo();
+      }, HOME_DEMO_IDLE_REPLAY_MS);
+    };
+
+    const handleCompositionStart = () => {
+      isComposing = true;
+      scheduleReplay();
+    };
+    const handleCompositionEnd = () => {
+      isComposing = false;
+      scheduleReplay();
+    };
+    const activityEvents = ["pointerdown", "pointermove", "keydown", "input", "wheel", "focusin"] as const;
+    for (const event of activityEvents) {
+      window.addEventListener(event, scheduleReplay, { capture: true, passive: true });
+    }
+    window.addEventListener("compositionstart", handleCompositionStart, true);
+    window.addEventListener("compositionend", handleCompositionEnd, true);
+    document.addEventListener("visibilitychange", scheduleReplay);
+    reducedMotion.addEventListener("change", scheduleReplay);
+    scheduleReplay();
+
+    return () => {
+      window.clearTimeout(timerId);
+      for (const event of activityEvents) window.removeEventListener(event, scheduleReplay, true);
+      window.removeEventListener("compositionstart", handleCompositionStart, true);
+      window.removeEventListener("compositionend", handleCompositionEnd, true);
+      document.removeEventListener("visibilitychange", scheduleReplay);
+      reducedMotion.removeEventListener("change", scheduleReplay);
+    };
+  }, [hasHomeOnboardingDemo, homeDemoPhase, isHomeComposerBusy, startHomeDemo]);
 
   const getHomeCanvasPanBounds = useCallback(() => {
     const containerHeight = flowContainerRef.current?.clientHeight ?? window.innerHeight;

@@ -58,6 +58,7 @@ export const HOME_DEMO_COMPACT_LAYOUT: HomeDemoLayout = {
 
 export const HOME_DEMO_COMPACT_MEDIA_QUERY = "(max-width: 639px)";
 export const HOME_DEMO_DISMISSED_STORAGE_KEY = "branchmind-home-demo-dismissed";
+export const HOME_DEMO_IDLE_REPLAY_MS = 10_000;
 
 export const HOME_DEMO_LOOP_SECONDS = 11.5;
 export const HOME_DEMO_TIMELINE = {

@@ -1828,12 +1828,17 @@ textarea {
 
 /* Home first-visit demo (HomeOnboardingDemo): the demo card stands in for the real composer
    until the user clicks it or moves focus into the composer. */
+[data-home-demo-pending="true"] .branch-node-card-surface[data-home-composer="true"] {
+  visibility: hidden;
+}
+
 [data-home-demo] .branch-node-card-surface[data-home-composer="true"] {
   pointer-events: none;
 }
 
 [data-home-demo="playing"] .branch-node-card-surface[data-home-composer="true"] {
   opacity: 0;
+  transition: none;
 }
 
 [data-home-demo="closing"] .branch-node-card-surface[data-home-composer="true"] {

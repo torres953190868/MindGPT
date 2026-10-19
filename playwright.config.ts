@@ -33,9 +33,8 @@ export default defineConfig({
       args: ["--no-proxy-server"],
     },
     testIdAttribute: "data-testid",
-    // Mark the first-visit home demo as already seen so it does not cover the
-    // home composer in unrelated tests. e2e/home-onboarding-demo.spec.ts
-    // starts from an empty storage state to test the demo itself.
+    // Skip immediate first-visit playback so unrelated tests start with the home composer.
+    // Idle replay stays enabled. e2e/home-onboarding-demo.spec.ts tests both entry paths.
     storageState: {
       cookies: [],
       origins: [

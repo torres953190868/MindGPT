@@ -36,8 +36,8 @@ export type InlineNodeComposerData = {
   variant?: "default" | "home";
   suggestions?: string[];
   suggestionsAnimationPhase?: "idle" | "leaving" | "entering";
-  /** Home only: play the first-visit demo over this composer until the user engages with it. */
-  onboardingDemo?: { onDismiss: () => void };
+  /** Home only: play on the first visit, then replay when the empty composer is idle. */
+  onboardingDemo?: { autoPlay: boolean; onDismiss: () => void };
   autoPreparePdfAttachments?: boolean;
   onBeforeSubmit?: (resumeSubmit: () => void) => boolean | Promise<boolean>;
   onSubmit: (
