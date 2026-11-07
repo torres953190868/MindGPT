@@ -65,7 +65,7 @@ public/           # Static assets
 | `next.config.ts` | Next.js config with per-port `distDir` for dev, strict mode, webpack ignore patterns. |
 | `tsconfig.json` | Strict TypeScript, `@/*` path alias, includes generated Next.js types. |
 | `eslint.config.mjs` | Flat ESLint config extending `next/core-web-vitals` and `next/typescript`. |
-| `vitest.config.ts` | Vitest config: Node env, tests in `tests/**/*.test.ts`, `@/` alias. |
+| `vitest.config.ts` | Vitest config with two projects sharing the `@/` alias: `node` (`tests/**/*.test.ts`) and `dom` (jsdom, `tests/**/*.test.tsx`). |
 | `playwright.config.ts` | E2E config with Chromium + mobile Chrome projects, local web server. |
 | `postcss.config.mjs` | Tailwind CSS v4 PostCSS plugin. |
 | `vercel.json` | Vercel function config for the RAG document-processing queue. |
@@ -274,10 +274,20 @@ Server modules under `lib/server/rag/`:
 
 ### Vitest
 
-- Tests live in `tests/`.
-- `npm run test` runs all `tests/**/*.test.ts` in a Node environment.
+- Tests live in `tests/`. `npm run test` runs both Vitest projects:
+  - `node` project: `tests/**/*.test.ts` (logic, stores, API routes) in a Node environment.
+  - `dom` project: `tests/**/*.test.tsx` (React component tests) in jsdom with Testing Library (`@testing-library/react`, `user-event`, `jest-dom`). Run only one with `npx vitest run --project dom` (or `node`).
 - Tests include client store tests, server route tests, RAG pipeline tests, auth/security tests, and provider-specific tests.
 - A synthetic PDF fixture helper exists at `tests/server/rag/pdf-fixtures.ts`.
+
+### Component Tests (jsdom)
+
+- Put them under `tests/components/`, mirroring the component path (e.g. `tests/components/workspace/NodeDetailPanel.test.tsx`).
+- `tests/setup/dom.ts` (loaded only by the `dom` project) registers jest-dom matchers, runs `cleanup` after each test, resets local/session storage, stubs `fetch` with a 404 default, and shims `ResizeObserver`, `matchMedia`, `scrollTo`/`scrollIntoView`, and `navigator.clipboard`.
+- Render with `renderWithProviders(ui, { language?, wrapper? })` from `tests/setup/render.tsx`: wraps `LanguageProvider` (English by default) and returns a user-event `user`. Query by the same copy the UI renders via the exported `copy` (`LANGUAGE_COPY.en`), roles, labels, and existing `data-testid`s.
+- Shared data builders (`makeNode`, `makeMessage`, `makeProject`) live in `tests/components/fixtures.ts`; composer-control harness and `fetch` route mocks in `tests/components/chat/composer-harness.tsx`.
+- Components using React Flow `Handle`s need `{ wrapper: ReactFlowProvider }`; full `<ReactFlow>` canvases (MindMap) also need `mockReactFlow()` from `tests/setup/react-flow.ts` at the top of the file, and `findBy*` queries because nodes stay hidden until measured.
+- Mock only at boundaries (`fetch`, callback props); do not mock child components or copy.
 
 ### Playwright E2E
 
