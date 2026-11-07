@@ -38,3 +38,6 @@ screenshots/
 
 # Vendored dev-only element inspector helper (torres953190868/element-inspector-helper)
 public/useElementInspector.js
+
+# Promo video render outputs
+promo-video/out/

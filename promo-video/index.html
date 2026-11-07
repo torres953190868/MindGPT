@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>BranchMind 宣传片</title>
+<!--
+  BranchMind 宣传片（42 秒，1920×1080）。
+  所有画面由 renderFrame(t) 按时间确定性绘制，方便逐帧导出。
+  预览：用浏览器打开 index.html?preview  （?t=20 可定格到第 20 秒）
+  导出：node promo-video/render.mjs
+-->
+<style>
+  :root {
+    --paper: #fcf9f4;
+    --ink: #2a2420;
+    --ink2: #5f554b;
+    --muted: #73685c;
+    --line: #e4dace;
+    --border: #d9cdbb;
+    --gold: #8a7448;
+    --branch: #5a4d42;
+    --sage100: #e2eadb;
+    --sage600: #4f6b4a;
+    --brand100: #ece5da;
+    --brand300: #bcae9a;
+    --brand600: #453c36;
+    --fold100: #eadfce;
+    --fold600: #5b5045;
+    --warn100: #f3e3c4;
+    --warn600: #8a5d22;
+    --danger50: #f7eee8;
+    --danger500: #89523f;
+    --shadow-md: 0 8px 24px rgb(60 45 30 / 0.08), 0 1px 2px rgb(60 45 30 / 0.06);
+    --shadow-lg: 0 18px 40px rgb(60 45 30 / 0.11), 0 2px 6px rgb(60 45 30 / 0.06);
+    --shadow-xl: 0 24px 60px rgb(60 45 30 / 0.14);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #f1eadf; }
+  body {
+    font-family: -apple-system, "SF Pro Display", "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  #stage {
+    position: relative; width: 1920px; height: 1080px; overflow: hidden;
+    background:
+      linear-gradient(180deg, rgb(252 249 244 / 0.56) 0%, rgb(252 249 244 / 0.14) 42%, rgb(252 249 244 / 0) 100%),
+      linear-gradient(180deg, #f1eadf 0%, #e9e0d2 100%);
+  }
+  #grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgb(74 60 46 / 0.065) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(74 60 46 / 0.065) 1px, transparent 1px);
+  }
+  #vignette {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 45%, rgb(252 249 244 / 0) 55%, rgb(120 95 70 / 0.10) 100%);
+  }
+  .layer { position: absolute; inset: 0; }
+  .kicker {
+    display: flex; align-items: center; gap: 14px;
+    font-size: 17px; font-weight: 700; letter-spacing: 0.22em; color: var(--muted);
+  }
+  .kicker .rule { width: 56px; height: 0; border-top: 3px solid var(--gold); border-radius: 2px; }
+  .kicker .rule.dashed { border-top: 3px dashed var(--branch); }
+
+  /* ---------- 场景 1：线性对话 ---------- */
+  #s1copy { position: absolute; left: 170px; top: 330px; width: 760px; }
+  #s1copy h1 { font-size: 76px; line-height: 1.18; font-weight: 800; letter-spacing: -0.01em; margin-top: 28px; }
+  #s1copy p { font-size: 28px; line-height: 1.7; color: var(--ink2); margin-top: 30px; font-weight: 500; }
+  #chatwin {
+    position: absolute; left: 1030px; top: 120px; width: 720px; height: 840px;
+    background: var(--paper); border: 1px solid var(--line); border-radius: 28px;
+    box-shadow: var(--shadow-xl); overflow: hidden;
+  }
+  #chathead {
+    height: 70px; display: flex; align-items: center; gap: 10px; padding: 0 26px;
+    border-bottom: 1px solid var(--line); font-weight: 700; font-size: 19px; color: var(--ink2);
+  }
+  #chathead .dot { width: 13px; height: 13px; border-radius: 50%; background: var(--border); }
+  #chathead .title { margin-left: 12px; }
+  #derail {
+    margin-left: auto; font-size: 16px; font-weight: 700; color: var(--danger500);
+    background: var(--danger50); border: 1px solid #ddc2b2; padding: 6px 14px; border-radius: 999px;
+  }
+  #chatbody {
+    position: absolute; top: 70px; left: 0; right: 0; bottom: 0; overflow: hidden;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 70px, #000 100%);
+  }
+  #chatlist { position: absolute; left: 0; right: 0; top: 0; padding: 26px 28px 30px; }
+  .bub {
+    max-width: 78%; padding: 16px 20px; border-radius: 20px; font-size: 20px; line-height: 1.6;
+    margin-bottom: 16px; width: fit-content;
+  }
+  .bub.u { margin-left: auto; background: #ece1cf; color: var(--ink); border-bottom-right-radius: 6px; transform-origin: 100% 100%; }
+  .bub.a { background: #f4eee4; border: 1px solid #e2d7c7; color: var(--ink2); border-bottom-left-radius: 6px; transform-origin: 0 100%; }
+  .bub.u.off { box-shadow: 0 0 0 2px #ddc2b2; }
+
+  /* ---------- 场景 2 / 7：品牌 ---------- */
+  .brand { position: absolute; left: 0; right: 0; text-align: center; }
+  .logo { font-size: 196px; font-weight: 900; letter-spacing: -0.035em; color: var(--ink); text-shadow: 0 10px 28px rgb(60 45 30 / 0.08); }
+  .logo span { display: inline-block; }
+  .slogan { font-size: 46px; font-weight: 700; color: var(--ink2); margin-top: 18px; letter-spacing: 0.02em; }
+  .tagchip {
+    display: inline-flex; align-items: center; gap: 12px; margin-top: 46px;
+    padding: 14px 28px; border-radius: 999px; background: var(--paper);
+    border: 1px solid var(--border); box-shadow: var(--shadow-md);
+    font-size: 26px; font-weight: 600; color: var(--ink2);
+  }
+  .tagchip svg { width: 26px; height: 26px; }
+
+  /* ---------- 场景 3：输入框 ---------- */
+  #s3cap { position: absolute; left: 0; right: 0; top: 280px; text-align: center; font-size: 48px; font-weight: 800; }
+  #composer {
+    position: absolute; left: 580px; top: 418px; width: 760px; height: 212px;
+    background: #f8f1e6; border: 2px solid #ddd2c2; border-radius: 26px; box-shadow: var(--shadow-lg);
+    padding: 22px 24px;
+  }
+  .crow { display: flex; gap: 10px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px;
+    border: 1px solid var(--border); border-radius: 12px; background: var(--paper);
+    font-size: 17px; font-weight: 500; color: var(--ink);
+  }
+  .pill img { width: 20px; height: 20px; }
+  .pill svg, .sq svg { width: 16px; height: 16px; color: var(--muted); }
+  .sq { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 12px; background: var(--paper); }
+  #ctext { margin-top: 22px; height: 64px; font-size: 22px; line-height: 1.5; color: var(--ink); }
+  #cplaceholder { color: var(--muted); position: absolute; }
+  .crow2 { display: flex; align-items: center; gap: 10px; }
+  .sugg {
+    display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px;
+    border: 1px solid var(--border); border-radius: 10px; background: #f3ece1; font-size: 17px; color: var(--ink2);
+  }
+  .sugg svg { width: 16px; height: 16px; }
+  #sendbtn {
+    margin-left: auto; width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center;
+    background: #9a8f84; color: #fcf9f4;
+  }
+  #sendbtn svg { width: 20px; height: 20px; }
+
+  /* ---------- 画布 ---------- */
+  #world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  #edges { position: absolute; left: 0; top: 0; overflow: visible; }
+  .node {
+    position: absolute; width: 320px; height: 188px; padding: 16px;
+    background: var(--paper); border: 1px solid var(--line); border-radius: 20px;
+    box-shadow: var(--shadow-md);
+  }
+  .node.sel { border-color: var(--brand300); box-shadow: 0 0 0 4px rgb(188 174 154 / 0.35), var(--shadow-lg); }
+  .nlabel { font-size: 11px; line-height: 14px; font-weight: 800; letter-spacing: 0.16em; color: var(--muted); }
+  .nlabel.continue { color: var(--gold); }
+  .nlabel.branch { color: var(--branch); }
+  .nbadge {
+    position: absolute; right: 14px; top: 13px; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--warn100); color: var(--warn600); font-size: 12px; font-weight: 800;
+    display: grid; place-items: center;
+  }
+  .ntitle {
+    margin-top: 6px; padding-right: 30px; font-size: 17px; line-height: 23px; font-weight: 800; max-height: 46px;
+    overflow: hidden;
+  }
+  .nsum { margin-top: 8px; font-size: 13.5px; line-height: 21px; color: var(--ink2); height: 42px; overflow: hidden; }
+  .caret {
+    display: inline-block; width: 2px; height: 1.05em; background: var(--gold); vertical-align: -0.15em; margin-left: 2px;
+  }
+  .nchips { position: absolute; left: 16px; bottom: 16px; display: flex; gap: 8px; }
+  .chip { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; }
+  .chip svg { width: 17px; height: 17px; }
+  .chip.c-cont { background: var(--sage100); color: var(--sage600); }
+  .chip.c-br { background: var(--brand100); color: var(--brand600); }
+  .chip.c-fold { background: var(--fold100); color: var(--fold600); }
+
+  /* ---------- 说明文案 ---------- */
+  .cap { position: absolute; left: 160px; top: 360px; width: 600px; }
+  .cap h2 { font-size: 62px; line-height: 1.2; font-weight: 800; margin-top: 26px; letter-spacing: -0.01em; }
+  .cap p { font-size: 26px; line-height: 1.7; color: var(--ink2); margin-top: 26px; font-weight: 500; }
+  .cap .en { font-size: 22px; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); margin-top: 22px; }
+  .topcap { position: absolute; left: 0; right: 0; top: 78px; text-align: center; font-size: 58px; font-weight: 800; }
+
+  #cursor { position: absolute; left: 0; top: 0; width: 34px; height: 34px; transform-origin: 4px 3px; }
+  #ripple { position: absolute; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%; border: 3px solid var(--gold); }
+
+  #endurl {
+    display: inline-flex; align-items: center; gap: 14px; margin-top: 54px; padding: 16px 34px;
+    border-radius: 999px; background: var(--ink); color: #fcf9f4; font-size: 30px; font-weight: 700; letter-spacing: 0.02em;
+  }
+  #endsub { margin-top: 26px; font-size: 22px; font-weight: 700; letter-spacing: 0.24em; color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="grid"></div>
+
+  <!-- 场景 1 -->
+  <div id="s1" class="layer">
+    <div id="s1copy">
+      <div class="kicker" id="s1kicker"><span class="rule"></span>线性对话的困境</div>
+      <h1 id="s1h1">一个问题，<br />牵出十个新问题。</h1>
+      <p id="s1p">在线性对话里，它们只能挤在同一条时间线上——<br />主线被打断，思路越聊越乱。</p>
+    </div>
+    <div id="chatwin">
+      <div id="chathead">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="title">AI Chat</span>
+        <span id="derail">主线被打断 × 0</span>
+      </div>
+      <div id="chatbody"><div id="chatlist"></div></div>
+    </div>
+  </div>
+
+  <!-- 场景 2 -->
+  <div id="s2" class="layer">
+    <div class="brand" style="top: 330px">
+      <div class="logo" id="logo2"></div>
+      <div class="slogan" id="slogan2">你可以外包思考，但是无法外包理解。</div>
+      <div><span class="tagchip" id="tag2"><span id="tag2icon"></span>分支式 AI 学习画布</span></div>
+    </div>
+  </div>
+
+  <!-- 画布（场景 3–6） -->
+  <div id="canvas" class="layer">
+    <div id="world"><svg id="edges" width="1400" height="1400"></svg></div>
+  </div>
+
+  <!-- 场景 3 -->
+  <div id="s3" class="layer">
+    <div id="s3cap">从一个问题开始</div>
+    <div id="composer">
+      <div class="crow">
+        <span class="pill"><img src="../public/model-logos/deepseek.svg" alt="" />DeepSeek V3<span id="chev"></span></span>
+        <span class="sq" id="plus"></span>
+      </div>
+      <div id="ctext">
+        <span id="cplaceholder">输入一个研究问题，BranchMind 会把理解路径拆成可探索的分支…</span>
+        <span id="ctyped"></span><span class="caret" id="ccaret"></span>
+      </div>
+      <div class="crow2">
+        <span class="sugg"><span class="ic-spark"></span>拆解论文论点</span>
+        <span class="sugg"><span class="ic-spark"></span>规划学习路线</span>
+        <span class="sugg"><span class="ic-spark"></span>拆分复杂概念</span>
+        <span id="sendbtn"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 场景 4 / 5 文案 -->
+  <div class="cap" id="cap4">
+    <div class="kicker"><span class="rule"></span>CONTINUE DOWN</div>
+    <h2>沿着主线，<br />继续深入</h2>
+    <p>顺着思路一步步向下追问。每一步都是独立节点，主线始终清晰、可回溯。</p>
+  </div>
+  <div class="cap" id="cap5">
+    <div class="kicker"><span class="rule dashed"></span>BRANCH RIGHT</div>
+    <h2>为好奇心，<br />开一条支线</h2>
+    <p>遇到想深挖的概念，就向右分支。支线里尽情展开，主线原封不动。</p>
+  </div>
+  <div class="topcap" id="cap6a">主线不断，支线不乱。</div>
+  <div class="topcap" id="cap6b">每一个疑问，都有自己的位置。</div>
+
+  <div id="ripple"></div>
+  <svg id="cursor" viewBox="0 0 24 24">
+    <path d="M4 2.5 L4 19.5 L8.6 15.3 L11.6 22 L14.6 20.7 L11.7 14.2 L18 14.2 Z"
+      fill="#2a2420" stroke="#fcf9f4" stroke-width="1.6" stroke-linejoin="round" />
+  </svg>
+
+  <!-- 场景 7 -->
+  <div id="s7" class="layer">
+    <div class="brand" style="top: 300px">
+      <div class="logo" id="logo7">BranchMind</div>
+      <div class="slogan" id="slogan7">你可以外包思考，但是无法外包理解。</div>
+      <div><span id="endurl">branchmind.app</span></div>
+      <div id="endsub">CONTINUE DOWN · BRANCH RIGHT</div>
+    </div>
+  </div>
+
+  <div id="vignette"></div>
+</div>
+
+<script>
+/* ===================== 工具 ===================== */
+const DURATION = 42;
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const E = {
+  out: (u) => 1 - Math.pow(1 - u, 3),
+  inOut: (u) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2),
+  back: (u) => { const c1 = 1.5, c3 = c1 + 1; return 1 + c3 * Math.pow(u - 1, 3) + c1 * Math.pow(u - 1, 2); },
+  lin: (u) => u,
+};
+const P = (t, s, d, e = E.out) => e(clamp((t - s) / d));
+const lerp = (a, b, u) => a + (b - a) * u;
+const $ = (id) => document.getElementById(id);
+const typed = (str, t, s, d) => { const a = Array.from(str); return a.slice(0, Math.round(a.length * clamp((t - s) / d))).join(""); };
+function setVis(el, o, extra = "") {
+  el.style.opacity = o;
+  el.style.visibility = o <= 0.001 ? "hidden" : "visible";
+  if (extra !== null) el.style.transform = extra;
+}
+
+const ICON = {
+  sprout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/></svg>',
+  branch: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>',
+  ribbon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11.22C11 9.997 10 9 10 8a2 2 0 0 1 4 0c0 1-.998 2.002-2.01 3.22"/><path d="m12 18 2.57-3.5"/><path d="M6.243 9.016a7 7 0 0 1 11.507-.009"/><path d="M9.35 14.53 12 11.22"/><path d="M9.35 14.53C7.728 12.246 6 10.221 6 7a6 5 0 0 1 12 0c-.005 3.22-1.778 5.235-3.43 7.5l3.557 4.527a1 1 0 0 1-.203 1.43l-1.894 1.36a1 1 0 0 1-1.384-.215L12 18l-2.679 3.593a1 1 0 0 1-1.39.213l-1.865-1.353a1 1 0 0 1-.203-1.422z"/></svg>',
+  send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>',
+  spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>',
+  chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>',
+};
+
+/* ===================== 场景 1 数据 ===================== */
+const CHAT = [
+  ["u", "神经网络到底是怎么学习的？"],
+  ["a", "可以从三个层面理解：神经元、损失函数和反向传播。首先，每个神经元会对输入做加权求和……"],
+  ["u", "等等，激活函数是干什么的？", true],
+  ["a", "激活函数为网络引入非线性，常见的有 ReLU、Sigmoid、Tanh……"],
+  ["u", "那为什么一定要非线性？", true],
+  ["a", "如果没有非线性，再多层的网络也只等价于一次线性变换……"],
+  ["u", "好，回到刚才的反向传播？"],
+  ["a", "反向传播利用链式法则，把误差从输出层逐层传回……"],
+  ["u", "链式法则我有点忘了……", true],
+  ["a", "链式法则描述复合函数的求导：若 y = f(g(x))，则……"],
+  ["u", "学习率又该怎么选？", true],
+  ["a", "学习率决定每一步更新的幅度，太大容易震荡……"],
+  ["u", "我们刚才聊到哪了？", true],
+  ["a", "我们在讨论……"],
+  ["u", "最开始的问题是什么来着？", true],
+];
+const CHAT_T = CHAT.map((_, i) => 0.35 + 5.1 * Math.pow(i / CHAT.length, 0.72));
+
+/* ===================== 画布数据 ===================== */
+const NW = 320, NH = 188, COL = 400, ROW = 260;
+const NODES = [
+  { id: "n0", kind: "ROOT", col: 0, row: 0, at: 14.65, title: "总览：从第一性原理理解神经网络", sum: "拆出核心概念、关键例子和下一步追问方向，先搭好理解的骨架。" },
+  { id: "n1", kind: "CONTINUE", parent: "n0", col: 0, row: 1, at: 17.25, title: "继续：神经元与激活函数", sum: "一个神经元 = 加权求和 + 非线性激活，是网络最小的计算单元。" },
+  { id: "n2", kind: "CONTINUE", parent: "n1", col: 0, row: 2, at: 19.7, title: "继续：反向传播", sum: "用链式法则把误差逐层传回，算出每个权重该往哪边调。" },
+  { id: "b1", kind: "BRANCH", parent: "n1", col: 1, row: 1, at: 23.75, title: "深入：为什么需要非线性？", sum: "没有激活函数，再深的网络也会退化成一次线性变换。" },
+  { id: "b3", kind: "BRANCH", parent: "n2", col: 1, row: 2, at: 25.8, title: "深入：链式法则的直觉", sum: "把复杂的导数拆成一串局部导数的乘积，逐层相乘即可。" },
+  { id: "b2", kind: "BRANCH", parent: "b1", col: 2, row: 1, at: 27.75, title: "深入：ReLU 还是 Sigmoid？", sum: "ReLU 计算简单、缓解梯度消失，成了现代网络的默认选择。" },
+  { id: "n3", kind: "CONTINUE", parent: "n2", col: 0, row: 3, at: 31.0, title: "继续：梯度下降", sum: "沿着损失下降最快的方向，小步迭代更新参数。" },
+  { id: "b8", kind: "BRANCH", parent: "b3", col: 2, row: 2, at: 31.35, title: "深入：计算图", sum: "把运算画成图，前向求值、反向求导都一目了然。" },
+  { id: "b4", kind: "BRANCH", parent: "n3", col: 1, row: 3, at: 31.7, title: "深入：学习率怎么选？", sum: "太大会震荡，太小收敛慢——可以试试学习率预热与衰减。" },
+  { id: "n4", kind: "CONTINUE", parent: "n3", col: 0, row: 4, at: 32.05, title: "继续：过拟合与正则化", sum: "权重衰减、早停与数据增强，让模型学规律而不是死记。" },
+  { id: "b6", kind: "BRANCH", parent: "b4", col: 2, row: 3, at: 32.4, title: "深入：Adam 优化器", sum: "动量 + 自适应步长，几乎开箱即用。" },
+  { id: "b7", kind: "BRANCH", parent: "n4", col: 1, row: 4, at: 32.75, title: "深入：Dropout 为什么有效？", sum: "随机关闭神经元，相当于同时训练一群子网络。" },
+];
+const byId = Object.fromEntries(NODES.map((n) => [n.id, n]));
+NODES.forEach((n) => { n.x = n.col * COL; n.y = n.row * ROW; });
+const chipPos = (id, chip) => { const n = byId[id]; return { x: n.x + (chip === "cont" ? 32 : 72), y: n.y + NH - 32 }; };
+
+const CLICKS = [
+  { t: 16.9, node: "n0", chip: "cont" },
+  { t: 19.35, node: "n1", chip: "cont" },
+  { t: 23.4, node: "n1", chip: "br" },
+  { t: 25.45, node: "n2", chip: "br" },
+  { t: 27.4, node: "b1", chip: "br" },
+];
+
+const cp = (id, chip) => chipPos(id, chip);
+const CURSOR = [
+  { t: 15.7, x: 250, y: 120 },
+  { t: 16.75, ...cp("n0", "cont") },
+  { t: 17.0, ...cp("n0", "cont") },
+  { t: 17.9, x: 230, y: 360 },
+  { t: 19.2, ...cp("n1", "cont") },
+  { t: 19.45, ...cp("n1", "cont") },
+  { t: 20.6, x: 250, y: 610 },
+  { t: 22.6, x: 220, y: 560 },
+  { t: 23.25, ...cp("n1", "br") },
+  { t: 23.5, ...cp("n1", "br") },
+  { t: 24.6, x: 560, y: 360 },
+  { t: 25.3, ...cp("n2", "br") },
+  { t: 25.55, ...cp("n2", "br") },
+  { t: 26.5, x: 580, y: 620 },
+  { t: 27.25, ...cp("b1", "br") },
+  { t: 27.5, ...cp("b1", "br") },
+  { t: 28.6, x: 960, y: 360 },
+  { t: 30.5, x: 980, y: 380 },
+];
+
+const CAMERA = [
+  { t: 0, x: 160, y: 94, s: 1.15, ax: 960, ay: 470 },
+  { t: 14.6, x: 160, y: 94, s: 1.15, ax: 960, ay: 470 },
+  { t: 16.3, x: 160, y: 210, s: 1.0, ax: 1240, ay: 500 },
+  { t: 17.6, x: 160, y: 224, s: 1.0, ax: 1240, ay: 500 },
+  { t: 19.7, x: 160, y: 290, s: 0.98, ax: 1240, ay: 500 },
+  { t: 20.8, x: 160, y: 354, s: 0.95, ax: 1240, ay: 500 },
+  { t: 23.3, x: 160, y: 354, s: 0.95, ax: 1240, ay: 500 },
+  { t: 24.5, x: 360, y: 374, s: 0.9, ax: 1250, ay: 500 },
+  { t: 25.6, x: 380, y: 384, s: 0.9, ax: 1250, ay: 500 },
+  { t: 27.6, x: 560, y: 374, s: 0.85, ax: 1260, ay: 500 },
+  { t: 30.4, x: 560, y: 374, s: 0.85, ax: 1260, ay: 500 },
+  { t: 33.4, x: 560, y: 614, s: 0.58, ax: 960, ay: 605 },
+  { t: 36.0, x: 560, y: 614, s: 0.56, ax: 960, ay: 605 },
+  { t: 42.0, x: 560, y: 614, s: 0.53, ax: 960, ay: 605 },
+];
+
+function interpKeys(keys, t, fields) {
+  if (t <= keys[0].t) return { ...keys[0] };
+  for (let i = 0; i < keys.length - 1; i++) {
+    const a = keys[i], b = keys[i + 1];
+    if (t <= b.t) {
+      const u = E.inOut((t - a.t) / (b.t - a.t));
+      const o = {};
+      fields.forEach((f) => (o[f] = lerp(a[f], b[f], u)));
+      return o;
+    }
+  }
+  return { ...keys[keys.length - 1] };
+}
+
+/* ===================== DOM 构建 ===================== */
+const nodeEls = {}, edgeEls = {};
+function build() {
+  // 图标
+  $("tag2icon").innerHTML = ICON.branch;
+  $("chev").innerHTML = ICON.chev;
+  $("plus").innerHTML = ICON.plus;
+  $("sendbtn").innerHTML = ICON.send;
+  document.querySelectorAll(".ic-spark").forEach((el) => (el.innerHTML = ICON.spark));
+
+  // 场景 1 气泡
+  const list = $("chatlist");
+  CHAT.forEach(([who, text, off]) => {
+    const b = document.createElement("div");
+    b.className = `bub ${who}${off ? " off" : ""}`;
+    b.textContent = text;
+    list.appendChild(b);
+  });
+
+  // 场景 2 logo 字母
+  $("logo2").innerHTML = Array.from("BranchMind").map((c) => `<span>${c}</span>`).join("");
+
+  // 节点与连线
+  const world = $("world");
+  const svg = $("edges");
+  const NS = "http://www.w3.org/2000/svg";
+  NODES.forEach((n) => {
+    if (n.parent) {
+      const g = document.createElementNS(NS, "g");
+      const path = document.createElementNS(NS, "path");
+      const isBranch = n.kind === "BRANCH";
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", isBranch ? "#5a4d42" : "#8a7448");
+      path.setAttribute("stroke-width", "2.6");
+      path.setAttribute("stroke-linecap", "round");
+      if (isBranch) path.setAttribute("stroke-dasharray", "7 7");
+      const d1 = document.createElementNS(NS, "circle");
+      const d2 = document.createElementNS(NS, "circle");
+      [d1, d2].forEach((d) => { d.setAttribute("r", "4.5"); d.setAttribute("fill", isBranch ? "#5a4d42" : "#8a7448"); });
+      g.append(path, d1, d2);
+      svg.appendChild(g);
+      const p = byId[n.parent];
+      const from = isBranch ? { x: p.x + NW, y: p.y + NH / 2 } : { x: p.x + NW / 2, y: p.y + NH };
+      const to = isBranch ? { x: n.x, y: n.y + NH / 2 } : { x: n.x + NW / 2, y: n.y };
+      edgeEls[n.id] = { g, path, d1, d2, from, to };
+    }
+    const el = document.createElement("div");
+    el.className = "node";
+    el.style.left = n.x + "px";
+    el.style.top = n.y + "px";
+    el.innerHTML = `
+      <div class="nlabel ${n.kind.toLowerCase()}">${n.kind}</div>
+      <div class="nbadge">0</div>
+      <div class="ntitle">${n.title}</div>
+      <div class="nsum"><span class="typed"></span><span class="caret"></span></div>
+      <div class="nchips">
+        <span class="chip c-cont">${ICON.sprout}</span>
+        <span class="chip c-br">${ICON.branch}</span>
+        <span class="chip c-fold">${ICON.ribbon}</span>
+      </div>`;
+    world.appendChild(el);
+    nodeEls[n.id] = {
+      el,
+      badge: el.querySelector(".nbadge"),
+      title: el.querySelector(".ntitle"),
+      typed: el.querySelector(".typed"),
+      caret: el.querySelector(".caret"),
+      chips: { cont: el.querySelector(".c-cont"), br: el.querySelector(".c-br") },
+    };
+  });
+}
+
+let chatMetrics = null;
+function measureChat() {
+  const bodyH = $("chatbody").clientHeight;
+  const bubs = Array.from(document.querySelectorAll(".bub"));
+  const listPad = 30;
+  const S = bubs.map((b) => Math.max(0, b.offsetTop + b.offsetHeight + listPad - bodyH));
+  chatMetrics = { bubs, S };
+}
+
+/* ===================== 渲染 ===================== */
+function renderFrame(t) {
+  // ---------- 场景 1 ----------
+  {
+    const exit = P(t, 5.85, 0.7, E.inOut);
+    const s1 = $("s1");
+    setVis(s1, 1 - exit, `scale(${1 - exit * 0.04})`);
+    s1.style.filter = exit > 0 ? `blur(${exit * 10}px)` : "none";
+    const k = P(t, 0.15, 0.6);
+    setVis($("s1kicker"), k, `translateY(${(1 - k) * 16}px)`);
+    const h = P(t, 0.35, 0.8);
+    setVis($("s1h1"), h, `translateY(${(1 - h) * 30}px)`);
+    const p = P(t, 2.5, 0.8);
+    setVis($("s1p"), p, `translateY(${(1 - p) * 20}px)`);
+    const w = P(t, 0.1, 0.9);
+    setVis($("chatwin"), w, `translateY(${(1 - w) * 40}px)`);
+
+    const { bubs, S } = chatMetrics;
+    let shift = 0, derail = 0;
+    bubs.forEach((b, i) => {
+      const u = P(t, CHAT_T[i], 0.32);
+      const ub = P(t, CHAT_T[i], 0.42, E.back);
+      setVis(b, u, `translateY(${(1 - u) * 14}px) scale(${0.92 + 0.08 * ub})`);
+      const prev = i === 0 ? 0 : S[i - 1];
+      shift += (S[i] - prev) * P(t, CHAT_T[i] - 0.05, 0.38, E.inOut);
+      if (CHAT[i][2] && t >= CHAT_T[i]) derail++;
+    });
+    $("chatlist").style.transform = `translateY(${-shift}px)`;
+    $("derail").textContent = `主线被打断 × ${derail}`;
+  }
+
+  // ---------- 场景 2 ----------
+  {
+    const exit = P(t, 10.35, 0.6, E.inOut);
+    const s2 = $("s2");
+    setVis(s2, (t > 6.3 ? 1 : 0) * (1 - exit), `translateY(${-exit * 40}px)`);
+    Array.from($("logo2").children).forEach((sp, i) => {
+      const u = P(t, 6.55 + i * 0.045, 0.7);
+      sp.style.opacity = u;
+      sp.style.transform = `translateY(${(1 - u) * 60}px)`;
+      sp.style.filter = u < 1 ? `blur(${(1 - u) * 12}px)` : "none";
+    });
+    const sl = P(t, 7.55, 0.8);
+    setVis($("slogan2"), sl, `translateY(${(1 - sl) * 20}px)`);
+    const tg = P(t, 8.35, 0.7, E.back);
+    setVis($("tag2"), P(t, 8.35, 0.4), `scale(${0.85 + 0.15 * tg})`);
+  }
+
+  // ---------- 相机 ----------
+  const cam = interpKeys(CAMERA, t, ["x", "y", "s", "ax", "ay"]);
+  const ox = cam.ax - cam.x * cam.s, oy = cam.ay - cam.y * cam.s;
+  const toScreen = (wx, wy) => ({ x: ox + wx * cam.s, y: oy + wy * cam.s });
+  const g = 40 * cam.s;
+  const grid = $("grid");
+  grid.style.backgroundSize = `${g}px ${g}px`;
+  grid.style.backgroundPosition = `${ox % g}px ${oy % g}px`;
+  $("world").style.transform = `translate(${ox}px, ${oy}px) scale(${cam.s})`;
+
+  // ---------- 场景 3：输入框 ----------
+  {
+    const inn = P(t, 10.9, 0.7);
+    const morph = P(t, 14.15, 0.75, E.inOut);
+    const s3 = $("s3");
+    setVis(s3, t < 10.8 ? 0 : 1, null);
+    const capO = inn * (1 - P(t, 14.3, 0.5, E.inOut));
+    setVis($("s3cap"), capO, `translateY(${(1 - inn) * 20}px)`);
+    const press = t > 13.9 && t < 14.15 ? 0.9 : 1;
+    const comp = $("composer");
+    const sc = lerp(1, 0.48, morph);
+    setVis(comp, inn * (1 - P(t, 14.35, 0.5)), `translateY(${(1 - inn) * 40 - morph * 70}px) scale(${(0.96 + 0.04 * inn) * sc})`);
+    const q = "从第一性原理理解神经网络，我该从哪里开始？";
+    const txt = typed(q, t, 11.75, 1.9);
+    $("ctyped").textContent = txt;
+    $("cplaceholder").style.visibility = txt.length ? "hidden" : "visible";
+    $("ccaret").style.opacity = t < 11.75 ? (Math.floor(t * 2.4) % 2 ? 0 : 1) : (t < 13.65 ? 1 : (Math.floor(t * 2.4) % 2 ? 0 : 1));
+    const sb = $("sendbtn");
+    sb.style.background = txt.length ? "#2a2420" : "#9a8f84";
+    sb.style.transform = `scale(${press})`;
+  }
+
+  // ---------- 画布 ----------
+  {
+    const cin = P(t, 14.35, 0.6);
+    const cout = P(t, 36.0, 1.0, E.inOut);
+    const cv = $("canvas");
+    setVis(cv, cin * (1 - cout * 0.84), null);
+    cv.style.filter = cout > 0 ? `blur(${cout * 6}px)` : "none";
+
+    const visible = NODES.filter((n) => t >= n.at);
+    const latest = visible.length ? visible[visible.length - 1] : null;
+    NODES.forEach((n) => {
+      const ne = nodeEls[n.id];
+      const fast = n.at > 30;
+      const u = P(t, n.at, fast ? 0.4 : 0.5);
+      const ub = P(t, n.at, fast ? 0.5 : 0.65, E.back);
+      const dir = n.kind === "BRANCH" ? `translateX(${(1 - u) * -24}px)` : `translateY(${(1 - u) * -20}px)`;
+      setVis(ne.el, u, `${dir} scale(${0.9 + 0.1 * ub})`);
+      ne.el.classList.toggle("sel", !!latest && latest.id === n.id && t < 33.2);
+      const titleO = P(t, n.at + 0.1, 0.3);
+      ne.title.style.opacity = titleO;
+      const ts = n.at + (fast ? 0.2 : 0.35), td = fast ? 0.45 : 0.95;
+      ne.typed.textContent = typed(n.sum, t, ts, td);
+      ne.caret.style.display = t >= ts - 0.2 && t < ts + td + 0.15 ? "inline-block" : "none";
+      const kids = NODES.filter((c) => c.parent === n.id && t >= c.at).length;
+      ne.badge.textContent = kids;
+      ["cont", "br"].forEach((chip) => {
+        const c = CLICKS.find((k) => k.node === n.id && k.chip === chip && t >= k.t - 0.08 && t < k.t + 0.22);
+        ne.chips[chip].style.transform = c ? "scale(0.86)" : "scale(1)";
+        ne.chips[chip].style.filter = c ? "brightness(0.9)" : "none";
+      });
+
+      const ed = edgeEls[n.id];
+      if (ed) {
+        const eu = P(t, n.at - 0.22, fast ? 0.3 : 0.4, E.inOut);
+        const ex = lerp(ed.from.x, ed.to.x, eu), ey = lerp(ed.from.y, ed.to.y, eu);
+        ed.path.setAttribute("d", `M ${ed.from.x} ${ed.from.y} L ${ex} ${ey}`);
+        ed.g.style.opacity = eu > 0 ? 1 : 0;
+        ed.d1.setAttribute("cx", ed.from.x); ed.d1.setAttribute("cy", ed.from.y);
+        ed.d2.setAttribute("cx", ed.to.x); ed.d2.setAttribute("cy", ed.to.y);
+        ed.d2.style.opacity = eu >= 1 ? 1 : 0;
+      }
+    });
+  }
+
+  // ---------- 文案 ----------
+  {
+    const c4 = P(t, 15.9, 0.7) * (1 - P(t, 22.6, 0.5, E.inOut));
+    setVis($("cap4"), c4, `translateX(${(1 - P(t, 15.9, 0.7)) * -30}px)`);
+    const c5 = P(t, 23.0, 0.7) * (1 - P(t, 30.2, 0.6, E.inOut));
+    setVis($("cap5"), c5, `translateX(${(1 - P(t, 23.0, 0.7)) * -30}px)`);
+    const a = P(t, 31.0, 0.7) * (1 - P(t, 33.5, 0.5, E.inOut));
+    setVis($("cap6a"), a, `translateY(${(1 - P(t, 31.0, 0.7)) * 24}px)`);
+    const b = P(t, 33.8, 0.7) * (1 - P(t, 35.9, 0.5, E.inOut));
+    setVis($("cap6b"), b, `translateY(${(1 - P(t, 33.8, 0.7)) * 24}px)`);
+  }
+
+  // ---------- 光标 ----------
+  {
+    const cur = $("cursor");
+    const co = P(t, 15.6, 0.35) * (1 - P(t, 29.8, 0.5));
+    const wp = interpKeys(CURSOR, t, ["x", "y"]);
+    const sp = toScreen(wp.x, wp.y);
+    const click = CLICKS.find((k) => t >= k.t - 0.06 && t < k.t + 0.16);
+    setVis(cur, co, `translate(${sp.x - 4}px, ${sp.y - 3}px) scale(${click ? 0.85 : 1})`);
+    const last = [...CLICKS].reverse().find((k) => t >= k.t);
+    const rip = $("ripple");
+    if (last && t - last.t < 0.6) {
+      const ru = (t - last.t) / 0.6;
+      const cpt = chipPos(last.node, last.chip);
+      const rp = toScreen(cpt.x, cpt.y);
+      setVis(rip, (1 - ru) * 0.9, `translate(${rp.x}px, ${rp.y}px) scale(${0.4 + ru * 1.1})`);
+      rip.style.left = "0px"; rip.style.top = "0px";
+    } else setVis(rip, 0, null);
+  }
+
+  // ---------- 场景 7 ----------
+  {
+    const l = P(t, 36.6, 0.9);
+    setVis($("s7"), t > 36.4 ? 1 : 0, null);
+    const logo = $("logo7");
+    setVis(logo, l, `translateY(${(1 - l) * 40}px) scale(${0.94 + 0.06 * l})`);
+    logo.style.filter = l < 1 ? `blur(${(1 - l) * 10}px)` : "none";
+    const sl = P(t, 37.3, 0.8);
+    setVis($("slogan7"), sl, `translateY(${(1 - sl) * 20}px)`);
+    const u = P(t, 38.0, 0.7, E.back);
+    setVis($("endurl"), P(t, 38.0, 0.4), `scale(${0.85 + 0.15 * u})`);
+    const sub = P(t, 38.6, 0.8);
+    setVis($("endsub"), sub, `translateY(${(1 - sub) * 12}px)`);
+  }
+}
+
+/* ===================== 启动 ===================== */
+window.DURATION = DURATION;
+window.renderFrame = renderFrame;
+window.promoReady = (async () => {
+  build();
+  await document.fonts.ready;
+  await Promise.all(Array.from(document.images).map((img) => img.complete ? null : new Promise((r) => { img.onload = img.onerror = r; })));
+  measureChat();
+  renderFrame(0);
+})();
+
+const params = new URLSearchParams(location.search);
+window.promoReady.then(() => {
+  if (params.has("t")) renderFrame(parseFloat(params.get("t")));
+  else if (params.has("preview")) {
+    const start = performance.now();
+    const loop = (now) => { renderFrame(((now - start) / 1000) % DURATION); requestAnimationFrame(loop); };
+    requestAnimationFrame(loop);
+  }
+});
+</script>
+</body>
+</html>
