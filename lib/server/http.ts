@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { NextResponse } from "next/server";
 import type { BranchMindSession } from "@/lib/server/session";
 import { commitSessionCookie } from "@/lib/server/session";
@@ -153,6 +154,18 @@ export function logApiError(
     name: getObject(error)?.name,
     message: getErrorLogMessage(error),
     stack: error instanceof Error ? error.stack : undefined,
+  });
+
+  // Handled 5xx errors never reach `onRequestError`, so report them here.
+  // No-op when Sentry is not configured. Only identifiers are attached as tags;
+  // the remaining log context is not forwarded.
+  Sentry.captureException(error, {
+    tags: {
+      request_id: requestId,
+      status_code: String(status),
+      error_code: code,
+      ...(typeof context.action === "string" ? { action: context.action } : {}),
+    },
   });
 }
 

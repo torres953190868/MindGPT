@@ -151,6 +151,16 @@ Copy `.env.example` to `.env.local` and fill in the providers you intend to use.
 - `DASHSCOPE_API_KEY` / `GEMINI_API_KEY` — for embeddings.
 - `LLM_PROVIDER` / `LLM_MODEL` — for RAG answer generation; defaults to `AI_PROVIDER`.
 
+### Error Monitoring (Sentry, optional)
+
+- Fully opt-in: with no DSN set, Sentry is never initialized, `next.config.ts` is exported without `withSentryConfig`, and webpack aliases `@sentry/nextjs` to the no-op stub `lib/observability/sentry-noop.ts` (add any new `@sentry/nextjs` import to the stub). Local dev, CI, E2E, and `smoke:prod` need no Sentry env.
+- `NEXT_PUBLIC_SENTRY_DSN` — browser DSN (must be set at build time); also used by server/edge when `SENTRY_DSN` is unset.
+- `SENTRY_DSN` — optional server/edge DSN override.
+- `SENTRY_TRACES_SAMPLE_RATE` / `NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE` — server/browser trace sampling; default `0.1` in production, `0` elsewhere.
+- `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` — build-time source map upload; skipped unless all three are set.
+- Code: `lib/observability/sentry.ts` (pure config + privacy scrubbers), `instrumentation.ts`, `instrumentation-client.ts`, `sentry.server.config.ts`, `sentry.edge.config.ts`, tunnel handler `app/sentry-tunnel/route.ts` (browser events go to same-origin `/monitoring`, so the CSP needs no change). Handled API 5xx errors are reported from `logApiError` in `lib/server/http.ts` with a `request_id` tag.
+- Privacy: never send request bodies, chat/message content, PDF text, cookies, or auth headers. Keep `dataCollection` locked down and Session Replay off.
+
 ### Mock / Test Mode
 
 - `AI_MOCK_MODE=true` — deterministic AI replies for local development, CI, and E2E. Do not use in production.

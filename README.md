@@ -85,6 +85,40 @@ runs indexing inline in the dev server process by default, avoiding Vercel OIDC
 requirements. Set `BRANCHMIND_RAG_QUEUE_MODE=queue` to force queue-only behavior,
 or `BRANCHMIND_RAG_QUEUE_MODE=inline` to force inline processing explicitly.
 
+## Error Monitoring (Sentry)
+
+Sentry (`@sentry/nextjs`) is optional and fully opt-in. Without a DSN it is never
+initialized, the Next.js config is not wrapped, and no network calls are made, so
+local development, CI, E2E, and `npm run smoke:prod` need no Sentry variables.
+
+To enable it, create a Next.js project in Sentry and set these in Vercel (or
+`.env.local`) **before building**, because the browser DSN is inlined at build time:
+
+```bash
+NEXT_PUBLIC_SENTRY_DSN=        # browser + server DSN
+SENTRY_DSN=                    # optional server/edge override
+SENTRY_TRACES_SAMPLE_RATE=     # optional, defaults to 0.1 in production, 0 elsewhere
+NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=  # optional browser override
+# Source map upload (all three required, otherwise upload is skipped):
+SENTRY_AUTH_TOKEN=
+SENTRY_ORG=
+SENTRY_PROJECT=
+```
+
+Reported: uncaught server/edge request errors (`onRequestError` in
+`instrumentation.ts`), handled API 5xx errors (`logApiError` in
+`lib/server/http.ts`, tagged with `request_id` to match the `x-request-id`
+header and server logs), and client errors caught by `app/error.tsx` /
+`app/global-error.tsx`. Browser events are sent to the same-origin `/monitoring`
+tunnel (`app/sentry-tunnel/route.ts`), so the CSP is unchanged and ad-blockers
+don't drop them.
+
+Privacy: request bodies, chat/message content, PDF text, cookies, headers, query
+strings, and user fields other than the internal id are never sent. The SDK's
+`dataCollection` is locked down, `beforeSend` / `beforeBreadcrumb` /
+`beforeSendSpan` scrub events (see `lib/observability/sentry.ts`), console and UI
+breadcrumbs are dropped, and Session Replay is disabled.
+
 ## Database
 
 Apply Supabase migrations in `supabase/migrations`, including:

@@ -19,7 +19,7 @@ Use `AI_MOCK_MODE=true` only for local smoke, CI, and E2E. Production must use S
 - All migrations in `supabase/migrations` must be applied, including `20260711000000_pdf_rag_document_content_hash.sql`.
 - Required configuration: `SUPABASE_SERVICE_ROLE_KEY`, `BRANCHMIND_ADMIN_EMAILS`, and `APP_ORIGIN` (or `ALLOWED_ORIGINS`).
 - Vercel Queues v2beta must be enabled for the project, and production must explicitly set `BRANCHMIND_RAG_QUEUE_MODE=queue`.
-- TODO: monitoring and alerting (Sentry, or Vercel Log Drains plus alert rules) is not built into the codebase and must be set up manually before launch.
+- Error monitoring: set `NEXT_PUBLIC_SENTRY_DSN` (and optionally `SENTRY_DSN`) for the Production environment in Vercel before building, plus `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT` for readable stack traces (source map upload). Sentry is inert without a DSN. Configure Sentry alert rules (new issue, error-rate spike) and, if desired, Vercel Log Drains separately.
 
 ## Release Checklist
 
@@ -29,6 +29,7 @@ Use `AI_MOCK_MODE=true` only for local smoke, CI, and E2E. Production must use S
 4. Run `npm run lint`, `npm run typecheck`, `npm run test`, `npm run build`, `npm run smoke:prod`.
 5. Run `npx playwright install chromium` once on the release runner, then `npm run e2e`.
 6. Verify dashboard alerts for 5xx, 429, AI provider failures, and database write failures.
+7. If Sentry is enabled, confirm a test error appears in Sentry with the correct `environment` and a `request_id` tag (search by the `x-request-id` from a failed response).
 
 ## Backup And Rollback
 

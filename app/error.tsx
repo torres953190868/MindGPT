@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
+import * as Sentry from "@sentry/nextjs";
+import { shouldCaptureBoundaryError } from "@/lib/observability/sentry";
 
 type ErrorPageProps = {
   error: Error & { digest?: string };
@@ -11,6 +13,9 @@ type ErrorPageProps = {
 export default function ErrorPage({ error, reset }: ErrorPageProps) {
   useEffect(() => {
     console.error(error);
+    // No-op unless Sentry is configured; server-render errors (with a digest)
+    // are already reported by `onRequestError`.
+    if (shouldCaptureBoundaryError(error)) Sentry.captureException(error);
   }, [error]);
 
   return (

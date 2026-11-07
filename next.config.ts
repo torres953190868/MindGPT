@@ -1,5 +1,12 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
+import { withSentryConfig, type SentryBuildOptions } from "@sentry/nextjs/config";
+import {
+  SENTRY_TUNNEL_ROUTE,
+  isSentryConfiguredForBuild,
+  isSentrySourceMapUploadEnabled,
+} from "./lib/observability/sentry";
 
 function getArgValue(flags: string[]) {
   for (let index = 0; index < process.argv.length; index += 1) {
@@ -27,6 +34,7 @@ function getDistDir(phase: string) {
 }
 
 const isDev = process.env.NODE_ENV !== "production";
+const sentryEnabled = isSentryConfiguredForBuild(process.env);
 
 // Next.js inline scripts/styles require 'unsafe-inline'; React Refresh in dev
 // additionally requires 'unsafe-eval'. KaTeX ships data: fonts, pdfjs-dist
@@ -97,8 +105,42 @@ const createNextConfig = (phase: string): NextConfig => ({
       ],
     };
 
+    if (!sentryEnabled) {
+      config.resolve = {
+        ...config.resolve,
+        alias: {
+          ...config.resolve?.alias,
+          "@sentry/nextjs$": path.resolve("lib/observability/sentry-noop.ts"),
+        },
+      };
+    }
+
     return config;
   },
 });
 
-export default createNextConfig;
+// Sentry is opt-in: without a DSN the config is exported unwrapped and
+// `@sentry/nextjs` is aliased to a no-op stub above, so local dev, CI, E2E, and
+// smoke builds ship no Sentry code. Browser events go through the same-origin
+// tunnel route, so the CSP `connect-src 'self'` already allows them.
+const sentryBuildOptions: SentryBuildOptions = {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  telemetry: false,
+  tunnelRoute: SENTRY_TUNNEL_ROUTE,
+  widenClientFileUpload: true,
+  // Upload (and then delete) hidden source maps only when CLI credentials exist.
+  sourcemaps: isSentrySourceMapUploadEnabled(process.env) ? undefined : { disable: true },
+  bundleSizeOptimizations: {
+    excludeDebugStatements: true,
+    excludeReplayIframe: true,
+    excludeReplayShadowDom: true,
+    excludeReplayWorker: true,
+  },
+};
+
+export default sentryEnabled
+  ? withSentryConfig(createNextConfig, sentryBuildOptions)
+  : createNextConfig;
