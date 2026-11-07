@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PENDING_PROJECT_SYNC_KEY } from "@/lib/client/pending-project-sync";
 import type { Project } from "@/lib/types";
+import { ReadOnlyStorage, stubBlockedStorageWindow, stubStorageWindow } from "./blocked-storage";
 
 class MemoryStorage implements Storage {
   private values = new Map<string, string>();
@@ -757,5 +758,77 @@ describe("useBranchMindStore regenerate", () => {
     expect(body.expectedNodeUpdatedAt).toBe("2026-01-01T00:00:00.000Z");
     expect(body.userMessageId).toBe("user_b");
     expect(body.assistantMessageId).toBe("assistant_b");
+  });
+});
+
+describe("useBranchMindStore with unavailable browser storage", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubGlobal("document", {
+      addEventListener: vi.fn(),
+      visibilityState: "visible",
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("hydrates projects from the server when storage access is blocked", async () => {
+    stubBlockedStorageWindow();
+    const project = makeProject("project_blocked_storage");
+    const fetchMock = vi.fn(async () => Response.json({ projects: [project] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/projects");
+    expect(useBranchMindStore.getState().aiError).toBeNull();
+    expect(useBranchMindStore.getState().projects.map((item) => item.id)).toEqual([project.id]);
+    expect(useBranchMindStore.getState().pendingProjectSyncs).toEqual({});
+  });
+
+  it("imports legacy projects even when clearing them from storage fails", async () => {
+    const legacyProject = makeProject("project_legacy");
+    stubStorageWindow(
+      new ReadOnlyStorage({
+        "branchmind.projects.v1": JSON.stringify([legacyProject]),
+        "branchmind.activeProjectId.v1": legacyProject.id,
+      }),
+    );
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (input.toString() === "/api/projects/import" && init?.method === "POST") {
+        return Response.json({ projects: [legacyProject] });
+      }
+      throw new Error(`Unexpected request: ${init?.method ?? "GET"} ${input.toString()}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+
+    expect(useBranchMindStore.getState().aiError).toBeNull();
+    expect(useBranchMindStore.getState().activeProjectId).toBe(legacyProject.id);
+  });
+
+  it("reads empty legacy/pending data and ignores writes when storage access is blocked", async () => {
+    stubBlockedStorageWindow();
+    const { clearLegacyProjects, readLegacyProjects } = await import("@/store/branchmind/helpers");
+    const { readPendingNodePositionSyncRecords, writePendingNodePositionSyncRecords } = await import(
+      "@/store/branchmind/sync"
+    );
+
+    expect(readLegacyProjects()).toEqual({ projects: [], activeProjectId: null });
+    expect(() => clearLegacyProjects()).not.toThrow();
+    expect(readPendingNodePositionSyncRecords()).toEqual([]);
+    expect(() => writePendingNodePositionSyncRecords([])).not.toThrow();
+  });
+
+  it("ignores pending node position write failures such as an exceeded quota", async () => {
+    stubStorageWindow(new ReadOnlyStorage());
+    const { writePendingNodePositionSyncRecords } = await import("@/store/branchmind/sync");
+
+    expect(() => writePendingNodePositionSyncRecords([])).not.toThrow();
   });
 });

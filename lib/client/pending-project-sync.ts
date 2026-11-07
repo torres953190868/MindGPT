@@ -97,6 +97,11 @@ function isPendingProjectSyncRecord(value: unknown): value is PendingProjectSync
   );
 }
 
+/**
+ * Throws when storage is unavailable (no window, blocked access, full quota).
+ * Writes intentionally surface that error: `persistPendingSyncRecord` turns it
+ * into `false` so project creation falls back to a direct server request.
+ */
 function getStorage() {
   if (typeof window === "undefined") {
     throw new Error("Browser storage is not available.");
@@ -154,7 +159,13 @@ export function createPendingProjectSyncRecord(
 export function readPendingProjectSyncRecords() {
   if (typeof window === "undefined") return [];
 
-  const raw = window.localStorage.getItem(PENDING_PROJECT_SYNC_KEY);
+  let raw: string | null;
+  try {
+    raw = window.localStorage.getItem(PENDING_PROJECT_SYNC_KEY);
+  } catch {
+    // Storage blocked (e.g. Safari with cookies disabled): no pending records.
+    return [];
+  }
   if (!raw) return [];
 
   try {
