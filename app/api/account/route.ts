@@ -28,6 +28,7 @@ import {
 } from "@/lib/supabase/server";
 import * as projectStore from "@/lib/server/projects-store";
 import { getRagRepository } from "@/lib/server/rag/store";
+import { clearUserMemoryForOwnerSafe } from "@/lib/server/user-memory";
 import { parseJsonBody } from "@/lib/server/validation";
 import { DEFAULT_LANGUAGE, getBranchMindLanguage, type BranchMindLanguage } from "@/lib/language";
 import { z } from "zod";
@@ -369,6 +370,9 @@ async function deleteSupabaseAccountData(userId: string, requestId: string) {
     .eq("session_id", userId);
   if (rateLimitError) logAccountDeletionFailure(requestId, "rate-limits", rateLimitError);
 
+  // Best-effort cleanup of cross-canvas user memory rows.
+  await clearUserMemoryForOwnerSafe(userId);
+
   try {
     const { error } = await supabase.auth.admin.deleteUser(userId);
     if (error) throw error;
@@ -456,6 +460,8 @@ export async function DELETE(request: NextRequest) {
     for (const document of documents) {
       await ragRepo.deleteDocument(document);
     }
+
+    await clearUserMemoryForOwnerSafe(sessionId);
 
     const response = jsonWithSession({ ok: true }, { id: sessionId, isNew: false });
     response.cookies.set({

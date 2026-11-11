@@ -14,11 +14,32 @@ const insertMock = vi.hoisted(() => vi.fn());
 const updateMock = vi.hoisted(() => vi.fn());
 const deleteMock = vi.hoisted(() => vi.fn());
 const fromMock = vi.hoisted(() => vi.fn());
+const rpcMock = vi.hoisted(() => vi.fn());
 const uploadMock = vi.hoisted(() => vi.fn());
 const downloadMock = vi.hoisted(() => vi.fn());
 const createSignedUrlMock = vi.hoisted(() => vi.fn());
 const removeMock = vi.hoisted(() => vi.fn());
 const storageFromMock = vi.hoisted(() => vi.fn());
+const testOverrides = vi.hoisted(() => ({
+  includeRpc: true,
+  ragDataJson: null as string | null,
+}));
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    readFile: (async (...args: Parameters<typeof actual.readFile>) => {
+      if (
+        testOverrides.ragDataJson !== null &&
+        String(args[0]).endsWith("branchmind-rag.json")
+      ) {
+        return testOverrides.ragDataJson;
+      }
+      return actual.readFile(...args);
+    }) as typeof actual.readFile,
+  };
+});
 
 vi.mock("@/lib/ids", () => ({
   createId: createIdMock,
@@ -27,6 +48,17 @@ vi.mock("@/lib/ids", () => ({
 vi.mock("@/lib/supabase/server", () => ({
   getSupabaseAdminClient: () => ({
     from: fromMock,
+    ...(testOverrides.includeRpc
+      ? {
+          rest: { endpoint: "mock-rest" },
+          rpc(this: { rest?: unknown }, fn: string, args: Record<string, unknown>) {
+            if (!this?.rest) {
+              throw new Error("Supabase rpc called with unbound receiver");
+            }
+            return rpcMock(fn, args);
+          },
+        }
+      : {}),
     storage: {
       from: storageFromMock,
     },
@@ -88,11 +120,14 @@ describe("rag store", () => {
     updateMock.mockReset();
     deleteMock.mockReset();
     fromMock.mockReset();
+    rpcMock.mockReset();
     uploadMock.mockReset();
     downloadMock.mockReset();
     createSignedUrlMock.mockReset();
     removeMock.mockReset();
     storageFromMock.mockReset();
+    testOverrides.includeRpc = true;
+    testOverrides.ragDataJson = null;
 
     createIdMock.mockReturnValue("doc_storage");
     eqMock.mockResolvedValue({ count: 7, error: null });
@@ -404,5 +439,285 @@ describe("rag store", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  describe("matchChunks", () => {
+    it("pushes vector similarity matching to Supabase match_document_chunks RPC without downloading embeddings", async () => {
+      rpcMock.mockResolvedValue({
+        data: [
+          {
+            id: "chunk_2",
+            document_id: "doc_rpc",
+            section_id: "sec_1",
+            chunk_index: 2,
+            content: "Matched passage about vector indexes",
+            content_hash: "hash_2",
+            page_start: 4,
+            page_end: 5,
+            heading_path: ["Chapter 2", "2.1 Indexing"],
+            token_count: 48,
+            embedding_model: "text-embedding-v4",
+            chunk_version: "heading-recursive-v1",
+            metadata: { source: "pdf" },
+            similarity: 0.9125,
+          },
+        ],
+        error: null,
+      });
+      const { getRagRepository } = await import("@/lib/server/rag/store");
+
+      const matches = await getRagRepository().matchChunks(
+        "doc_rpc",
+        [0.25, -0.5, 0.75],
+        12,
+      );
+
+      expect(rpcMock).toHaveBeenCalledTimes(1);
+      expect(rpcMock).toHaveBeenCalledWith("match_document_chunks", {
+        match_document_id: "doc_rpc",
+        query_embedding: "[0.25,-0.5,0.75]",
+        match_count: 12,
+      });
+      expect(fromMock).not.toHaveBeenCalled();
+      expect(matches).toEqual([
+        {
+          chunk: {
+            id: "chunk_2",
+            documentId: "doc_rpc",
+            sectionId: "sec_1",
+            parentChunkId: null,
+            chunkIndex: 2,
+            content: "Matched passage about vector indexes",
+            contentHash: "hash_2",
+            pageStart: 4,
+            pageEnd: 5,
+            headingPath: ["Chapter 2", "2.1 Indexing"],
+            tokenCount: 48,
+            charStart: null,
+            charEnd: null,
+            embedding: null,
+            embeddingModel: "text-embedding-v4",
+            chunkVersion: "heading-recursive-v1",
+            metadata: { source: "pdf" },
+            createdAt: "",
+          },
+          similarity: 0.9125,
+        },
+      ]);
+    });
+
+    it.each([
+      {
+        code: "PGRST202",
+        message:
+          "Could not find the function public.match_document_chunks in the schema cache",
+      },
+      {
+        code: "42883",
+        message:
+          "function public.match_document_chunks(text, vector, integer) does not exist",
+      },
+    ])(
+      "falls back to getChunks + local cosine similarity when match_document_chunks RPC is missing ($code)",
+      async (rpcError) => {
+        rpcMock.mockResolvedValue({ data: null, error: rpcError });
+        const orderMock = vi.fn().mockResolvedValue({
+          data: [
+            {
+              id: "chunk_low",
+              document_id: "doc_fallback",
+              section_id: null,
+              parent_chunk_id: null,
+              chunk_index: 0,
+              content: "Orthogonal chunk",
+              content_hash: "hash_low",
+              page_start: 1,
+              page_end: 1,
+              heading_path: [],
+              token_count: 10,
+              char_start: 0,
+              char_end: 16,
+              embedding: [0, 1],
+              embedding_model: "mock",
+              chunk_version: "1",
+              metadata: {},
+              created_at: "2026-01-01T00:00:00.000Z",
+            },
+            {
+              id: "chunk_high",
+              document_id: "doc_fallback",
+              section_id: null,
+              parent_chunk_id: null,
+              chunk_index: 1,
+              content: "Aligned chunk",
+              content_hash: "hash_high",
+              page_start: 2,
+              page_end: 2,
+              heading_path: ["Intro"],
+              token_count: 10,
+              char_start: 0,
+              char_end: 13,
+              embedding: [1, 0],
+              embedding_model: "mock",
+              chunk_version: "1",
+              metadata: {},
+              created_at: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+          error: null,
+        });
+        selectMock.mockReturnValue({
+          eq: vi.fn(() => ({ order: orderMock })),
+        });
+        const { getRagRepository } = await import("@/lib/server/rag/store");
+
+        const matches = await getRagRepository().matchChunks(
+          "doc_fallback",
+          [1, 0],
+          1,
+        );
+
+        expect(matches).toHaveLength(1);
+        expect(matches[0].chunk.id).toBe("chunk_high");
+        expect(matches[0].similarity).toBeCloseTo(1, 5);
+      },
+    );
+
+    it("returns [] immediately on zero RPC rows when countChunks is 0", async () => {
+      rpcMock.mockResolvedValue({ data: [], error: null });
+      eqMock.mockResolvedValue({ count: 0, error: null });
+      const { getRagRepository } = await import("@/lib/server/rag/store");
+
+      const matches = await getRagRepository().matchChunks("doc_empty", [1, 0], 10);
+
+      expect(matches).toEqual([]);
+      expect(selectMock).toHaveBeenCalledTimes(1);
+      expect(selectMock).toHaveBeenCalledWith("id", {
+        count: "exact",
+        head: true,
+      });
+    });
+
+    it("loads up to matchCount unembedded chunks without selecting embedding when RPC returns zero rows and countChunks > 0", async () => {
+      rpcMock.mockResolvedValue({ data: [], error: null });
+      const limitMock = vi.fn().mockResolvedValue({
+        data: [
+          {
+            id: "chunk_unembedded",
+            document_id: "doc_unembedded",
+            section_id: null,
+            parent_chunk_id: null,
+            chunk_index: 0,
+            content: "Chunk stored without vector",
+            content_hash: "hash_0",
+            page_start: 1,
+            page_end: 1,
+            heading_path: ["Section 1"],
+            token_count: 14,
+            char_start: 0,
+            char_end: 27,
+            embedding_model: null,
+            chunk_version: "heading-recursive-v1",
+            metadata: {},
+            created_at: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+        error: null,
+      });
+      const orderMock = vi.fn(() => ({ limit: limitMock }));
+
+      selectMock.mockImplementation(
+        (columns: string, options?: { count?: string; head?: boolean }) => {
+          if (options?.head) {
+            return {
+              eq: vi.fn().mockResolvedValue({ count: 3, error: null }),
+            };
+          }
+          return {
+            eq: vi.fn(() => ({ order: orderMock })),
+          };
+        },
+      );
+      const { getRagRepository } = await import("@/lib/server/rag/store");
+
+      const matches = await getRagRepository().matchChunks(
+        "doc_unembedded",
+        [1, 0],
+        8,
+      );
+
+      expect(selectMock).toHaveBeenCalledTimes(2);
+      const fallbackSelectColumns = String(selectMock.mock.calls[1][0]);
+      expect(fallbackSelectColumns.split(",")).not.toContain("embedding");
+      expect(fallbackSelectColumns).toContain("embedding_model");
+      expect(orderMock).toHaveBeenCalledWith("chunk_index");
+      expect(limitMock).toHaveBeenCalledWith(8);
+      expect(matches).toEqual([
+        {
+          chunk: expect.objectContaining({
+            id: "chunk_unembedded",
+            documentId: "doc_unembedded",
+            embedding: null,
+            headingPath: ["Section 1"],
+          }),
+          similarity: 0,
+        },
+      ]);
+    });
+
+    it("orders FileRagRepository.matchChunks by descending cosine similarity with chunkIndex tie-breaking and slices matchCount", async () => {
+      process.env.BRANCHMIND_RAG_BACKEND = "file";
+      const makeStoredChunk = (
+        id: string,
+        documentId: string,
+        chunkIndex: number,
+        embedding: number[] | null,
+      ): RagChunk => ({
+        id,
+        documentId,
+        sectionId: null,
+        parentChunkId: null,
+        chunkIndex,
+        content: `Content ${id}`,
+        contentHash: `hash_${id}`,
+        pageStart: 1,
+        pageEnd: 1,
+        headingPath: [],
+        tokenCount: 10,
+        charStart: 0,
+        charEnd: 10,
+        embedding,
+        embeddingModel: "mock",
+        chunkVersion: "heading-recursive-v1",
+        metadata: {},
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+
+      testOverrides.ragDataJson = JSON.stringify({
+        version: 1,
+        documents: [],
+        pages: [],
+        sections: [],
+        chunks: [
+          makeStoredChunk("other_doc_best", "doc_other", 0, [1, 0]),
+          makeStoredChunk("tie_later", "doc_file", 5, [0.6, 0.8]),
+          makeStoredChunk("best", "doc_file", 2, [1, 0]),
+          makeStoredChunk("tie_earlier", "doc_file", 1, [0.6, 0.8]),
+          makeStoredChunk("worst", "doc_file", 0, [-1, 0]),
+        ],
+      });
+      const { getRagRepository } = await import("@/lib/server/rag/store");
+
+      const matches = await getRagRepository().matchChunks("doc_file", [1, 0], 3);
+
+      expect(matches.map((item) => item.chunk.id)).toEqual([
+        "best",
+        "tie_earlier",
+        "tie_later",
+      ]);
+      expect(matches[0].similarity).toBeCloseTo(1, 5);
+      expect(matches[1].similarity).toBeCloseTo(0.6, 5);
+      expect(matches[2].similarity).toBeCloseTo(0.6, 5);
+    });
   });
 });

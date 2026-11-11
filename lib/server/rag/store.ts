@@ -17,15 +17,19 @@ import {
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { PDF_PARSER_VERSION, DEFAULT_CHUNK_VERSION } from "./config";
 import { RagError } from "./errors";
+import { cosineSimilarity } from "./retriever";
 import { estimateTokenCount } from "./text";
 import type {
   ParsedDocument,
   RagChunk,
+  RagChunkMatch,
   RagDocument,
   RagPage,
   RagSection,
   RagUpload,
 } from "./types";
+
+export { cosineSimilarity } from "./retriever";
 
 type DocumentRow = Database["public"]["Tables"]["documents"]["Row"];
 type DocumentInsert = Database["public"]["Tables"]["documents"]["Insert"];
@@ -35,6 +39,25 @@ type SectionRow = Database["public"]["Tables"]["document_sections"]["Row"];
 type SectionInsert = Database["public"]["Tables"]["document_sections"]["Insert"];
 type ChunkRow = Database["public"]["Tables"]["document_chunks"]["Row"];
 type ChunkInsert = Database["public"]["Tables"]["document_chunks"]["Insert"];
+type MatchDocumentChunkRow = {
+  id: string;
+  document_id: string;
+  section_id: string | null;
+  chunk_index: number;
+  content: string;
+  content_hash: string;
+  page_start: number;
+  page_end: number;
+  heading_path: Json;
+  token_count: number;
+  embedding_model: string | null;
+  chunk_version: string;
+  metadata: Json;
+  similarity: number | null;
+};
+
+const CHUNK_COLUMNS_WITHOUT_EMBEDDING =
+  "id,document_id,section_id,parent_chunk_id,chunk_index,content,content_hash,page_start,page_end,heading_path,token_count,char_start,char_end,embedding_model,chunk_version,metadata,created_at";
 
 type RagDataFile = {
   version: 1;
@@ -110,6 +133,11 @@ export type RagRepository = {
   replaceChunks: (documentId: string, chunks: RagChunk[]) => Promise<RagChunk[]>;
   countChunks: (documentId: string) => Promise<number>;
   getChunks: (documentId: string) => Promise<RagChunk[]>;
+  matchChunks: (
+    documentId: string,
+    queryEmbedding: number[],
+    matchCount?: number,
+  ) => Promise<RagChunkMatch[]>;
   transferOwner: (fromUserId: string, toUserId: string) => Promise<number>;
 };
 
@@ -138,6 +166,19 @@ type SupabaseErrorLike = {
 function isSupabaseQueuedStatusConstraintError(error: SupabaseErrorLike) {
   const text = `${error.message} ${error.details ?? ""}`;
   return error.code === "23514" && /documents_status_check/i.test(text);
+}
+
+function isMissingFunctionError(error: SupabaseErrorLike | null) {
+  if (!error) return false;
+  const text = [error.message, error.details, error.hint]
+    .filter(Boolean)
+    .join(" ");
+  return Boolean(
+    error.code === "42883" ||
+      error.code === "PGRST202" ||
+      (text &&
+        /function .* does not exist|could not find .* function/i.test(text)),
+  );
 }
 
 function isSupabaseSchemaError(error: SupabaseErrorLike) {
@@ -337,6 +378,59 @@ function toChunk(row: ChunkRow): RagChunk {
     metadata: row.metadata,
     createdAt: row.created_at,
   };
+}
+
+function toMatchedChunk(row: MatchDocumentChunkRow): RagChunkMatch {
+  return {
+    chunk: {
+      id: row.id,
+      documentId: row.document_id,
+      sectionId: row.section_id,
+      parentChunkId: null,
+      chunkIndex: row.chunk_index,
+      content: row.content,
+      contentHash: row.content_hash,
+      pageStart: row.page_start,
+      pageEnd: row.page_end,
+      headingPath: toStringArray(row.heading_path),
+      tokenCount: row.token_count,
+      charStart: null,
+      charEnd: null,
+      embedding: null,
+      embeddingModel: row.embedding_model,
+      chunkVersion: row.chunk_version,
+      metadata: row.metadata,
+      createdAt: "",
+    },
+    similarity:
+      typeof row.similarity === "number" && Number.isFinite(row.similarity)
+        ? row.similarity
+        : 0,
+  };
+}
+
+function normalizeMatchCount(matchCount = 24): number {
+  if (!Number.isFinite(matchCount)) return 24;
+  return Math.max(1, Math.floor(matchCount));
+}
+
+function matchChunksLocally(
+  chunks: RagChunk[],
+  queryEmbedding: number[],
+  matchCount: number,
+): RagChunkMatch[] {
+  const limit = normalizeMatchCount(matchCount);
+  return chunks
+    .map((chunk): RagChunkMatch => ({
+      chunk,
+      similarity: cosineSimilarity(chunk.embedding, queryEmbedding),
+    }))
+    .sort(
+      (left, right) =>
+        right.similarity - left.similarity ||
+        left.chunk.chunkIndex - right.chunk.chunkIndex,
+    )
+    .slice(0, limit);
 }
 
 function pageToInsert(page: RagPage): PageInsert {
@@ -737,6 +831,18 @@ class FileRagRepository implements RagRepository {
     return data.chunks.filter((chunk) => chunk.documentId === documentId).length;
   }
 
+  async matchChunks(
+    documentId: string,
+    queryEmbedding: number[],
+    matchCount = 24,
+  ) {
+    const data = await readDataFile();
+    const documentChunks = data.chunks.filter(
+      (chunk) => chunk.documentId === documentId,
+    );
+    return matchChunksLocally(documentChunks, queryEmbedding, matchCount);
+  }
+
   async transferOwner(fromUserId: string, toUserId: string) {
     if (fromUserId === toUserId) return 0;
 
@@ -1112,6 +1218,69 @@ class SupabaseRagRepository implements RagRepository {
       .eq("document_id", documentId);
     assertNoError(error, "count document chunks");
     return count ?? 0;
+  }
+
+  async matchChunks(
+    documentId: string,
+    queryEmbedding: number[],
+    matchCount = 24,
+  ): Promise<RagChunkMatch[]> {
+    const limit = normalizeMatchCount(matchCount);
+    const client = getSupabaseAdminClient() as ReturnType<
+      typeof getSupabaseAdminClient
+    > & {
+      rpc?: unknown;
+    };
+
+    if (typeof client.rpc !== "function") {
+      const allChunks = await this.getChunks(documentId);
+      return matchChunksLocally(allChunks, queryEmbedding, limit);
+    }
+
+    const rpc = client.rpc.bind(client) as unknown as (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => Promise<{
+      data: MatchDocumentChunkRow[] | null;
+      error: SupabaseErrorLike | null;
+    }>;
+    const { data, error } = await rpc("match_document_chunks", {
+      match_document_id: documentId,
+      query_embedding: `[${queryEmbedding.join(",")}]`,
+      match_count: limit,
+    });
+
+    if (error) {
+      if (isMissingFunctionError(error)) {
+        const allChunks = await this.getChunks(documentId);
+        return matchChunksLocally(allChunks, queryEmbedding, limit);
+      }
+      assertNoError(error, "match document chunks");
+    }
+
+    const rows = data ?? [];
+    if (rows.length > 0) {
+      return rows.map(toMatchedChunk);
+    }
+
+    const totalChunks = await this.countChunks(documentId);
+    if (totalChunks === 0) {
+      return [];
+    }
+
+    const { data: unembeddedRows, error: unembeddedError } =
+      await getSupabaseAdminClient()
+        .from("document_chunks")
+        .select(CHUNK_COLUMNS_WITHOUT_EMBEDDING)
+        .eq("document_id", documentId)
+        .order("chunk_index")
+        .limit(limit);
+    assertNoError(unembeddedError, "read unembedded document chunks");
+
+    return (unembeddedRows ?? []).map((row) => ({
+      chunk: toChunk({ ...row, embedding: null }),
+      similarity: 0,
+    }));
   }
 
   async transferOwner(fromUserId: string, toUserId: string) {

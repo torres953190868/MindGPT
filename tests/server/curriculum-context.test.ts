@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  archiveCurriculumForOwner,
   createCurriculumForOwner,
   createDraftVersionForOwner,
   publishVersionForOwner,
@@ -187,5 +188,86 @@ describe("getWorkspaceCurriculumContextsForOwner", () => {
     );
 
     expect(contexts).toHaveLength(2);
+  });
+
+  it("resolves inherited published curricula when explicit attachments are empty", async () => {
+    const inherited = await createPublishedCurriculum("Inherited Course");
+
+    const contexts = await getWorkspaceCurriculumContextsForOwner(
+      OWNER,
+      [],
+      "testing",
+      {
+        inheritedAttachments: [curriculumAttachment(inherited.curriculumId)],
+      },
+    );
+
+    expect(contexts).toHaveLength(1);
+    expect(contexts[0]).toMatchObject({
+      curriculumId: inherited.curriculumId,
+      title: "Inherited Course",
+    });
+  });
+
+  it("prioritizes explicit curricula and deduplicates inherited attachments within the cap of two", async () => {
+    const explicitCourse = await createPublishedCurriculum("Explicit Course");
+    const inheritedA = await createPublishedCurriculum("Inherited A");
+    const inheritedB = await createPublishedCurriculum("Inherited B");
+
+    const contexts = await getWorkspaceCurriculumContextsForOwner(
+      OWNER,
+      [curriculumAttachment(explicitCourse.curriculumId)],
+      "testing",
+      {
+        inheritedAttachments: [
+          curriculumAttachment(explicitCourse.curriculumId),
+          curriculumAttachment(inheritedA.curriculumId),
+          curriculumAttachment(inheritedB.curriculumId),
+        ],
+      },
+    );
+
+    expect(contexts.map((c) => c.curriculumId)).toEqual([
+      explicitCourse.curriculumId,
+      inheritedA.curriculumId,
+    ]);
+  });
+
+  it("silently skips missing, archived, or unpublished inherited curricula without throwing 404 or 409", async () => {
+    const archivedCourse = await createPublishedCurriculum("Archived Course");
+    await archiveCurriculumForOwner(OWNER, archivedCourse.curriculumId);
+
+    const unpublishedCourse = await createCurriculumForOwner(OWNER, {
+      title: "Unpublished Inherited Course",
+      subject: "Deep Learning",
+      learningGoal: "Still in draft.",
+    });
+    await createDraftVersionForOwner(
+      OWNER,
+      unpublishedCourse.id,
+      createValidCurriculumDraft(),
+    );
+
+    const validInherited = await createPublishedCurriculum("Valid Ancestor Course");
+
+    const contexts = await getWorkspaceCurriculumContextsForOwner(
+      OWNER,
+      [],
+      "testing",
+      {
+        inheritedAttachments: [
+          curriculumAttachment("cur_deleted_missing"),
+          curriculumAttachment(archivedCourse.curriculumId),
+          curriculumAttachment(unpublishedCourse.id),
+          curriculumAttachment(validInherited.curriculumId),
+        ],
+      },
+    );
+
+    expect(contexts).toHaveLength(1);
+    expect(contexts[0]).toMatchObject({
+      curriculumId: validInherited.curriculumId,
+      title: "Valid Ancestor Course",
+    });
   });
 });

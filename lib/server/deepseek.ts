@@ -3,6 +3,7 @@ import {
   delay,
   DeepSeekError,
   getDeepSeekContent,
+  getDeepSeekFinishReason,
   getMockReply,
   isAbortError,
   isDeepSeekMockMode,
@@ -118,8 +119,10 @@ export async function requestDeepSeekReply(
           });
         }
 
+        const truncatedByLength = getDeepSeekFinishReason(data) === "length";
+
         return withReplyCitations(
-          parseReply(content, body.instruction),
+          parseReply(content, body.instruction, { truncatedByLength }),
           body.documentContexts,
         );
       } catch (error) {

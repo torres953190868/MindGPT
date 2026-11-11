@@ -31,6 +31,10 @@ import {
   getOrCreateSession,
   type BranchMindSession,
 } from "@/lib/server/session";
+import {
+  recordCanvasTurnMemoryForOwner,
+  resolveUserMemorySlotForOwner,
+} from "@/lib/server/user-memory";
 import { parseJsonBody } from "@/lib/server/validation";
 
 type NodesStreamRouteContext = {
@@ -102,16 +106,48 @@ export async function POST(request: NextRequest, context: NodesStreamRouteContex
       principal.id,
       projectId,
       body.parentId,
+      {
+        mode: body.mode,
+        hasSourceText: Boolean(body.sourceText?.trim()),
+        explicitAttachments: body.attachments,
+        instruction: body.instruction,
+        sourceText: body.sourceText,
+      },
     );
-    const documentContexts = await getWorkspaceDocumentContextsForOwner(
+    const fallbackQuery = [body.instruction, body.sourceText]
+      .filter(Boolean)
+      .join("\n\n");
+    const retrievalQuery = contextData.retrievalQuery ?? fallbackQuery;
+    const inheritedContextOptions = contextData.inheritedAttachments?.length
+      ? { inheritedAttachments: contextData.inheritedAttachments }
+      : undefined;
+    const documentContexts = inheritedContextOptions
+      ? await getWorkspaceDocumentContextsForOwner(
+          principal.id,
+          body.attachments,
+          retrievalQuery,
+          inheritedContextOptions,
+        )
+      : await getWorkspaceDocumentContextsForOwner(
+          principal.id,
+          body.attachments,
+          retrievalQuery,
+        );
+    const curriculumContexts = inheritedContextOptions
+      ? await getWorkspaceCurriculumContextsForOwner(
+          principal.id,
+          body.attachments,
+          retrievalQuery,
+          inheritedContextOptions,
+        )
+      : await getWorkspaceCurriculumContextsForOwner(
+          principal.id,
+          body.attachments,
+          retrievalQuery,
+        );
+    const userMemory = await resolveUserMemorySlotForOwner(
       principal.id,
-      body.attachments,
-      [body.instruction, body.sourceText].filter(Boolean).join("\n\n"),
-    );
-    const curriculumContexts = await getWorkspaceCurriculumContextsForOwner(
-      principal.id,
-      body.attachments,
-      [body.instruction, body.sourceText].filter(Boolean).join("\n\n"),
+      retrievalQuery,
     );
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
@@ -131,6 +167,8 @@ export async function POST(request: NextRequest, context: NodesStreamRouteContex
             modelSelection: body.modelSelection,
             userPlan,
             skill: body.skill,
+            treeContext: contextData.treeContext,
+            ...(userMemory ? { userMemory } : {}),
           })) {
             if (event.type === "delta") {
               controller.enqueue(encodeSse("delta", {
@@ -149,6 +187,16 @@ export async function POST(request: NextRequest, context: NodesStreamRouteContex
               body.attachments,
             );
             controller.enqueue(encodeSse("complete", result));
+            await recordCanvasTurnMemoryForOwner({
+              ownerId: principal.id,
+              projectId,
+              nodeId: result.node.id,
+              mode: body.mode,
+              instruction: body.instruction,
+              sourceText: body.sourceText,
+              reply: event.reply,
+              contextSummaries: contextData.contextSummaries,
+            });
           }
         } catch (error) {
           const status = getSafeErrorStatus(error);

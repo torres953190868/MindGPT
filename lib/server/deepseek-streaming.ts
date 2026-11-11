@@ -3,6 +3,7 @@ import {
   createProviderHttpError,
   deepSeekStreamChunkSchema,
   DeepSeekError,
+  getJsonStringValuePrefix,
   getMockReply,
   isAbortError,
   isDeepSeekMockMode,
@@ -20,6 +21,8 @@ import {
   type LlmRuntimeProvider,
 } from "@/lib/server/llm-router";
 import type { MockReply } from "@/lib/types";
+
+export { getJsonStringValuePrefix };
 
 export type DeepSeekStreamingEvent =
   | { type: "delta"; contentDelta: string }
@@ -60,75 +63,6 @@ async function* streamMockReply(
   }
 
   yield { type: "complete", reply };
-}
-
-function readJsonStringPrefix(input: string, start: number) {
-  let value = "";
-
-  for (let index = start + 1; index < input.length; index += 1) {
-    const character = input[index];
-
-    if (character === "\"") {
-      return { value, complete: true, endIndex: index };
-    }
-
-    if (character !== "\\") {
-      value += character;
-      continue;
-    }
-
-    const escaped = input[index + 1];
-    if (!escaped) return { value, complete: false, endIndex: input.length };
-
-    if (escaped === "u") {
-      const hex = input.slice(index + 2, index + 6);
-      if (hex.length < 4 || !/^[0-9a-fA-F]{4}$/.test(hex)) {
-        return { value, complete: false, endIndex: input.length };
-      }
-      value += String.fromCharCode(Number.parseInt(hex, 16));
-      index += 5;
-      continue;
-    }
-
-    const escapes: Record<string, string> = {
-      "\"": "\"",
-      "\\": "\\",
-      "/": "/",
-      b: "\b",
-      f: "\f",
-      n: "\n",
-      r: "\r",
-      t: "\t",
-    };
-    value += escapes[escaped] ?? escaped;
-    index += 1;
-  }
-
-  return { value, complete: false, endIndex: input.length };
-}
-
-export function getJsonStringValuePrefix(rawJson: string, key: string) {
-  for (let index = 0; index < rawJson.length; index += 1) {
-    if (rawJson[index] !== "\"") continue;
-
-    const token = readJsonStringPrefix(rawJson, index);
-    if (!token.complete) return null;
-
-    let cursor = token.endIndex + 1;
-    while (/\s/.test(rawJson[cursor] ?? "")) cursor += 1;
-    if (token.value !== key || rawJson[cursor] !== ":") {
-      index = token.endIndex;
-      continue;
-    }
-
-    cursor += 1;
-    while (/\s/.test(rawJson[cursor] ?? "")) cursor += 1;
-    if (rawJson[cursor] !== "\"") return null;
-
-    return readJsonStringPrefix(rawJson, cursor);
-  }
-
-  return null;
 }
 
 async function fetchDeepSeekStream(
@@ -188,7 +122,14 @@ async function readErrorResponse(response: Response) {
   return data === null ? { error: { message: "DeepSeek API call failed." } } : parseDeepSeekResponse(data);
 }
 
-async function* readDeepSeekContentDeltas(stream: ReadableStream<Uint8Array>) {
+type DeepSeekStreamPiece = {
+  contentDelta?: string;
+  finishReason?: string;
+};
+
+async function* readDeepSeekContentDeltas(
+  stream: ReadableStream<Uint8Array>,
+): AsyncGenerator<DeepSeekStreamPiece> {
   for await (const data of readSseData(stream)) {
     if (data === "[DONE]") return;
 
@@ -218,8 +159,16 @@ async function* readDeepSeekContentDeltas(stream: ReadableStream<Uint8Array>) {
       );
     }
 
-    const contentDelta = parsed.data.choices?.[0]?.delta?.content;
-    if (contentDelta) yield contentDelta;
+    const choice = parsed.data.choices?.[0];
+    const contentDelta = choice?.delta?.content ?? undefined;
+    const finishReason =
+      typeof choice?.finish_reason === "string" && choice.finish_reason.trim()
+        ? choice.finish_reason.trim()
+        : undefined;
+
+    if (contentDelta || finishReason) {
+      yield { contentDelta, finishReason };
+    }
   }
 }
 
@@ -278,6 +227,7 @@ export async function* streamDeepSeekReply(
       let emittedDelta = false;
       let rawReply = "";
       let visibleContent = "";
+      let finishReason: string | null = null;
 
       try {
         const response = await fetchDeepSeekStream(
@@ -301,8 +251,15 @@ export async function* streamDeepSeekReply(
           });
         }
 
-        for await (const rawDelta of readDeepSeekContentDeltas(response.body)) {
-          rawReply += rawDelta;
+        for await (const piece of readDeepSeekContentDeltas(response.body)) {
+          if (piece.finishReason) {
+            finishReason = piece.finishReason;
+          }
+          if (!piece.contentDelta) {
+            continue;
+          }
+
+          rawReply += piece.contentDelta;
           const contentPrefix = getJsonStringValuePrefix(rawReply, "content");
           if (!contentPrefix || contentPrefix.value.length <= visibleContent.length) {
             continue;
@@ -319,6 +276,7 @@ export async function* streamDeepSeekReply(
             rawReply,
             body.instruction,
             visibleContent,
+            { truncatedByLength: finishReason === "length" },
           ),
           body.documentContexts,
         );

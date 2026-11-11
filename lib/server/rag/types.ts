@@ -122,6 +122,11 @@ export type RagUpload = {
   userId: string | null;
 };
 
+export type RagChunkMatch = {
+  chunk: RagChunk;
+  similarity: number;
+};
+
 export type RetrievedChunk = {
   chunk: RagChunk;
   score: number;

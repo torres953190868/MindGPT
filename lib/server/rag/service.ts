@@ -2,10 +2,23 @@ import { createHash } from "node:crypto";
 import type { ChatAttachment, ChatDocumentContext } from "@/lib/types";
 import { generateGroundedAnswer } from "./answer";
 import { getMaxPdfSizeBytes } from "./config";
+import { getEmbeddingProvider } from "./embeddings";
 import { RagError } from "./errors";
-import { retrieveRelevantChunks } from "./retriever";
-import { getRagRepository, requireOwnedDocument } from "./store";
+import { buildWorkspaceDocumentOutline } from "./outline";
+import {
+  computeRetrievalCandidateCount,
+  rankMatchedChunks,
+  retrieveRelevantChunks,
+} from "./retriever";
+import { getRagRepository, requireOwnedDocument, type RagRepository } from "./store";
 import { compactText } from "./text";
+import type {
+  RagChunk,
+  RagChunkMatch,
+  RagDocument,
+  RagSection,
+  RetrievedChunk,
+} from "./types";
 
 const MAX_WORKSPACE_CONTEXT_DOCUMENTS = 3;
 const MAX_WORKSPACE_CONTEXT_SNIPPETS = 6;
@@ -173,6 +186,22 @@ export async function getDocumentChunksForOwner(userId: string, documentId: stri
   return repository.getChunks(documentId);
 }
 
+function getRepositoryMatchChunks(repository: RagRepository) {
+  return (repository as Partial<Pick<RagRepository, "matchChunks">>).matchChunks;
+}
+
+async function loadRepositorySections(
+  repository: RagRepository,
+  documentId: string,
+): Promise<RagSection[]> {
+  const getSections = (repository as Partial<Pick<RagRepository, "getSections">>)
+    .getSections;
+  if (typeof getSections !== "function") {
+    return [];
+  }
+  return (await getSections.call(repository, documentId)) ?? [];
+}
+
 export async function queryDocumentForOwner(
   userId: string,
   documentId: string,
@@ -190,37 +219,228 @@ export async function queryDocumentForOwner(
     });
   }
 
+  const matchChunks = getRepositoryMatchChunks(repository);
+  if (typeof matchChunks === "function") {
+    const queryEmbedding = await getEmbeddingProvider().embedQuery(question);
+    const candidateCount = computeRetrievalCandidateCount({ topK });
+    const [sections, matches] = await Promise.all([
+      loadRepositorySections(repository, documentId),
+      matchChunks.call(repository, documentId, queryEmbedding, candidateCount),
+    ]);
+    const retrieved = rankMatchedChunks(question, matches, { topK });
+    return generateGroundedAnswer(question, retrieved, sections, options);
+  }
+
   const [sections, chunks] = await Promise.all([
-    repository.getSections(documentId),
+    loadRepositorySections(repository, documentId),
     repository.getChunks(documentId),
   ]);
   const retrieved = await retrieveRelevantChunks(question, chunks, { topK });
   return generateGroundedAnswer(question, retrieved, sections, options);
 }
 
-export async function getWorkspaceDocumentContextsForOwner(
-  userId: string,
-  attachments: ChatAttachment[],
-  question: string,
-): Promise<ChatDocumentContext[]> {
-  const documentIds = Array.from(
+function collectAttachmentDocumentIds(attachments: ChatAttachment[]): string[] {
+  return Array.from(
     new Set(
       attachments
         .map((attachment) => attachment.documentId?.trim())
         .filter((documentId): documentId is string => Boolean(documentId)),
     ),
-  ).slice(0, MAX_WORKSPACE_CONTEXT_DOCUMENTS);
+  );
+}
 
-  if (documentIds.length === 0) return [];
+type ResolvedWorkspaceDocument = {
+  documentId: string;
+  document: RagDocument;
+  sections: RagSection[];
+  chunks: RagChunk[];
+};
+
+type ResolvedMatchedWorkspaceDocument = {
+  documentId: string;
+  document: RagDocument;
+  sections: RagSection[];
+  matches: RagChunkMatch[];
+};
+
+function formatWorkspaceDocumentContext(
+  documentId: string,
+  document: RagDocument,
+  sections: RagSection[],
+  retrieved: RetrievedChunk[],
+): ChatDocumentContext {
+  const outline = buildWorkspaceDocumentOutline(sections);
+
+  return {
+    documentId,
+    fileName: document.fileName,
+    title: document.title,
+    ...(outline ? { outline } : {}),
+    snippets: retrieved.map((item) => ({
+      chunkId: item.chunk.id,
+      pageStart: item.chunk.pageStart,
+      pageEnd: item.chunk.pageEnd,
+      headingPath: item.chunk.headingPath,
+      content: compactText(item.chunk.content, MAX_WORKSPACE_SNIPPET_LENGTH),
+      score: item.score,
+    })),
+  };
+}
+
+export type WorkspaceDocumentContextOptions = {
+  inheritedAttachments?: ChatAttachment[];
+};
+
+export async function getWorkspaceDocumentContextsForOwner(
+  userId: string,
+  attachments: ChatAttachment[],
+  question: string,
+  options?: WorkspaceDocumentContextOptions,
+): Promise<ChatDocumentContext[]> {
+  const allExplicitIds = collectAttachmentDocumentIds(attachments);
+  const explicitIds = allExplicitIds.slice(0, MAX_WORKSPACE_CONTEXT_DOCUMENTS);
+  const explicitIdSet = new Set(allExplicitIds);
+  const inheritedIds = collectAttachmentDocumentIds(
+    options?.inheritedAttachments ?? [],
+  ).filter((documentId) => !explicitIdSet.has(documentId));
+
+  if (explicitIds.length === 0 && inheritedIds.length === 0) {
+    return [];
+  }
 
   const repository = getRagRepository();
-  const snippetsPerDocument = Math.max(
-    2,
-    Math.ceil(MAX_WORKSPACE_CONTEXT_SNIPPETS / documentIds.length),
-  );
+  const matchChunks = getRepositoryMatchChunks(repository);
 
-  return Promise.all(
-    documentIds.map(async (documentId) => {
+  if (typeof matchChunks === "function") {
+    const explicitDocs = await Promise.all(
+      explicitIds.map(async (documentId) => {
+        const document = await requireOwnedDocument(userId, documentId);
+        if (document.status !== "indexed") {
+          throw new RagError(`Attached PDF "${document.fileName}" is not indexed yet.`, {
+            code: "ATTACHED_DOCUMENT_NOT_INDEXED",
+            status: 409,
+          });
+        }
+        return { documentId, document };
+      }),
+    );
+
+    let queryEmbeddingPromise: Promise<number[]> | null = null;
+    const getQueryEmbedding = () => {
+      queryEmbeddingPromise ??= getEmbeddingProvider().embedQuery(question);
+      return queryEmbeddingPromise;
+    };
+    const candidateCount = computeRetrievalCandidateCount({
+      topK: Math.max(12, MAX_WORKSPACE_CONTEXT_SNIPPETS * 3),
+      finalContextChunks: MAX_WORKSPACE_CONTEXT_SNIPPETS,
+    });
+    const loadSectionsAndMatches = async (
+      documentId: string,
+      queryEmbedding: number[],
+    ) => {
+      const [sections, matches] = await Promise.all([
+        loadRepositorySections(repository, documentId),
+        matchChunks.call(repository, documentId, queryEmbedding, candidateCount),
+      ]);
+      return {
+        sections,
+        matches,
+      };
+    };
+
+    const resolvedMatchedDocs: ResolvedMatchedWorkspaceDocument[] =
+      explicitDocs.length > 0
+        ? await (async () => {
+            const queryEmbedding = await getQueryEmbedding();
+            return Promise.all(
+              explicitDocs.map(async ({ documentId, document }) => {
+                const { sections, matches } = await loadSectionsAndMatches(
+                  documentId,
+                  queryEmbedding,
+                );
+                if (matches.length === 0) {
+                  throw new RagError("This document has no indexed chunks.", {
+                    code: "DOCUMENT_HAS_NO_CHUNKS",
+                    status: 409,
+                  });
+                }
+
+                return {
+                  documentId,
+                  document,
+                  sections,
+                  matches,
+                };
+              }),
+            );
+          })()
+        : [];
+
+    for (const documentId of inheritedIds) {
+      if (resolvedMatchedDocs.length >= MAX_WORKSPACE_CONTEXT_DOCUMENTS) {
+        break;
+      }
+
+      const document = await repository.getDocument(userId, documentId);
+      if (!document || document.status !== "indexed") {
+        continue;
+      }
+
+      const queryEmbedding = await getQueryEmbedding();
+      const { sections, matches } = await loadSectionsAndMatches(
+        documentId,
+        queryEmbedding,
+      );
+      if (matches.length === 0) {
+        continue;
+      }
+
+      resolvedMatchedDocs.push({
+        documentId,
+        document,
+        sections,
+        matches,
+      });
+    }
+
+    if (resolvedMatchedDocs.length === 0) {
+      return [];
+    }
+
+    const snippetsPerDocument = Math.max(
+      2,
+      Math.ceil(MAX_WORKSPACE_CONTEXT_SNIPPETS / resolvedMatchedDocs.length),
+    );
+
+    return resolvedMatchedDocs.map(
+      ({ documentId, document, sections, matches }) => {
+        const retrieved = rankMatchedChunks(question, matches, {
+          topK: Math.max(12, snippetsPerDocument * 3),
+          finalContextChunks: snippetsPerDocument,
+        });
+        return formatWorkspaceDocumentContext(
+          documentId,
+          document,
+          sections,
+          retrieved,
+        );
+      },
+    );
+  }
+
+  const loadSectionsAndChunks = async (documentId: string) => {
+    const [sections, chunks] = await Promise.all([
+      loadRepositorySections(repository, documentId),
+      repository.getChunks(documentId),
+    ]);
+    return {
+      sections,
+      chunks,
+    };
+  };
+
+  const resolvedDocs: ResolvedWorkspaceDocument[] = await Promise.all(
+    explicitIds.map(async (documentId) => {
       const document = await requireOwnedDocument(userId, documentId);
       if (document.status !== "indexed") {
         throw new RagError(`Attached PDF "${document.fileName}" is not indexed yet.`, {
@@ -229,25 +449,69 @@ export async function getWorkspaceDocumentContextsForOwner(
         });
       }
 
-      const chunks = await repository.getChunks(documentId);
-      const retrieved = await retrieveRelevantChunks(question, chunks, {
-        topK: Math.max(12, snippetsPerDocument * 3),
-        finalContextChunks: snippetsPerDocument,
-      });
+      const { sections, chunks } = await loadSectionsAndChunks(documentId);
+      if (chunks.length === 0) {
+        throw new RagError("This document has no indexed chunks.", {
+          code: "DOCUMENT_HAS_NO_CHUNKS",
+          status: 409,
+        });
+      }
 
       return {
         documentId,
-        fileName: document.fileName,
-        title: document.title,
-        snippets: retrieved.map((item) => ({
-          chunkId: item.chunk.id,
-          pageStart: item.chunk.pageStart,
-          pageEnd: item.chunk.pageEnd,
-          headingPath: item.chunk.headingPath,
-          content: compactText(item.chunk.content, MAX_WORKSPACE_SNIPPET_LENGTH),
-          score: item.score,
-        })),
+        document,
+        sections,
+        chunks,
       };
+    }),
+  );
+
+  for (const documentId of inheritedIds) {
+    if (resolvedDocs.length >= MAX_WORKSPACE_CONTEXT_DOCUMENTS) {
+      break;
+    }
+
+    const document = await repository.getDocument(userId, documentId);
+    if (!document || document.status !== "indexed") {
+      continue;
+    }
+
+    const { sections, chunks } = await loadSectionsAndChunks(documentId);
+    if (chunks.length === 0) {
+      continue;
+    }
+
+    resolvedDocs.push({
+      documentId,
+      document,
+      sections,
+      chunks,
+    });
+  }
+
+  if (resolvedDocs.length === 0) {
+    return [];
+  }
+
+  const queryEmbedding = await getEmbeddingProvider().embedQuery(question);
+  const snippetsPerDocument = Math.max(
+    2,
+    Math.ceil(MAX_WORKSPACE_CONTEXT_SNIPPETS / resolvedDocs.length),
+  );
+
+  return Promise.all(
+    resolvedDocs.map(async ({ documentId, document, sections, chunks }) => {
+      const retrieved = await retrieveRelevantChunks(question, chunks, {
+        queryEmbedding,
+        topK: Math.max(12, snippetsPerDocument * 3),
+        finalContextChunks: snippetsPerDocument,
+      });
+      return formatWorkspaceDocumentContext(
+        documentId,
+        document,
+        sections,
+        retrieved,
+      );
     }),
   );
 }

@@ -4,6 +4,7 @@ import { createPendingRootProject } from "@/lib/server/project-model";
 import type { Project } from "@/lib/types";
 
 const readProjectsMock = vi.hoisted(() => vi.fn());
+const readProjectOwnerIdMock = vi.hoisted(() => vi.fn());
 const saveProjectMock = vi.hoisted(() => vi.fn());
 const checkRateLimitAsyncMock = vi.hoisted(() => vi.fn());
 
@@ -26,6 +27,7 @@ vi.mock("@/lib/server/projects-repository", async (importOriginal) => {
     ...actual,
     getProjectsRepository: vi.fn(() => ({
       readProjects: readProjectsMock,
+      readProjectOwnerId: readProjectOwnerIdMock,
       saveProject: saveProjectMock,
     })),
   };
@@ -56,9 +58,11 @@ async function postSync(projectId: string, project: Project) {
 describe("project sync route", () => {
   beforeEach(() => {
     readProjectsMock.mockReset();
+    readProjectOwnerIdMock.mockReset();
     saveProjectMock.mockReset();
     checkRateLimitAsyncMock.mockReset();
     readProjectsMock.mockResolvedValue([]);
+    readProjectOwnerIdMock.mockResolvedValue(null);
     saveProjectMock.mockResolvedValue(undefined);
     checkRateLimitAsyncMock.mockResolvedValue({
       allowed: true,
@@ -80,6 +84,8 @@ describe("project sync route", () => {
       id: project.id,
       rootNodeId: project.rootNodeId,
     });
+    expect(readProjectOwnerIdMock).toHaveBeenCalledWith(project.id);
+    expect(readProjectsMock).not.toHaveBeenCalled();
     expect(saveProjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
         id: project.id,
@@ -138,13 +144,15 @@ describe("project sync route", () => {
 
   it("rejects syncing over a project owned by someone else", async () => {
     const project = makeSyncProject();
-    readProjectsMock.mockResolvedValue([{ ...project, ownerSessionId: "owner_other" }]);
+    readProjectOwnerIdMock.mockResolvedValue("owner_other");
 
     const response = await postSync(project.id, project);
     const body = await response.json();
 
     expect(response.status).toBe(403);
     expect(body.error.code).toBe("PROJECT_OWNER_MISMATCH");
+    expect(readProjectOwnerIdMock).toHaveBeenCalledWith(project.id);
+    expect(readProjectsMock).not.toHaveBeenCalled();
     expect(saveProjectMock).not.toHaveBeenCalled();
   });
 });

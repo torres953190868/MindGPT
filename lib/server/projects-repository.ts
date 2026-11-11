@@ -39,6 +39,8 @@ export type ProjectsRepository = {
   backend: ProjectsBackend;
   readProjects: () => Promise<OwnedProject[]>;
   readProjectsForSession: (sessionId: string) => Promise<ProjectDto[]>;
+  readProjectForOwner: (ownerId: string, projectId: string) => Promise<OwnedProject | null>;
+  readProjectOwnerId: (projectId: string) => Promise<string | null>;
   writeProjects: (projects: Project[]) => Promise<void>;
   updateProjects: (updater: (projects: OwnedProject[]) => Project[] | Promise<Project[]>) => Promise<OwnedProject[]>;
   saveProject: (project: Project) => Promise<void>;
@@ -51,6 +53,58 @@ export type ProjectsRepository = {
   deleteProject: (projectId: string) => Promise<void>;
   transferOwner: (fromOwnerId: string, toOwnerId: string) => Promise<number>;
 };
+
+const SUPABASE_SELECT_PAGE_SIZE = 1000;
+const SUPABASE_PROJECT_ID_BATCH_SIZE = 200;
+
+type SupabasePageResponse<TRow> = {
+  data: TRow[] | null;
+  error: { message: string } | null;
+};
+
+type PaginatableSupabaseQuery<TRow> = PromiseLike<SupabasePageResponse<TRow>> & {
+  range?: (from: number, to: number) => PromiseLike<SupabasePageResponse<TRow>>;
+};
+
+function chunkValues<T>(items: T[], chunkSize: number): T[][] {
+  if (items.length === 0) return [];
+  if (items.length <= chunkSize) return [items];
+
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+  return chunks;
+}
+
+async function selectAllPages<TRow>(
+  buildQuery: () => PaginatableSupabaseQuery<TRow>,
+  operation: string,
+  pageSize = SUPABASE_SELECT_PAGE_SIZE,
+): Promise<TRow[]> {
+  const rows: TRow[] = [];
+  let offset = 0;
+
+  while (true) {
+    const query = buildQuery();
+    if (typeof query.range !== "function") {
+      const { data, error } = await query;
+      assertNoError(error, operation);
+      return data ?? [];
+    }
+
+    const { data, error } = await query.range(offset, offset + pageSize - 1);
+    assertNoError(error, operation);
+    const page = data ?? [];
+    rows.push(...page);
+
+    if (page.length < pageSize) {
+      return rows;
+    }
+
+    offset += pageSize;
+  }
+}
 
 function assertNoError(error: { message: string } | null, operation: string) {
   if (!error) return;
@@ -403,25 +457,71 @@ class SupabaseProjectsRepository implements ProjectsRepository {
 
   async readProjects() {
     const client = getSupabaseAdminClient();
-    const { data: projectRows, error } = await client
-      .from("branchmind_projects")
-      .select("*")
-      .order("updated_at", { ascending: false });
+    const projectRows = await selectAllPages(
+      () =>
+        client
+          .from("branchmind_projects")
+          .select("*")
+          .order("updated_at", { ascending: false })
+          .order("id"),
+      "read projects",
+    );
 
-    assertNoError(error, "read projects");
-    return this.compose(projectRows ?? []);
+    return this.compose(projectRows);
   }
 
   async readProjectsForSession(sessionId: string) {
     const client = getSupabaseAdminClient();
-    const { data: projectRows, error } = await client
+    const projectRows = await selectAllPages(
+      () =>
+        client
+          .from("branchmind_projects")
+          .select("*")
+          .eq("owner_session_id", sessionId)
+          .order("updated_at", { ascending: false })
+          .order("id"),
+      "read session projects",
+    );
+
+    return toProjectDtos(await this.compose(projectRows));
+  }
+
+  async readProjectForOwner(
+    ownerId: string,
+    projectId: string,
+  ): Promise<OwnedProject | null> {
+    const normalizedOwnerId = ownerId.trim();
+    const normalizedProjectId = projectId.trim();
+    if (!normalizedOwnerId || !normalizedProjectId) return null;
+
+    const client = getSupabaseAdminClient();
+    const { data, error } = await client
       .from("branchmind_projects")
       .select("*")
-      .eq("owner_session_id", sessionId)
-      .order("updated_at", { ascending: false });
+      .eq("id", normalizedProjectId)
+      .eq("owner_session_id", normalizedOwnerId)
+      .maybeSingle();
 
-    assertNoError(error, "read session projects");
-    return toProjectDtos(await this.compose(projectRows ?? []));
+    assertNoError(error, "read owned project");
+    if (!data) return null;
+
+    const [project] = await this.compose([data]);
+    return project ?? null;
+  }
+
+  async readProjectOwnerId(projectId: string): Promise<string | null> {
+    const normalizedProjectId = projectId.trim();
+    if (!normalizedProjectId) return null;
+
+    const client = getSupabaseAdminClient();
+    const { data, error } = await client
+      .from("branchmind_projects")
+      .select("owner_session_id")
+      .eq("id", normalizedProjectId)
+      .maybeSingle();
+
+    assertNoError(error, "read project owner");
+    return data?.owner_session_id ?? null;
   }
 
   async writeProjects(projects: Project[]) {
@@ -691,29 +791,45 @@ class SupabaseProjectsRepository implements ProjectsRepository {
   }
 
   private async compose(projectRows: ProjectRow[]) {
-    const projectIds = projectRows.map((row) => row.id);
+    const projectIds = Array.from(new Set(projectRows.map((row) => row.id)));
     if (projectIds.length === 0) return [];
 
     const client = getSupabaseAdminClient();
-    const { data: nodeRows, error: nodeError } = await client
-      .from("branchmind_nodes")
-      .select("*")
-      .in("project_id", projectIds)
-      .order("project_id")
-      .order("parent_id", { nullsFirst: true })
-      .order("child_order");
-    assertNoError(nodeError, "read project nodes");
+    const projectIdBatches = chunkValues(projectIds, SUPABASE_PROJECT_ID_BATCH_SIZE);
+    const nodeRows: NodeRow[] = [];
+    const messageRows: MessageRow[] = [];
 
-    const { data: messageRows, error: messageError } = await client
-      .from("branchmind_messages")
-      .select("*")
-      .in("project_id", projectIds)
-      .order("project_id")
-      .order("node_id")
-      .order("sort_order");
-    assertNoError(messageError, "read project messages");
+    for (const batchIds of projectIdBatches) {
+      const batchNodes = await selectAllPages(
+        () =>
+          client
+            .from("branchmind_nodes")
+            .select("*")
+            .in("project_id", batchIds)
+            .order("project_id")
+            .order("parent_id", { nullsFirst: true })
+            .order("child_order")
+            .order("id"),
+        "read project nodes",
+      );
+      nodeRows.push(...batchNodes);
 
-    return composeProjectsFromRows(projectRows, nodeRows ?? [], messageRows ?? []);
+      const batchMessages = await selectAllPages(
+        () =>
+          client
+            .from("branchmind_messages")
+            .select("*")
+            .in("project_id", batchIds)
+            .order("project_id")
+            .order("node_id")
+            .order("sort_order")
+            .order("id"),
+        "read project messages",
+      );
+      messageRows.push(...batchMessages);
+    }
+
+    return composeProjectsFromRows(projectRows, nodeRows, messageRows);
   }
 }
 
@@ -724,6 +840,30 @@ const fileRepository: ProjectsRepository = {
   readProjects: async () => fileStore.readProjects() as Promise<OwnedProject[]>,
   readProjectsForSession: async (sessionId) =>
     getProjectsForSession(await fileStore.readProjects(), sessionId),
+  readProjectForOwner: async (ownerId, projectId) => {
+    const normalizedOwnerId = ownerId.trim();
+    const normalizedProjectId = projectId.trim();
+    if (!normalizedOwnerId || !normalizedProjectId) return null;
+
+    const projects = (await fileStore.readProjects()) as OwnedProject[];
+    return (
+      projects.find(
+        (item) =>
+          item.id === normalizedProjectId &&
+          projectBelongsToSession(item, normalizedOwnerId),
+      ) ?? null
+    );
+  },
+  readProjectOwnerId: async (projectId) => {
+    const normalizedProjectId = projectId.trim();
+    if (!normalizedProjectId) return null;
+
+    const projects = (await fileStore.readProjects()) as OwnedProject[];
+    return (
+      projects.find((item) => item.id === normalizedProjectId)?.ownerSessionId ??
+      null
+    );
+  },
   writeProjects: async (projects) => fileStore.writeProjects(projects),
   updateProjects: async (updater) =>
     fileStore.updateProjects(async (projects) => updater(projects as OwnedProject[])) as Promise<OwnedProject[]>,
@@ -816,6 +956,12 @@ export function getProjectsRepository(): ProjectsRepository {
 
 export async function readProjects() { return getProjectsRepository().readProjects(); }
 export async function readProjectsForSession(sessionId: string) { return getProjectsRepository().readProjectsForSession(sessionId); }
+export async function readProjectForOwner(ownerId: string, projectId: string) {
+  return getProjectsRepository().readProjectForOwner(ownerId, projectId);
+}
+export async function readProjectOwnerId(projectId: string) {
+  return getProjectsRepository().readProjectOwnerId(projectId);
+}
 export async function writeProjects(projects: Project[]) { return getProjectsRepository().writeProjects(projects); }
 export async function updateProjects(updater: (projects: OwnedProject[]) => Project[] | Promise<Project[]>) {
   return getProjectsRepository().updateProjects(updater);

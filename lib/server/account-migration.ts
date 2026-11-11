@@ -1,5 +1,6 @@
 import { transferProjectsOwner } from "@/lib/server/projects-repository";
 import { transferRagOwner } from "@/lib/server/rag/store";
+import { transferUserMemoryOwnerSafe } from "@/lib/server/user-memory";
 
 export type AccountMigrationResult = {
   ok: boolean;
@@ -32,6 +33,7 @@ export async function migrateAnonymousDataToUser(
   const [projectsUpdated, documentsUpdated] = await Promise.all([
     transferProjectsOwner(fromId, toId),
     transferRagOwner(fromId, toId),
+    transferUserMemoryOwnerSafe(fromId, toId),
   ]);
 
   return {

@@ -2,12 +2,17 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { getBranchMindAuthContext } from "@/lib/server/auth";
 import { getAccountPlanForModelAccess } from "@/lib/server/account-plan";
+import { MAX_REPLY_CONTENT_LENGTH } from "@/lib/server/deepseek-core";
 import { requestDeepSeekReply } from "@/lib/server/deepseek";
 import { jsonWithSession, safeErrorWithSession } from "@/lib/server/http";
 import { chatModelSelectionSchema } from "@/lib/server/node-request";
 import { checkRateLimitAsync } from "@/lib/server/rate-limit";
 import { assertValidRequestOrigin } from "@/lib/server/security";
 import { getOrCreateSession } from "@/lib/server/session";
+import {
+  recordCanvasTurnMemoryForOwner,
+  resolveUserMemorySlotForOwner,
+} from "@/lib/server/user-memory";
 import { parseJsonBody } from "@/lib/server/validation";
 
 const chatSchema = z.object({
@@ -18,7 +23,7 @@ const chatSchema = z.object({
     .array(
       z.object({
         role: z.enum(["user", "assistant"]),
-        content: z.string().trim().min(1).max(8_000),
+        content: z.string().trim().min(1).max(MAX_REPLY_CONTENT_LENGTH),
       }),
     )
     .max(16)
@@ -39,7 +44,7 @@ export async function POST(request: NextRequest) {
     });
     const { principal, session } = await getBranchMindAuthContext(request);
     const body = await parseJsonBody(request, chatSchema, {
-      maxBytes: 64 * 1024,
+      maxBytes: 128 * 1024,
     });
     const rateLimit = await checkRateLimitAsync(request, {
       action: "chat",
@@ -59,10 +64,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const retrievalQuery = [body.instruction, body.sourceText]
+      .filter(Boolean)
+      .join("\n\n");
+    const [userPlan, userMemory] = await Promise.all([
+      getAccountPlanForModelAccess(principal),
+      resolveUserMemorySlotForOwner(principal.id, retrievalQuery),
+    ]);
+
     const reply = await requestDeepSeekReply({
       ...body,
       llmTask: "branch_chat",
-      userPlan: await getAccountPlanForModelAccess(principal),
+      userPlan,
+      ...(userMemory ? { userMemory } : {}),
+    });
+    await recordCanvasTurnMemoryForOwner({
+      ownerId: principal.id,
+      mode: body.mode ?? "root",
+      instruction: body.instruction,
+      sourceText: body.sourceText,
+      reply,
+      contextSummaries: body.contextTitles,
     });
     return jsonWithSession(reply, session);
   } catch (error) {

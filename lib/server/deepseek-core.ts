@@ -13,6 +13,17 @@ import {
   getProviderUrl,
   type ChatCompletionsProvider,
 } from "@/lib/server/ai-provider";
+import {
+  allocateRecentTurnsWithDowngrade,
+  formatAssistantTurnJson,
+  formatFoldedAncestorsSlot,
+  formatSideBranchRollup,
+  formatTreeSystemBackgroundBlock,
+  type FoldedAncestorNode,
+  type NodeConversationTurn,
+  type TreePromptContext,
+  type UserMemoryContextSlot,
+} from "@/lib/server/tree-context";
 import type {
   ChatCitation,
   ChatCurriculumContext,
@@ -41,12 +52,15 @@ export type BranchMindReplyRequest = {
   userPlan?: string | null;
   llmTask?: LlmRouteTask;
   skill?: ChatSkill;
+  treeContext?: TreePromptContext;
+  userMemory?: UserMemoryContextSlot;
 };
 
 export type DeepSeekChoice = {
   message?: {
     content?: string | null;
   };
+  finish_reason?: string | null;
 };
 
 export class DeepSeekError extends Error {
@@ -79,6 +93,23 @@ export const DEEPSEEK_TIMEOUT_MS = 30_000;
 export const MAX_DEEPSEEK_ATTEMPTS = 2;
 export const RETRY_DELAY_MS = 300;
 export const DEFAULT_ALLOWED_MODELS = DEFAULT_DEEPSEEK_ALLOWED_MODELS;
+export const DEFAULT_CHAT_MAX_TOKENS = 4096;
+export const MIN_CHAT_MAX_TOKENS = 256;
+export const MAX_CHAT_MAX_TOKENS = 16_384;
+export const MAX_REPLY_CONTENT_LENGTH = 24_000;
+
+export function getChatMaxOutputTokens(
+  value = process.env.AI_MAX_OUTPUT_TOKENS,
+): number {
+  if (!value) return DEFAULT_CHAT_MAX_TOKENS;
+  const trimmed = value.trim();
+  if (!/^-?\d+$/.test(trimmed)) return DEFAULT_CHAT_MAX_TOKENS;
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    return DEFAULT_CHAT_MAX_TOKENS;
+  }
+  return Math.min(MAX_CHAT_MAX_TOKENS, Math.max(MIN_CHAT_MAX_TOKENS, parsed));
+}
 
 const RETRYABLE_STATUSES = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 
@@ -114,6 +145,7 @@ const deepSeekResponseSchema = z
               })
               .passthrough()
               .optional(),
+            finish_reason: z.string().nullable().optional(),
           })
           .passthrough(),
       )
@@ -158,7 +190,7 @@ export const deepSeekStreamChunkSchema = z
 const branchMindReplySchema = z.object({
   title: z.string().trim().min(1).max(120),
   summary: z.string().trim().min(1).max(280),
-  content: z.string().trim().min(1).max(8_000),
+  content: z.string().trim().min(1).max(MAX_REPLY_CONTENT_LENGTH),
 });
 
 export type DeepSeekResponse = z.infer<typeof deepSeekResponseSchema>;
@@ -389,10 +421,13 @@ export function createProviderHttpError(
 }
 
 export function getMockReply(body: BranchMindReplyRequest): MockReply {
-  const mode = body.mode ?? "root";
+  const mode = body.mode ?? body.treeContext?.mode ?? "root";
   const citations = buildChatCitations(body.documentContexts);
-  const context = body.contextTitles?.length
-    ? body.contextTitles.join(" / ")
+  const contextList = body.contextTitles?.length
+    ? body.contextTitles
+    : body.treeContext?.contextSummaries;
+  const context = contextList?.length
+    ? contextList.join(" / ")
     : "No prior path.";
   const source = body.sourceText
     ? ` Source text: ${compact(body.sourceText, 96)}`
@@ -436,6 +471,9 @@ function formatDocumentContexts(
   return documentContexts
     .map((document) => {
       const title = document.title ? ` (${document.title})` : "";
+      const outline = document.outline?.trim()
+        ? `Document outline (structural map only — cite factual claims only from numbered snippets):\n${document.outline.trim()}`
+        : "";
       const snippets = document.snippets
         .map((snippet) => {
           const section = snippet.headingPath.length
@@ -457,7 +495,10 @@ function formatDocumentContexts(
         })
         .join("\n\n");
 
-      return [`PDF: ${document.fileName}${title}`, snippets].join("\n");
+      const blocks = [`PDF: ${document.fileName}${title}`];
+      if (outline) blocks.push(outline);
+      if (snippets || !outline) blocks.push(snippets);
+      return blocks.join("\n");
     })
     .join("\n\n---\n\n");
 }
@@ -547,14 +588,212 @@ function looksLikeJsonContainer(raw: string) {
   return normalized.startsWith("{") || normalized.startsWith("[");
 }
 
-export function parseReply(raw: string, instruction: string): MockReply {
+function readJsonStringPrefix(input: string, start: number) {
+  let value = "";
+
+  for (let index = start + 1; index < input.length; index += 1) {
+    const character = input[index];
+
+    if (character === "\"") {
+      return { value, complete: true, endIndex: index };
+    }
+
+    if (character !== "\\") {
+      value += character;
+      continue;
+    }
+
+    const escaped = input[index + 1];
+    if (!escaped) return { value, complete: false, endIndex: input.length };
+
+    if (escaped === "u") {
+      const hex = input.slice(index + 2, index + 6);
+      if (hex.length < 4 || !/^[0-9a-fA-F]{4}$/.test(hex)) {
+        return { value, complete: false, endIndex: input.length };
+      }
+      value += String.fromCharCode(Number.parseInt(hex, 16));
+      index += 5;
+      continue;
+    }
+
+    const escapes: Record<string, string> = {
+      "\"": "\"",
+      "\\": "\\",
+      "/": "/",
+      b: "\b",
+      f: "\f",
+      n: "\n",
+      r: "\r",
+      t: "\t",
+    };
+    value += escapes[escaped] ?? escaped;
+    index += 1;
+  }
+
+  return { value, complete: false, endIndex: input.length };
+}
+
+export function getJsonStringValuePrefix(rawJson: string, key: string) {
+  for (let index = 0; index < rawJson.length; index += 1) {
+    if (rawJson[index] !== "\"") continue;
+
+    const token = readJsonStringPrefix(rawJson, index);
+    if (!token.complete) return null;
+
+    let cursor = token.endIndex + 1;
+    while (/\s/.test(rawJson[cursor] ?? "")) cursor += 1;
+    if (token.value !== key || rawJson[cursor] !== ":") {
+      index = token.endIndex;
+      continue;
+    }
+
+    cursor += 1;
+    while (/\s/.test(rawJson[cursor] ?? "")) cursor += 1;
+    if (rawJson[cursor] !== "\"") return null;
+
+    return readJsonStringPrefix(rawJson, cursor);
+  }
+
+  return null;
+}
+
+export const LENGTH_TRUNCATION_NOTICE_EN =
+  "\n\n*(Response reached the output token limit; ask a follow-up to continue.)*";
+export const LENGTH_TRUNCATION_NOTICE_ZH =
+  "\n\n*（回答已达单次输出长度上限，可继续追问展开后续内容。）*";
+
+const CJK_CHARACTER_PATTERN = /[\u4e00-\u9fff]/;
+
+export function appendLengthTruncationNotice(
+  content: string,
+  instruction = "",
+): string {
+  if (
+    content.includes(LENGTH_TRUNCATION_NOTICE_EN.trim()) ||
+    content.includes(LENGTH_TRUNCATION_NOTICE_ZH.trim())
+  ) {
+    return content;
+  }
+
+  const notice =
+    CJK_CHARACTER_PATTERN.test(content) ||
+    CJK_CHARACTER_PATTERN.test(instruction)
+      ? LENGTH_TRUNCATION_NOTICE_ZH
+      : LENGTH_TRUNCATION_NOTICE_EN;
+
+  return content ? `${content}${notice}` : notice.trimStart();
+}
+
+export type ParseReplyOptions = {
+  truncatedByLength?: boolean;
+};
+
+function buildRecoveredReply(params: {
+  baseContent: string;
+  recoveredTitle: string | null;
+  recoveredSummary: string | null;
+  instruction: string;
+  appendTruncationNotice: boolean;
+}): MockReply {
+  const {
+    baseContent,
+    recoveredTitle,
+    recoveredSummary,
+    instruction,
+    appendTruncationNotice,
+  } = params;
+  const fallback = safeReply(instruction, baseContent);
+
+  return {
+    title: recoveredTitle ? compact(recoveredTitle, 48) : fallback.title,
+    summary: recoveredSummary
+      ? compact(recoveredSummary, 110)
+      : compact(baseContent, 110),
+    content: appendTruncationNotice
+      ? appendLengthTruncationNotice(baseContent, instruction)
+      : baseContent,
+  };
+}
+
+export function parseReply(
+  raw: string,
+  instruction: string,
+  options: ParseReplyOptions = {},
+): MockReply {
+  const truncatedByLength = options.truncatedByLength === true;
   const cleaned = cleanReplyJson(raw);
 
   try {
-    const parsed = branchMindReplySchema.safeParse(JSON.parse(cleaned));
+    const parsedJson = JSON.parse(cleaned);
+    const parsed = branchMindReplySchema.safeParse(parsedJson);
     if (parsed.success) return normalizeParsedReply(parsed.data);
+
+    const partialReply = partialReplyFromObject(parsedJson, instruction, "");
+    if (partialReply) return partialReply;
+
+    if (truncatedByLength) {
+      const object = objectValue(parsedJson);
+      const fallbackBody =
+        stringField(object?.summary) ?? stringField(object?.title);
+      if (fallbackBody) {
+        return buildRecoveredReply({
+          baseContent: fallbackBody,
+          recoveredTitle: stringField(object?.title),
+          recoveredSummary: stringField(object?.summary),
+          instruction,
+          appendTruncationNotice: true,
+        });
+      }
+    }
   } catch {
-    return safeReply(instruction, raw);
+    // Fall through to partial JSON prefix recovery or plain-text fallback.
+  }
+
+  const titlePrefix = getJsonStringValuePrefix(raw, "title");
+  const summaryPrefix = getJsonStringValuePrefix(raw, "summary");
+  const contentPrefix = getJsonStringValuePrefix(raw, "content");
+  const recoveredTitle = titlePrefix?.value.trim() || null;
+  const recoveredSummary = summaryPrefix?.value.trim() || null;
+  const recoveredContent = contentPrefix?.value.trim() || null;
+
+  if (truncatedByLength) {
+    const usableContent =
+      recoveredContent ?? recoveredSummary ?? recoveredTitle;
+    if (usableContent) {
+      return buildRecoveredReply({
+        baseContent: usableContent,
+        recoveredTitle,
+        recoveredSummary,
+        instruction,
+        appendTruncationNotice: true,
+      });
+    }
+
+    if (cleaned && !looksLikeJsonContainer(cleaned)) {
+      return {
+        ...safeReply(instruction, cleaned),
+        content: appendLengthTruncationNotice(cleaned, instruction),
+      };
+    }
+
+    throw new DeepSeekError(
+      "DeepSeek returned truncated JSON before any usable content was produced.",
+      502,
+      {
+        code: "DEEPSEEK_INVALID_JSON",
+        retryable: true,
+      },
+    );
+  }
+
+  if (recoveredContent) {
+    return buildRecoveredReply({
+      baseContent: recoveredContent,
+      recoveredTitle,
+      recoveredSummary,
+      instruction,
+      appendTruncationNotice: false,
+    });
   }
 
   return safeReply(instruction, raw);
@@ -564,7 +803,9 @@ export function parseStreamingReply(
   raw: string,
   instruction: string,
   visibleContent = "",
+  options: ParseReplyOptions = {},
 ): MockReply {
+  const truncatedByLength = options.truncatedByLength === true;
   const cleaned = cleanReplyJson(raw);
 
   try {
@@ -579,6 +820,25 @@ export function parseStreamingReply(
     );
     if (partialReply) return partialReply;
 
+    if (truncatedByLength) {
+      const object = objectValue(parsedJson);
+      const fallbackBody =
+        stringField(object?.summary) ?? stringField(object?.title);
+      if (fallbackBody) {
+        const leadingStreamed =
+          visibleContent.length > 0 && !visibleContent.trim()
+            ? visibleContent
+            : "";
+        return buildRecoveredReply({
+          baseContent: `${leadingStreamed}${fallbackBody}`,
+          recoveredTitle: stringField(object?.title),
+          recoveredSummary: stringField(object?.summary),
+          instruction,
+          appendTruncationNotice: true,
+        });
+      }
+    }
+
     throw new DeepSeekError("DeepSeek streaming response failed validation.", 502, {
       code: "DEEPSEEK_INVALID_STREAMING_REPLY",
       retryable: true,
@@ -586,8 +846,59 @@ export function parseStreamingReply(
   } catch (error) {
     if (error instanceof DeepSeekError) throw error;
 
-    if (visibleContent.trim()) {
-      return safeReply(instruction, visibleContent.trim());
+    const titlePrefix = getJsonStringValuePrefix(raw, "title");
+    const summaryPrefix = getJsonStringValuePrefix(raw, "summary");
+    const contentPrefix = getJsonStringValuePrefix(raw, "content");
+    const recoveredTitle = titlePrefix?.value.trim() || null;
+    const recoveredSummary = summaryPrefix?.value.trim() || null;
+    const hasVisibleContent = visibleContent.trim().length > 0;
+    const extractedContent = hasVisibleContent
+      ? visibleContent
+      : contentPrefix?.value.trim()
+        ? contentPrefix.value
+        : "";
+
+    if (truncatedByLength) {
+      const fallbackField = recoveredSummary ?? recoveredTitle ?? "";
+      const leadingStreamed =
+        visibleContent.length > 0 && !hasVisibleContent ? visibleContent : "";
+      const usableContent =
+        extractedContent ||
+        (fallbackField ? `${leadingStreamed}${fallbackField}` : "");
+      if (usableContent) {
+        return buildRecoveredReply({
+          baseContent: usableContent,
+          recoveredTitle,
+          recoveredSummary,
+          instruction,
+          appendTruncationNotice: true,
+        });
+      }
+
+      if (cleaned && !looksLikeJsonContainer(cleaned)) {
+        return {
+          ...safeReply(instruction, cleaned),
+          content: appendLengthTruncationNotice(cleaned, instruction),
+        };
+      }
+
+      throw new DeepSeekError("DeepSeek returned invalid streaming JSON.", 502, {
+        code: "DEEPSEEK_INVALID_STREAMING_JSON",
+        retryable: true,
+      });
+    }
+
+    const nonTruncatedContent = hasVisibleContent
+      ? visibleContent.trim()
+      : contentPrefix?.value.trim() || "";
+    if (nonTruncatedContent) {
+      return buildRecoveredReply({
+        baseContent: nonTruncatedContent,
+        recoveredTitle,
+        recoveredSummary,
+        instruction,
+        appendTruncationNotice: false,
+      });
     }
 
     if (cleaned && !looksLikeJsonContainer(cleaned)) {
@@ -636,12 +947,96 @@ function formatSkillBlock(skill: ChatSkill): string {
     .join("\n");
 }
 
+const LEGACY_RECENT_TURNS_BUDGET_CHARS = 6_000;
+const LEGACY_FOLDED_TURNS_BUDGET_CHARS = 1_600;
+
+function normalizeLegacyAssistantTurnJson(rawAssistantContent: string): string {
+  const trimmed = rawAssistantContent.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = branchMindReplySchema.safeParse(JSON.parse(trimmed));
+      if (parsed.success) {
+        return JSON.stringify({
+          title: parsed.data.title,
+          summary: parsed.data.summary,
+          content: parsed.data.content,
+        });
+      }
+    } catch {
+      // Fall through to deterministic wrapper when content is not valid reply JSON.
+    }
+  }
+
+  return formatAssistantTurnJson({
+    title: "",
+    summary: "",
+    content: rawAssistantContent,
+  });
+}
+
+function buildLegacyMessageHistory(rawMessages: ApiMessage[] | undefined): {
+  turns: NodeConversationTurn[];
+  foldedAncestors: FoldedAncestorNode[];
+  trailingUnpairedUser: string | null;
+} {
+  if (!rawMessages || rawMessages.length === 0) {
+    return { turns: [], foldedAncestors: [], trailingUnpairedUser: null };
+  }
+
+  const rawPairs: Array<{ userContent: string; assistantRawContent: string }> = [];
+  let pendingUser: string | null = null;
+
+  for (const message of rawMessages) {
+    if (message.role === "user") {
+      pendingUser = message.content.trim().length > 0 ? message.content : null;
+      continue;
+    }
+
+    if (message.role === "assistant") {
+      if (message.content.trim().length === 0) {
+        continue;
+      }
+      if (pendingUser !== null) {
+        rawPairs.push({
+          userContent: pendingUser,
+          assistantRawContent: message.content,
+        });
+        pendingUser = null;
+      }
+    }
+  }
+
+  const rawTurns: NodeConversationTurn[] = rawPairs.map((pair, index) => ({
+    nodeId: `legacy_turn_${index}`,
+    nodeTitle: "",
+    branchType: "continue",
+    depth: index,
+    userContent: pair.userContent,
+    assistantJsonContent: normalizeLegacyAssistantTurnJson(pair.assistantRawContent),
+    assistantRawContent: pair.assistantRawContent,
+  }));
+
+  const allocated = allocateRecentTurnsWithDowngrade({
+    recentTurns: rawTurns,
+    foldedAncestors: [],
+    recentTurnsBudgetChars: LEGACY_RECENT_TURNS_BUDGET_CHARS,
+  });
+
+  return {
+    turns: allocated.recentTurns,
+    foldedAncestors: allocated.foldedAncestors,
+    trailingUnpairedUser: pendingUser,
+  };
+}
+
 export function buildMessages(body: BranchMindReplyRequest): ApiMessage[] {
-  const mode = body.mode ?? "root";
-  const context = body.contextTitles?.length
-    ? body.contextTitles.join(" / ")
+  const mode = body.mode ?? body.treeContext?.mode ?? "root";
+  const contextList = body.contextTitles?.length
+    ? body.contextTitles
+    : body.treeContext?.contextSummaries;
+  const context = contextList?.length
+    ? contextList.join(" / ")
     : "No prior path.";
-  const history = body.messages?.slice(-8) ?? [];
   const source = body.sourceText ? `\nSelected source text: ${body.sourceText}` : "";
   const citationCatalog = buildChatCitations(body.documentContexts);
   const documentContexts = formatDocumentContexts(body.documentContexts, citationCatalog);
@@ -653,18 +1048,45 @@ export function buildMessages(body: BranchMindReplyRequest): ApiMessage[] {
     ? `\nAttached course material:\n${courseContexts}`
     : "";
   const citationInstruction = citationCatalog.length
-    ? " When retrieved PDF context is provided, use it as evidence, cite factual claims with the exact [[cite:N]] markers shown in the context, do not invent citation numbers, and do not replace those markers with plain page citations."
+    ? " When retrieved PDF context is provided, use it as evidence, cite factual claims with the exact [[cite:N]] markers shown in the context, do not invent citation numbers, and do not replace those markers with plain page citations. If a document outline is included, you may use it to understand document structure and chapter relationships, while factual claims must still be grounded in and cited from the numbered [[cite:N]] snippets."
     : "";
   const courseInstruction = body.curriculumContexts?.length
     ? " When course material is attached, treat it as the primary reference for this branch, and say when the material does not cover the user's question."
     : "";
   const skill = body.skill;
 
+  const legacyHistory = body.treeContext
+    ? null
+    : buildLegacyMessageHistory(body.messages);
+  const legacyFoldedBlock =
+    legacyHistory && legacyHistory.foldedAncestors.length > 0
+      ? formatFoldedAncestorsSlot({
+          rootAnchor: null,
+          foldedAncestors: legacyHistory.foldedAncestors,
+          keptRecentTurns: legacyHistory.turns,
+          maxChars: LEGACY_FOLDED_TURNS_BUDGET_CHARS,
+        })
+      : "";
+
+  const baseSystemPrompt = `You are BranchMind, a concise learning assistant. Return only valid JSON with keys title, summary, content. Match the user's language: answer in English when the user writes in English, and answer in Chinese when the user writes in Chinese. The title must be short. The summary must be concise. The content should be 300-600 characters unless the user asks otherwise. Write all mathematical notation as LaTeX: wrap inline math in single dollar signs ($...$) and standalone equations in double dollar signs ($$...$$); never leave formulas as plain text.${citationInstruction}${courseInstruction} Say when the provided snippets do not contain enough evidence.`;
+  const treeBackgroundBlock = formatTreeSystemBackgroundBlock(
+    body.treeContext,
+    body.userMemory,
+  );
+  const backgroundBlock = [
+    legacyFoldedBlock ? `Earlier conversation summary:\n${legacyFoldedBlock}` : "",
+    treeBackgroundBlock,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  const systemContent = backgroundBlock
+    ? `${baseSystemPrompt}\n\n${backgroundBlock}`
+    : baseSystemPrompt;
+
   const messages: ApiMessage[] = [
     {
       role: "system",
-      content:
-        `You are BranchMind, a concise learning assistant. Return only valid JSON with keys title, summary, content. Match the user's language: answer in English when the user writes in English, and answer in Chinese when the user writes in Chinese. The title must be short. The summary must be concise. The content should be 300-600 characters unless the user asks otherwise. Write all mathematical notation as LaTeX: wrap inline math in single dollar signs ($...$) and standalone equations in double dollar signs ($$...$$); never leave formulas as plain text.${citationInstruction}${courseInstruction} Say when the provided snippets do not contain enough evidence.`,
+      content: systemContent,
     },
   ];
 
@@ -675,14 +1097,48 @@ export function buildMessages(body: BranchMindReplyRequest): ApiMessage[] {
     });
   }
 
+  let trailingUnpairedUser: string | null = null;
+  if (body.treeContext) {
+    for (const turn of body.treeContext.recentTurns) {
+      messages.push(
+        { role: "user", content: turn.userContent },
+        { role: "assistant", content: turn.assistantJsonContent },
+      );
+    }
+  } else if (legacyHistory) {
+    trailingUnpairedUser = legacyHistory.trailingUnpairedUser;
+    for (const turn of legacyHistory.turns) {
+      messages.push(
+        { role: "user", content: turn.userContent },
+        { role: "assistant", content: turn.assistantJsonContent },
+      );
+    }
+  }
+
+  const sideBranchBlock =
+    body.treeContext && body.treeContext.sideBranches.length > 0
+      ? formatSideBranchRollup(
+          body.treeContext.sideBranches,
+          body.treeContext.policy.budgets.sideBranchesChars,
+        )
+      : "";
+
+  const finalUserLines: string[] = [
+    `Node mode: ${mode}`,
+    ...(body.treeContext?.policy.modeGuidance
+      ? [`Mode guidance: ${body.treeContext.policy.modeGuidance}`]
+      : []),
+    `Current path: ${context}`,
+    ...(sideBranchBlock ? [`Clarified side-branches:\n${sideBranchBlock}`] : []),
+    ...(trailingUnpairedUser
+      ? [`Prior user context: ${trailingUnpairedUser}`]
+      : []),
+    `User instruction: ${body.instruction}${source}${pdfContext}${courseContext}`,
+  ];
+
   messages.push({
     role: "user",
-    content: [
-      `Node mode: ${mode}`,
-      `Current path: ${context}`,
-      `Recent node conversation: ${JSON.stringify(history)}`,
-      `User instruction: ${body.instruction}${source}${pdfContext}${courseContext}`,
-    ].join("\n"),
+    content: finalUserLines.join("\n"),
   });
 
   return messages;
@@ -698,7 +1154,7 @@ export function createDeepSeekPayload(
     model,
     messages: buildMessages(body),
     response_format: { type: "json_object" },
-    max_tokens: 900,
+    max_tokens: getChatMaxOutputTokens(),
     stream,
     ...provider.payloadOptions,
   };
@@ -737,4 +1193,11 @@ export function createDeepSeekHttpError(response: Response, data: DeepSeekRespon
 export function getDeepSeekContent(data: DeepSeekResponse) {
   const firstChoice: DeepSeekChoice | undefined = data.choices?.[0];
   return firstChoice?.message?.content?.trim();
+}
+
+export function getDeepSeekFinishReason(data: DeepSeekResponse): string | null {
+  const finishReason = data.choices?.[0]?.finish_reason;
+  return typeof finishReason === "string" && finishReason.trim()
+    ? finishReason.trim()
+    : null;
 }

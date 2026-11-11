@@ -18,6 +18,10 @@ import { getWorkspaceDocumentContextsForOwner } from "@/lib/server/rag/service";
 import { checkRateLimitAsync } from "@/lib/server/rate-limit";
 import { assertValidRequestOrigin } from "@/lib/server/security";
 import { getOrCreateSession } from "@/lib/server/session";
+import {
+  recordCanvasTurnMemoryForOwner,
+  resolveUserMemorySlotForOwner,
+} from "@/lib/server/user-memory";
 import { parseJsonBody } from "@/lib/server/validation";
 
 type NodesRouteContext = {
@@ -71,16 +75,48 @@ export async function POST(request: NextRequest, context: NodesRouteContext) {
       principal.id,
       projectId,
       createBody.parentId,
+      {
+        mode: createBody.mode,
+        hasSourceText: Boolean(createBody.sourceText?.trim()),
+        explicitAttachments: createBody.attachments,
+        instruction: createBody.instruction,
+        sourceText: createBody.sourceText,
+      },
     );
-    const documentContexts = await getWorkspaceDocumentContextsForOwner(
+    const fallbackQuery = [createBody.instruction, createBody.sourceText]
+      .filter(Boolean)
+      .join("\n\n");
+    const retrievalQuery = contextData.retrievalQuery ?? fallbackQuery;
+    const inheritedContextOptions = contextData.inheritedAttachments?.length
+      ? { inheritedAttachments: contextData.inheritedAttachments }
+      : undefined;
+    const documentContexts = inheritedContextOptions
+      ? await getWorkspaceDocumentContextsForOwner(
+          principal.id,
+          createBody.attachments,
+          retrievalQuery,
+          inheritedContextOptions,
+        )
+      : await getWorkspaceDocumentContextsForOwner(
+          principal.id,
+          createBody.attachments,
+          retrievalQuery,
+        );
+    const curriculumContexts = inheritedContextOptions
+      ? await getWorkspaceCurriculumContextsForOwner(
+          principal.id,
+          createBody.attachments,
+          retrievalQuery,
+          inheritedContextOptions,
+        )
+      : await getWorkspaceCurriculumContextsForOwner(
+          principal.id,
+          createBody.attachments,
+          retrievalQuery,
+        );
+    const userMemory = await resolveUserMemorySlotForOwner(
       principal.id,
-      createBody.attachments,
-      [createBody.instruction, createBody.sourceText].filter(Boolean).join("\n\n"),
-    );
-    const curriculumContexts = await getWorkspaceCurriculumContextsForOwner(
-      principal.id,
-      createBody.attachments,
-      [createBody.instruction, createBody.sourceText].filter(Boolean).join("\n\n"),
+      retrievalQuery,
     );
     const reply = await requestDeepSeekReply({
       llmTask: "node_generation",
@@ -97,6 +133,8 @@ export async function POST(request: NextRequest, context: NodesRouteContext) {
       modelSelection: createBody.modelSelection,
       userPlan,
       skill: createBody.skill,
+      treeContext: contextData.treeContext,
+      ...(userMemory ? { userMemory } : {}),
     });
     const result = await createChildNodeForOwner(
       principal.id,
@@ -107,6 +145,16 @@ export async function POST(request: NextRequest, context: NodesRouteContext) {
       reply,
       createBody.attachments,
     );
+    await recordCanvasTurnMemoryForOwner({
+      ownerId: principal.id,
+      projectId,
+      nodeId: result.node.id,
+      mode: createBody.mode,
+      instruction: createBody.instruction,
+      sourceText: createBody.sourceText,
+      reply,
+      contextSummaries: contextData.contextSummaries,
+    });
 
     return jsonWithSession(result, session);
   } catch (error) {

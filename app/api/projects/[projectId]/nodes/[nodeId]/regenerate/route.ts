@@ -30,6 +30,10 @@ import {
   getOrCreateSession,
   type BranchMindSession,
 } from "@/lib/server/session";
+import {
+  recordCanvasTurnMemoryForOwner,
+  resolveUserMemorySlotForOwner,
+} from "@/lib/server/user-memory";
 import { parseJsonBody } from "@/lib/server/validation";
 
 type RegenerateNodeRouteContext = {
@@ -99,15 +103,37 @@ export async function POST(request: NextRequest, context: RegenerateNodeRouteCon
       nodeId,
       body,
     );
-    const documentContexts = await getWorkspaceDocumentContextsForOwner(
+    const retrievalQuery = contextData.retrievalQuery ?? contextData.instruction;
+    const inheritedContextOptions = contextData.inheritedAttachments?.length
+      ? { inheritedAttachments: contextData.inheritedAttachments }
+      : undefined;
+    const documentContexts = inheritedContextOptions
+      ? await getWorkspaceDocumentContextsForOwner(
+          principal.id,
+          contextData.attachments,
+          retrievalQuery,
+          inheritedContextOptions,
+        )
+      : await getWorkspaceDocumentContextsForOwner(
+          principal.id,
+          contextData.attachments,
+          retrievalQuery,
+        );
+    const curriculumContexts = inheritedContextOptions
+      ? await getWorkspaceCurriculumContextsForOwner(
+          principal.id,
+          contextData.attachments,
+          retrievalQuery,
+          inheritedContextOptions,
+        )
+      : await getWorkspaceCurriculumContextsForOwner(
+          principal.id,
+          contextData.attachments,
+          retrievalQuery,
+        );
+    const userMemory = await resolveUserMemorySlotForOwner(
       principal.id,
-      contextData.attachments,
-      contextData.instruction,
-    );
-    const curriculumContexts = await getWorkspaceCurriculumContextsForOwner(
-      principal.id,
-      contextData.attachments,
-      contextData.instruction,
+      retrievalQuery,
     );
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
@@ -126,6 +152,8 @@ export async function POST(request: NextRequest, context: RegenerateNodeRouteCon
             modelSelection: body.modelSelection,
             userPlan,
             skill: body.skill,
+            treeContext: contextData.treeContext,
+            ...(userMemory ? { userMemory } : {}),
           })) {
             if (event.type === "delta") {
               controller.enqueue(encodeSse("delta", {
@@ -147,6 +175,15 @@ export async function POST(request: NextRequest, context: RegenerateNodeRouteCon
               },
             );
             controller.enqueue(encodeSse("complete", result));
+            await recordCanvasTurnMemoryForOwner({
+              ownerId: principal.id,
+              projectId,
+              nodeId: result.node.id,
+              mode: contextData.mode,
+              instruction: contextData.instruction,
+              reply: event.reply,
+              contextSummaries: contextData.contextSummaries,
+            });
           }
         } catch (error) {
           const status = getSafeErrorStatus(error);

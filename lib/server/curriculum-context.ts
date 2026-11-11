@@ -51,80 +51,114 @@ export function buildCurriculumOutline(draft: CurriculumDraft): string {
   return outline;
 }
 
-export async function getWorkspaceCurriculumContextsForOwner(
-  userId: string,
-  attachments: ChatAttachment[],
-  question: string,
-): Promise<ChatCurriculumContext[]> {
-  // Feature-flag off: silently ignore curriculum attachments so messages
-  // created while the flag was on still regenerate cleanly after rollback.
-  if (!isCurriculumAgentEnabled()) return [];
+export type WorkspaceCurriculumContextOptions = {
+  inheritedAttachments?: ChatAttachment[];
+};
 
-  const curriculumIds = Array.from(
+function extractCurriculumIds(attachments: ChatAttachment[]): string[] {
+  return Array.from(
     new Set(
       attachments
         .map((attachment) => attachment.curriculumId?.trim())
         .filter((curriculumId): curriculumId is string => Boolean(curriculumId)),
     ),
-  ).slice(0, MAX_WORKSPACE_CONTEXT_CURRICULA);
+  );
+}
 
-  if (curriculumIds.length === 0) return [];
+export async function getWorkspaceCurriculumContextsForOwner(
+  userId: string,
+  attachments: ChatAttachment[],
+  question: string,
+  options?: WorkspaceCurriculumContextOptions,
+): Promise<ChatCurriculumContext[]> {
+  // Feature-flag off: silently ignore curriculum attachments so messages
+  // created while the flag was on still regenerate cleanly after rollback.
+  if (!isCurriculumAgentEnabled()) return [];
+
+  const allExplicitIds = extractCurriculumIds(attachments);
+  const explicitIdSet = new Set(allExplicitIds);
+  const explicitIds = allExplicitIds.slice(0, MAX_WORKSPACE_CONTEXT_CURRICULA);
+  const inheritedIds = extractCurriculumIds(options?.inheritedAttachments ?? []).filter(
+    (curriculumId) => !explicitIdSet.has(curriculumId),
+  );
+
+  if (explicitIds.length === 0 && inheritedIds.length === 0) return [];
 
   const repository = getCurriculumRepository();
 
-  return Promise.all(
-    curriculumIds.map(async (curriculumId) => {
-      const curriculum = await repository.getCurriculum(userId, curriculumId);
-      if (!curriculum) {
-        throw new HttpError("Curriculum was not found.", {
-          code: "CURRICULUM_NOT_FOUND",
-          expose: true,
-          status: 404,
-        });
-      }
-
-      const versions = (await repository.listVersions(userId, curriculumId)) ?? [];
-      const version = versions
-        .filter((candidate) => candidate.status === "published")
-        .sort((left, right) => right.versionNumber - left.versionNumber)[0];
-      if (!version) {
-        throw new HttpError(
-          `Attached curriculum "${curriculum.title}" has no published version yet.`,
-          {
-            code: "CURRICULUM_VERSION_NOT_PUBLISHED",
-            expose: true,
-            status: 409,
-          },
-        );
-      }
-
-      const content = await repository.getVersionWithContent(
-        userId,
-        curriculumId,
-        version.id,
-      );
-      const matches = await searchCourseSources({
-        ownerId: userId,
-        curriculumVersionId: version.id,
-        query: question,
-        topK: MAX_CURRICULUM_CONTEXT_SNIPPETS,
+  async function resolveCurriculumContext(
+    curriculumId: string,
+    source: "explicit" | "inherited",
+  ): Promise<ChatCurriculumContext | null> {
+    const curriculum = await repository.getCurriculum(userId, curriculumId);
+    if (!curriculum || curriculum.status === "archived") {
+      if (source === "inherited") return null;
+      throw new HttpError("Curriculum was not found.", {
+        code: "CURRICULUM_NOT_FOUND",
+        expose: true,
+        status: 404,
       });
+    }
 
-      return {
-        curriculumId,
-        versionId: version.id,
-        title: curriculum.title,
-        versionLabel: version.versionLabel,
-        outline: content ? buildCurriculumOutline(content.draft) : "",
-        snippets: matches
-          .filter((match) => match.kind === "curriculum_source")
-          .map((match) => ({
-            chunkId: match.chunkId,
-            sourceId: match.sourceId,
-            excerpt: compactText(match.excerpt, MAX_CURRICULUM_SNIPPET_CHARS),
-            score: match.score,
-          })),
-      };
-    }),
-  );
+    const versions = (await repository.listVersions(userId, curriculumId)) ?? [];
+    const version = versions
+      .filter((candidate) => candidate.status === "published")
+      .sort((left, right) => right.versionNumber - left.versionNumber)[0];
+    if (!version) {
+      if (source === "inherited") return null;
+      throw new HttpError(
+        `Attached curriculum "${curriculum.title}" has no published version yet.`,
+        {
+          code: "CURRICULUM_VERSION_NOT_PUBLISHED",
+          expose: true,
+          status: 409,
+        },
+      );
+    }
+
+    const content = await repository.getVersionWithContent(
+      userId,
+      curriculumId,
+      version.id,
+    );
+    const matches = await searchCourseSources({
+      ownerId: userId,
+      curriculumVersionId: version.id,
+      query: question,
+      topK: MAX_CURRICULUM_CONTEXT_SNIPPETS,
+    });
+
+    return {
+      curriculumId,
+      versionId: version.id,
+      title: curriculum.title,
+      versionLabel: version.versionLabel,
+      outline: content ? buildCurriculumOutline(content.draft) : "",
+      snippets: matches
+        .filter((match) => match.kind === "curriculum_source")
+        .map((match) => ({
+          chunkId: match.chunkId,
+          sourceId: match.sourceId,
+          excerpt: compactText(match.excerpt, MAX_CURRICULUM_SNIPPET_CHARS),
+          score: match.score,
+        })),
+    };
+  }
+
+  const explicitContexts = (
+    await Promise.all(
+      explicitIds.map((curriculumId) => resolveCurriculumContext(curriculumId, "explicit")),
+    )
+  ).filter((context): context is ChatCurriculumContext => context !== null);
+
+  const contexts = [...explicitContexts];
+  for (const curriculumId of inheritedIds) {
+    if (contexts.length >= MAX_WORKSPACE_CONTEXT_CURRICULA) break;
+    const inheritedContext = await resolveCurriculumContext(curriculumId, "inherited");
+    if (inheritedContext) {
+      contexts.push(inheritedContext);
+    }
+  }
+
+  return contexts;
 }

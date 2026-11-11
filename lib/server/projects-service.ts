@@ -29,6 +29,13 @@ import {
   withProjectOwner,
   type ProjectDto,
 } from "@/lib/server/projects-repository";
+import {
+  buildContextSummariesFromPath,
+  buildContextualizedRetrievalQuery,
+  buildTreePromptContext,
+  collectInheritedKnowledgeAttachments,
+  type UserMemoryContextSlot,
+} from "@/lib/server/tree-context";
 import type {
   BranchType,
   ChatAttachment,
@@ -52,7 +59,18 @@ type RegenerateNodeUpdate = {
   expectedNodeUpdatedAt?: string;
 };
 
-type PrepareRegenerateNodeUpdate = Omit<RegenerateNodeUpdate, "reply">;
+type PrepareRegenerateNodeUpdate = Omit<RegenerateNodeUpdate, "reply"> & {
+  hasSourceText?: boolean;
+};
+
+export type PrepareChildContextOptions = {
+  mode?: Exclude<BranchType, "root">;
+  hasSourceText?: boolean;
+  userMemory?: UserMemoryContextSlot;
+  explicitAttachments?: ChatAttachment[];
+  instruction?: string;
+  sourceText?: string;
+};
 
 type PopulateBlankNodeUpdate = {
   instruction: string;
@@ -81,18 +99,16 @@ function badRequest(message: string, code: string): never {
 }
 
 async function readOwnedProject(ownerId: string, projectId: string) {
-  const project = (await getProjectsRepository().readProjects()).find(
+  const repository = getProjectsRepository();
+  if (typeof repository.readProjectForOwner === "function") {
+    return repository.readProjectForOwner(ownerId, projectId);
+  }
+
+  const project = (await repository.readProjects()).find(
     (item) => item.id === projectId && projectBelongsToSession(item, ownerId),
   );
 
   return project ?? null;
-}
-
-function getContextSummaries(project: Project, nodeId: string) {
-  return getContextTitles(project, nodeId).map((title) => {
-    const node = Object.values(project.nodes).find((item) => item.title === title);
-    return node ? `${node.title}: ${node.summary}` : title;
-  });
 }
 
 function resolveRegenerateInstruction(
@@ -263,10 +279,14 @@ export async function syncProjectForOwner(
 ) {
   assertSyncProjectGraph(projectId, project);
 
-  const existingProject = (await getProjectsRepository().readProjects()).find(
-    (item) => item.id === projectId,
-  );
-  if (existingProject && existingProject.ownerSessionId !== ownerId) {
+  const repository = getProjectsRepository();
+  const existingOwnerId =
+    typeof repository.readProjectOwnerId === "function"
+      ? await repository.readProjectOwnerId(projectId)
+      : ((await repository.readProjects()).find((item) => item.id === projectId)
+          ?.ownerSessionId ?? null);
+
+  if (existingOwnerId && existingOwnerId !== ownerId) {
     throw new HttpError("Project belongs to another owner.", {
       code: "PROJECT_OWNER_MISMATCH",
       expose: true,
@@ -282,7 +302,7 @@ export async function syncProjectForOwner(
     ownerId,
   );
 
-  await getProjectsRepository().saveProject(ownedProject);
+  await repository.saveProject(ownedProject);
   return toProjectDto(ownedProject);
 }
 
@@ -396,16 +416,36 @@ export async function preparePopulateBlankNodeContext(
     badRequest("Node already has messages.", "NODE_ALREADY_POPULATED");
   }
 
+  const attachments = update.attachments ?? [];
   const contextNodeId = node.parentId ?? nodeId;
+  const treeContext = buildTreePromptContext({
+    project,
+    ancestorNodeId: node.parentId,
+    mode: node.branchType,
+    excludeNodeId: node.id,
+  });
+  const inheritedAttachments = collectInheritedKnowledgeAttachments({
+    project,
+    ancestorNodeId: node.parentId,
+    explicitAttachments: attachments,
+  });
+  const retrievalQuery = buildContextualizedRetrievalQuery({
+    project,
+    ancestorNodeId: node.parentId,
+    instruction,
+  });
 
   return {
-    attachments: update.attachments ?? [],
-    contextSummaries: getContextSummaries(project, contextNodeId),
+    attachments,
+    inheritedAttachments,
+    retrievalQuery,
+    contextSummaries: buildContextSummariesFromPath(project, contextNodeId),
     instruction,
     messages: node.parentId
       ? getNodeConversationMessages(project, node.parentId).map((item) => item.message)
       : [],
     mode: node.branchType,
+    treeContext,
   };
 }
 
@@ -564,16 +604,47 @@ export async function deleteNodeForOwner(
   };
 }
 
-export async function prepareChildContext(ownerId: string, projectId: string, parentId: string) {
+export async function prepareChildContext(
+  ownerId: string,
+  projectId: string,
+  parentId: string,
+  options: PrepareChildContextOptions = {},
+) {
   const project = await readOwnedProject(ownerId, projectId);
   const parent = project?.nodes[parentId];
   if (!project || !parent) notFound();
 
+  const hasSourceText = options.hasSourceText ?? Boolean(options.sourceText?.trim());
+  const treeContext = buildTreePromptContext({
+    project,
+    ancestorNodeId: parentId,
+    mode: options.mode ?? "continue",
+    hasSourceText,
+    userMemory: options.userMemory,
+  });
+  const inheritedAttachments = collectInheritedKnowledgeAttachments({
+    project,
+    ancestorNodeId: parentId,
+    explicitAttachments: options.explicitAttachments,
+  });
+  const retrievalQuery =
+    typeof options.instruction === "string"
+      ? buildContextualizedRetrievalQuery({
+          project,
+          ancestorNodeId: parentId,
+          instruction: options.instruction,
+          sourceText: options.sourceText,
+        })
+      : undefined;
+
   return {
     parent,
     contextTitles: getContextTitles(project, parentId),
-    contextSummaries: getContextSummaries(project, parentId),
+    contextSummaries: buildContextSummariesFromPath(project, parentId),
     messages: getNodeConversationMessages(project, parentId).map((item) => item.message),
+    treeContext,
+    inheritedAttachments,
+    ...(retrievalQuery !== undefined ? { retrievalQuery } : {}),
   };
 }
 
@@ -601,14 +672,38 @@ export async function prepareRegenerateNodeContext(
     node.messages,
     targets,
   );
+  const treeContext = buildTreePromptContext({
+    project,
+    ancestorNodeId: parentId,
+    mode: node.branchType,
+    hasSourceText: update.hasSourceText,
+    excludeNodeId: node.id,
+    currentNodePrefixMessages: currentMessages,
+    currentNode: node,
+  });
+  const explicitAttachments = targets.userMessage.attachments;
+  const inheritedAttachments = collectInheritedKnowledgeAttachments({
+    project,
+    ancestorNodeId: parentId,
+    explicitAttachments,
+    currentNodePrefixMessages: currentMessages,
+  });
+  const retrievalQuery = buildContextualizedRetrievalQuery({
+    project,
+    ancestorNodeId: parentId,
+    instruction,
+  });
 
   return {
     node,
     instruction,
-    attachments: targets.userMessage.attachments,
+    attachments: explicitAttachments,
+    inheritedAttachments,
+    retrievalQuery,
     mode: node.branchType,
-    contextSummaries: parentId ? getContextSummaries(project, parentId) : [],
+    contextSummaries: parentId ? buildContextSummariesFromPath(project, parentId) : [],
     messages: [...ancestorMessages, ...currentMessages],
+    treeContext,
   };
 }
 

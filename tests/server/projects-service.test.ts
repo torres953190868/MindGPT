@@ -3,9 +3,12 @@ import type { ChatAttachment, Project } from "@/lib/types";
 
 const readProjectsMock = vi.hoisted(() => vi.fn());
 const readProjectsForSessionMock = vi.hoisted(() => vi.fn());
+const readProjectForOwnerMock = vi.hoisted(() => vi.fn());
+const readProjectOwnerIdMock = vi.hoisted(() => vi.fn());
 const deleteProjectMock = vi.hoisted(() => vi.fn());
 const saveProjectMock = vi.hoisted(() => vi.fn());
 const updateNodePositionForOwnerMock = vi.hoisted(() => vi.fn());
+const getProjectsRepositoryMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/server/projects-repository", async (importOriginal) => {
   const actual =
@@ -13,13 +16,7 @@ vi.mock("@/lib/server/projects-repository", async (importOriginal) => {
 
   return {
     ...actual,
-    getProjectsRepository: vi.fn(() => ({
-      readProjects: readProjectsMock,
-      readProjectsForSession: readProjectsForSessionMock,
-      deleteProject: deleteProjectMock,
-      saveProject: saveProjectMock,
-      updateNodePositionForOwner: updateNodePositionForOwnerMock,
-    })),
+    getProjectsRepository: getProjectsRepositoryMock,
   };
 });
 
@@ -264,18 +261,46 @@ function makeInheritedProject(): Project {
   };
 }
 
+function resetRepositoryMocks(projects: Project[] = []) {
+  readProjectsMock.mockReset();
+  readProjectsForSessionMock.mockReset();
+  readProjectForOwnerMock.mockReset();
+  readProjectOwnerIdMock.mockReset();
+  deleteProjectMock.mockReset();
+  saveProjectMock.mockReset();
+  updateNodePositionForOwnerMock.mockReset();
+  getProjectsRepositoryMock.mockReset();
+
+  readProjectsMock.mockResolvedValue(projects);
+  readProjectsForSessionMock.mockResolvedValue([]);
+  readProjectForOwnerMock.mockImplementation(
+    async (ownerId: string, projectId: string) =>
+      projects.find(
+        (item) => item.id === projectId && item.ownerSessionId === ownerId,
+      ) ?? null,
+  );
+  readProjectOwnerIdMock.mockImplementation(
+    async (projectId: string) =>
+      projects.find((item) => item.id === projectId)?.ownerSessionId ?? null,
+  );
+  deleteProjectMock.mockResolvedValue(undefined);
+  saveProjectMock.mockResolvedValue(undefined);
+  updateNodePositionForOwnerMock.mockResolvedValue(null);
+
+  getProjectsRepositoryMock.mockReturnValue({
+    readProjects: readProjectsMock,
+    readProjectsForSession: readProjectsForSessionMock,
+    readProjectForOwner: readProjectForOwnerMock,
+    readProjectOwnerId: readProjectOwnerIdMock,
+    deleteProject: deleteProjectMock,
+    saveProject: saveProjectMock,
+    updateNodePositionForOwner: updateNodePositionForOwnerMock,
+  });
+}
+
 describe("prepareRegenerateNodeContext", () => {
   beforeEach(() => {
-    readProjectsMock.mockReset();
-    readProjectsForSessionMock.mockReset();
-    deleteProjectMock.mockReset();
-    saveProjectMock.mockReset();
-    updateNodePositionForOwnerMock.mockReset();
-    readProjectsMock.mockResolvedValue([makeProject()]);
-    readProjectsForSessionMock.mockResolvedValue([]);
-    deleteProjectMock.mockResolvedValue(undefined);
-    saveProjectMock.mockResolvedValue(undefined);
-    updateNodePositionForOwnerMock.mockResolvedValue(null);
+    resetRepositoryMocks([makeProject()]);
   });
 
   it("keeps the edited user message attachments for regenerate RAG", async () => {
@@ -367,16 +392,7 @@ describe("prepareRegenerateNodeContext", () => {
 
 describe("regenerateNodeForOwner", () => {
   beforeEach(() => {
-    readProjectsMock.mockReset();
-    readProjectsForSessionMock.mockReset();
-    deleteProjectMock.mockReset();
-    saveProjectMock.mockReset();
-    updateNodePositionForOwnerMock.mockReset();
-    readProjectsMock.mockResolvedValue([makeProject()]);
-    readProjectsForSessionMock.mockResolvedValue([]);
-    deleteProjectMock.mockResolvedValue(undefined);
-    saveProjectMock.mockResolvedValue(undefined);
-    updateNodePositionForOwnerMock.mockResolvedValue(null);
+    resetRepositoryMocks([makeProject()]);
   });
 
   const reply = {
@@ -401,6 +417,11 @@ describe("regenerateNodeForOwner", () => {
       id: "assistant_b",
       content: "Regenerated answer",
     });
+    expect(readProjectForOwnerMock).toHaveBeenCalledWith(
+      "owner_regenerate",
+      "project_regenerate",
+    );
+    expect(readProjectsMock).not.toHaveBeenCalled();
     expect(saveProjectMock).toHaveBeenCalled();
   });
 
@@ -468,16 +489,7 @@ describe("regenerateNodeForOwner", () => {
 
 describe("inherited conversation context", () => {
   beforeEach(() => {
-    readProjectsMock.mockReset();
-    readProjectsForSessionMock.mockReset();
-    deleteProjectMock.mockReset();
-    saveProjectMock.mockReset();
-    updateNodePositionForOwnerMock.mockReset();
-    readProjectsMock.mockResolvedValue([makeInheritedProject()]);
-    readProjectsForSessionMock.mockResolvedValue([]);
-    deleteProjectMock.mockResolvedValue(undefined);
-    saveProjectMock.mockResolvedValue(undefined);
-    updateNodePositionForOwnerMock.mockResolvedValue(null);
+    resetRepositoryMocks([makeInheritedProject()]);
   });
 
   it("prepares child creation with the root-to-parent conversation", async () => {
@@ -494,6 +506,11 @@ describe("inherited conversation context", () => {
       "Parent prompt",
       "Parent answer",
     ]);
+    expect(readProjectForOwnerMock).toHaveBeenCalledWith(
+      "owner_inherit",
+      "project_inherit",
+    );
+    expect(readProjectsMock).not.toHaveBeenCalled();
   });
 
   it("prepares child regeneration with the ancestor conversation", async () => {
@@ -522,35 +539,37 @@ describe("inherited conversation context", () => {
 
 describe("deleteProjectForOwner", () => {
   beforeEach(() => {
-    readProjectsMock.mockReset();
-    readProjectsForSessionMock.mockReset();
-    deleteProjectMock.mockReset();
-    saveProjectMock.mockReset();
-    updateNodePositionForOwnerMock.mockReset();
-    readProjectsForSessionMock.mockResolvedValue([]);
-    deleteProjectMock.mockResolvedValue(undefined);
-    saveProjectMock.mockResolvedValue(undefined);
-    updateNodePositionForOwnerMock.mockResolvedValue(null);
+    resetRepositoryMocks([]);
   });
 
   it("deletes owned projects and returns the refreshed owner list", async () => {
-    readProjectsMock.mockResolvedValue([makeProject()]);
+    resetRepositoryMocks([makeProject()]);
 
     await expect(
       deleteProjectForOwner("owner_regenerate", "project_regenerate"),
     ).resolves.toEqual([]);
 
+    expect(readProjectForOwnerMock).toHaveBeenCalledWith(
+      "owner_regenerate",
+      "project_regenerate",
+    );
+    expect(readProjectsMock).not.toHaveBeenCalled();
     expect(deleteProjectMock).toHaveBeenCalledWith("project_regenerate");
     expect(readProjectsForSessionMock).toHaveBeenCalledWith("owner_regenerate");
   });
 
   it("treats missing or stale project deletes as idempotent", async () => {
-    readProjectsMock.mockResolvedValue([]);
+    resetRepositoryMocks([]);
 
     await expect(
       deleteProjectForOwner("owner_regenerate", "project_regenerate"),
     ).resolves.toEqual([]);
 
+    expect(readProjectForOwnerMock).toHaveBeenCalledWith(
+      "owner_regenerate",
+      "project_regenerate",
+    );
+    expect(readProjectsMock).not.toHaveBeenCalled();
     expect(deleteProjectMock).not.toHaveBeenCalled();
     expect(readProjectsForSessionMock).toHaveBeenCalledWith("owner_regenerate");
   });
@@ -558,14 +577,7 @@ describe("deleteProjectForOwner", () => {
 
 describe("updateNodeForOwner", () => {
   beforeEach(() => {
-    readProjectsMock.mockReset();
-    readProjectsForSessionMock.mockReset();
-    deleteProjectMock.mockReset();
-    saveProjectMock.mockReset();
-    updateNodePositionForOwnerMock.mockReset();
-    readProjectsMock.mockResolvedValue([makeProject()]);
-    saveProjectMock.mockResolvedValue(undefined);
-    updateNodePositionForOwnerMock.mockResolvedValue(null);
+    resetRepositoryMocks([makeProject()]);
   });
 
   it("keeps a renamed project title when the root node title changes", async () => {
@@ -581,6 +593,11 @@ describe("updateNodeForOwner", () => {
       title: "Manual root title",
       titleManuallyEdited: true,
     });
+    expect(readProjectForOwnerMock).toHaveBeenCalledWith(
+      "owner_regenerate",
+      "project_regenerate",
+    );
+    expect(readProjectsMock).not.toHaveBeenCalled();
     expect(saveProjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
         ownerSessionId: "owner_regenerate",
@@ -590,9 +607,7 @@ describe("updateNodeForOwner", () => {
   });
 
   it("syncs the project title when it still matches the previous root title", async () => {
-    readProjectsMock.mockResolvedValue([
-      { ...makeProject(), title: "Regenerate node" },
-    ]);
+    resetRepositoryMocks([{ ...makeProject(), title: "Regenerate node" }]);
 
     const result = await updateNodeForOwner(
       "owner_regenerate",
@@ -636,6 +651,7 @@ describe("updateNodeForOwner", () => {
       "node_regenerate",
       { x: 42, y: 64 },
     );
+    expect(readProjectForOwnerMock).not.toHaveBeenCalled();
     expect(readProjectsMock).not.toHaveBeenCalled();
     expect(saveProjectMock).not.toHaveBeenCalled();
   });
@@ -643,14 +659,7 @@ describe("updateNodeForOwner", () => {
 
 describe("updateProjectForOwner", () => {
   beforeEach(() => {
-    readProjectsMock.mockReset();
-    readProjectsForSessionMock.mockReset();
-    deleteProjectMock.mockReset();
-    saveProjectMock.mockReset();
-    updateNodePositionForOwnerMock.mockReset();
-    readProjectsMock.mockResolvedValue([makeProject()]);
-    saveProjectMock.mockResolvedValue(undefined);
-    updateNodePositionForOwnerMock.mockResolvedValue(null);
+    resetRepositoryMocks([makeProject()]);
   });
 
   it("renames projects without changing the root node title", async () => {
@@ -665,6 +674,11 @@ describe("updateProjectForOwner", () => {
       title: "Regenerate node",
       titleManuallyEdited: false,
     });
+    expect(readProjectForOwnerMock).toHaveBeenCalledWith(
+      "owner_regenerate",
+      "project_regenerate",
+    );
+    expect(readProjectsMock).not.toHaveBeenCalled();
     expect(saveProjectMock).toHaveBeenCalledWith(
       expect.objectContaining({
         ownerSessionId: "owner_regenerate",
@@ -682,14 +696,7 @@ describe("updateProjectForOwner", () => {
 
 describe("syncProjectForOwner", () => {
   beforeEach(() => {
-    readProjectsMock.mockReset();
-    readProjectsForSessionMock.mockReset();
-    deleteProjectMock.mockReset();
-    saveProjectMock.mockReset();
-    updateNodePositionForOwnerMock.mockReset();
-    readProjectsMock.mockResolvedValue([]);
-    saveProjectMock.mockResolvedValue(undefined);
-    updateNodePositionForOwnerMock.mockResolvedValue(null);
+    resetRepositoryMocks([]);
   });
 
   it("rejects synced projects when node messages are missing", async () => {
@@ -704,5 +711,68 @@ describe("syncProjectForOwner", () => {
     });
 
     expect(saveProjectMock).not.toHaveBeenCalled();
+  });
+
+  it("queries readProjectOwnerId instead of readProjects and rejects syncing over another owner's project", async () => {
+    const project = makeSyncProject();
+    readProjectOwnerIdMock.mockResolvedValue("owner_other");
+
+    await expect(
+      syncProjectForOwner("owner_sync", project.id, project),
+    ).rejects.toMatchObject({
+      code: "PROJECT_OWNER_MISMATCH",
+      status: 403,
+    });
+
+    expect(readProjectOwnerIdMock).toHaveBeenCalledWith(project.id);
+    expect(readProjectsMock).not.toHaveBeenCalled();
+    expect(saveProjectMock).not.toHaveBeenCalled();
+  });
+
+  it("allows syncing when readProjectOwnerId returns null or the same owner without calling readProjects", async () => {
+    const project = makeSyncProject();
+    readProjectOwnerIdMock.mockResolvedValueOnce(null);
+
+    const firstDto = await syncProjectForOwner("owner_sync", project.id, project);
+    expect(firstDto.id).toBe(project.id);
+    expect(readProjectOwnerIdMock).toHaveBeenCalledWith(project.id);
+    expect(readProjectsMock).not.toHaveBeenCalled();
+
+    readProjectOwnerIdMock.mockResolvedValueOnce("owner_sync");
+    const secondDto = await syncProjectForOwner("owner_sync", project.id, project);
+    expect(secondDto.id).toBe(project.id);
+    expect(readProjectsMock).not.toHaveBeenCalled();
+    expect(saveProjectMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("falls back to readProjects when a partial repository mock omits targeted lookup methods", async () => {
+    getProjectsRepositoryMock.mockReturnValue({
+      readProjects: readProjectsMock,
+      readProjectsForSession: readProjectsForSessionMock,
+      deleteProject: deleteProjectMock,
+      saveProject: saveProjectMock,
+      updateNodePositionForOwner: updateNodePositionForOwnerMock,
+    });
+    readProjectsMock.mockResolvedValue([makeProject()]);
+
+    const renamed = await updateProjectForOwner(
+      "owner_regenerate",
+      "project_regenerate",
+      { title: "Fallback rename" },
+    );
+    expect(renamed.title).toBe("Fallback rename");
+    expect(readProjectsMock).toHaveBeenCalledTimes(1);
+
+    const syncProject = makeSyncProject();
+    readProjectsMock.mockResolvedValue([
+      { ...syncProject, ownerSessionId: "owner_other" },
+    ]);
+    await expect(
+      syncProjectForOwner("owner_sync", syncProject.id, syncProject),
+    ).rejects.toMatchObject({
+      code: "PROJECT_OWNER_MISMATCH",
+      status: 403,
+    });
+    expect(readProjectsMock).toHaveBeenCalledTimes(2);
   });
 });

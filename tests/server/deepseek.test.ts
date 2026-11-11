@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { requestDeepSeekReply } from "@/lib/server/deepseek";
 import {
+  appendLengthTruncationNotice,
+  createDeepSeekPayload,
+  DEFAULT_CHAT_MAX_TOKENS,
+  MAX_REPLY_CONTENT_LENGTH,
+} from "@/lib/server/deepseek-core";
+import {
   getJsonStringValuePrefix,
   streamDeepSeekReply,
   type DeepSeekStreamingEvent,
@@ -101,9 +107,195 @@ describe("requestDeepSeekReply", () => {
     expect(requestBody).toMatchObject({
       model: "test-model",
       response_format: { type: "json_object" },
+      max_tokens: DEFAULT_CHAT_MAX_TOKENS,
       stream: false,
     });
+    expect(DEFAULT_CHAT_MAX_TOKENS).toBe(4096);
     expect(requestBody.messages[1].content).toContain("Selected source text: selected source");
+  });
+
+  it("supports AI_MAX_OUTPUT_TOKENS override, clamps bounds, falls back on invalid values, and preserves provider payloadOptions", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+    vi.stubEnv("AI_MAX_OUTPUT_TOKENS", "2048");
+
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    title: "Token budget",
+                    summary: "Configurable output ceiling.",
+                    content: "Configured max_tokens applied.",
+                  }),
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestDeepSeekReply({ instruction: "Test custom max_tokens" });
+    const customBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(customBody.max_tokens).toBe(2048);
+
+    for (const invalid of ["", "not-a-number", "-100", "0", "1024.5"]) {
+      vi.stubEnv("AI_MAX_OUTPUT_TOKENS", invalid);
+      const payload = createDeepSeekPayload(
+        { instruction: "Fallback check" },
+        { payloadOptions: {} },
+        "test-model",
+        false,
+      );
+      expect(payload.max_tokens).toBe(4096);
+    }
+
+    vi.stubEnv("AI_MAX_OUTPUT_TOKENS", "100");
+    expect(
+      createDeepSeekPayload(
+        { instruction: "Min clamp" },
+        { payloadOptions: {} },
+        "test-model",
+        false,
+      ).max_tokens,
+    ).toBe(256);
+
+    vi.stubEnv("AI_MAX_OUTPUT_TOKENS", "99999");
+    expect(
+      createDeepSeekPayload(
+        { instruction: "Max clamp" },
+        { payloadOptions: {} },
+        "test-model",
+        false,
+      ).max_tokens,
+    ).toBe(16_384);
+
+    vi.stubEnv("AI_MAX_OUTPUT_TOKENS", "2048");
+    expect(
+      createDeepSeekPayload(
+        { instruction: "Admin override" },
+        { payloadOptions: { max_tokens: 8192 } },
+        "test-model",
+        false,
+      ).max_tokens,
+    ).toBe(8192);
+  });
+
+  it("accepts long structured replies exceeding 8,000 characters without failing validation", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+    expect(MAX_REPLY_CONTENT_LENGTH).toBe(24_000);
+
+    const longDerivation = `$$\\nabla \\cdot \\mathbf{E} = \\frac{\\rho}{\\varepsilon_0}$$\n${"Step derivation detail. ".repeat(450)}`.trim();
+    expect(longDerivation.length).toBeGreaterThan(10_000);
+
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              finish_reason: "stop",
+              message: {
+                content: JSON.stringify({
+                  title: "Gauss's Law Full Derivation",
+                  summary: "Complete integral-to-differential derivation.",
+                  content: longDerivation,
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const reply = await requestDeepSeekReply({
+      instruction: "Give a thorough derivation of Gauss's law",
+    });
+
+    expect(reply).toEqual({
+      title: "Gauss's Law Full Derivation",
+      summary: "Complete integral-to-differential derivation.",
+      content: longDerivation,
+    });
+  });
+
+  it("recovers partial JSON fields and appends a truncation notice on non-streaming finish_reason === 'length'", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                finish_reason: "length",
+                message: {
+                  content:
+                    '{"title":"Matrix Calculus","summary":"Chain rule proof","content":"Step 1: Let $J_f$ denote the Jacobian matrix',
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                finish_reason: "length",
+                message: {
+                  content:
+                    '{"title":"高斯定律推导","summary":"从通量积分推导散度形式","content":"第一步：由散度定理可知闭合曲面积分等于体积分',
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const englishReply = await requestDeepSeekReply({
+      instruction: "Derive the matrix chain rule",
+    });
+    expect(englishReply).toEqual({
+      title: "Matrix Calculus",
+      summary: "Chain rule proof",
+      content:
+        "Step 1: Let $J_f$ denote the Jacobian matrix\n\n*(Response reached the output token limit; ask a follow-up to continue.)*",
+    });
+
+    const chineseReply = await requestDeepSeekReply({
+      instruction: "请推导高斯定律的微分形式",
+    });
+    expect(chineseReply).toEqual({
+      title: "高斯定律推导",
+      summary: "从通量积分推导散度形式",
+      content:
+        "第一步：由散度定理可知闭合曲面积分等于体积分\n\n*（回答已达单次输出长度上限，可继续追问展开后续内容。）*",
+    });
+
+    expect(appendLengthTruncationNotice(englishReply.content)).toBe(
+      englishReply.content,
+    );
+    expect(appendLengthTruncationNotice(chineseReply.content)).toBe(
+      chineseReply.content,
+    );
   });
 
   it("includes retrieved PDF context in node reply prompts", async () => {
@@ -157,6 +349,7 @@ describe("requestDeepSeekReply", () => {
     expect(requestBody.messages[0].content).toContain("[[cite:N]]");
     expect(requestBody.messages[1].content).toContain("Retrieved PDF context:");
     expect(requestBody.messages[1].content).toContain("PDF: memory.pdf (Memory Systems)");
+    expect(requestBody.messages[1].content).not.toContain("Document outline (structural map only");
     expect(requestBody.messages[1].content).toContain(
       "[source 1; cite as [[cite:1]]] p. 3 | Chapter 1 > Retrieval | chunk chunk_memory",
     );
@@ -171,6 +364,80 @@ describe("requestDeepSeekReply", () => {
         chunkId: "chunk_memory",
         pageStart: 3,
         pageEnd: 3,
+      }),
+    ]);
+  });
+
+  it("renders ChatDocumentContext.outline alongside numbered snippets without adding outline to citations", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  title: "Chapter 2 Overview",
+                  summary: "Contextualizes Retrieval within the textbook structure.",
+                  content:
+                    "Following the Chapter 1 foundations, Retrieval is covered in Chapter 2 [[cite:1]].",
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const outline = [
+      "- Chapter 1: Encoding (pp. 1-2)",
+      "- Chapter 2: Retrieval (pp. 3-6)",
+      "  - 2.1 Retrieval Cues (pp. 3-4)",
+    ].join("\n");
+
+    const reply = await requestDeepSeekReply({
+      instruction: "How is the PDF structured around retrieval cues?",
+      documentContexts: [
+        {
+          documentId: "doc_memory",
+          fileName: "memory.pdf",
+          title: "Memory Systems",
+          outline,
+          snippets: [
+            {
+              chunkId: "chunk_memory",
+              pageStart: 3,
+              pageEnd: 3,
+              headingPath: ["Chapter 2: Retrieval", "2.1 Retrieval Cues"],
+              content: "Retrieval cues help long term memory recall.",
+            },
+          ],
+        },
+      ],
+    });
+
+    const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(requestBody.messages[0].content).toContain("document outline");
+    expect(requestBody.messages[0].content).toContain("[[cite:N]]");
+    expect(requestBody.messages[1].content).toContain(
+      [
+        "PDF: memory.pdf (Memory Systems)",
+        "Document outline (structural map only — cite factual claims only from numbered snippets):",
+        outline,
+        "[source 1; cite as [[cite:1]]] p. 3 | Chapter 2: Retrieval > 2.1 Retrieval Cues | chunk chunk_memory",
+        "Retrieval cues help long term memory recall.",
+      ].join("\n"),
+    );
+    expect(reply.citations).toHaveLength(1);
+    expect(reply.citations).toEqual([
+      expect.objectContaining({
+        index: 1,
+        documentId: "doc_memory",
+        chunkId: "chunk_memory",
       }),
     ]);
   });
@@ -508,12 +775,15 @@ describe("requestDeepSeekReply", () => {
   });
 });
 
-function createSseChunk(content: string) {
+function createSseChunk(
+  content: string | null,
+  finishReason: string | null = null,
+) {
   return `data: ${JSON.stringify({
     choices: [
       {
-        delta: { content },
-        finish_reason: null,
+        delta: content === null ? {} : { content },
+        finish_reason: finishReason,
         index: 0,
       },
     ],
@@ -683,9 +953,144 @@ describe("streamDeepSeekReply", () => {
 
     expect(streamedContent).toBe("Recovered body");
     expect(complete?.reply).toMatchObject({
-      title: "AI: Explain streaming",
-      summary: "Recovered body",
+      title: "Recovered",
+      summary: "Recovered",
       content: "Recovered body",
+    });
+  });
+
+  it("gracefully recovers mid-JSON streaming truncation when finish_reason is 'length'", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+
+    const truncatedJson =
+      '{"title":"Matrix Calculus","summary":"Chain rule proof","content":"Step 1: Let $\\\\mathbf{Y} = f(\\\\mathbf{X})$ and apply the total differential';
+    const ssePayload = [
+      createSseChunk(truncatedJson.slice(0, 45)),
+      createSseChunk(truncatedJson.slice(45, 95)),
+      createSseChunk(truncatedJson.slice(95)),
+      createSseChunk(null, "length"),
+      `data: ${JSON.stringify({ choices: [], usage: { completion_tokens: 4096 } })}\n\n`,
+      "data: [DONE]\n\n",
+    ].join("");
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(createSseResponse([ssePayload])),
+    );
+
+    const events = await collectStreamingEvents();
+    const deltas = events
+      .filter((event): event is Extract<DeepSeekStreamingEvent, { type: "delta" }> =>
+        event.type === "delta",
+      )
+      .map((event) => event.contentDelta);
+    const streamedContent = deltas.join("");
+    const complete = events.find(
+      (event): event is Extract<DeepSeekStreamingEvent, { type: "complete" }> =>
+        event.type === "complete",
+    );
+
+    const expectedNotice =
+      "\n\n*(Response reached the output token limit; ask a follow-up to continue.)*";
+    expect(deltas.at(-1)).toBe(expectedNotice);
+    expect(streamedContent).toBe(
+      `Step 1: Let $\\mathbf{Y} = f(\\mathbf{X})$ and apply the total differential${expectedNotice}`,
+    );
+    expect(complete?.reply).toEqual({
+      title: "Matrix Calculus",
+      summary: "Chain rule proof",
+      content: streamedContent,
+    });
+  });
+
+  it("streams CJK truncation notice and recovers when finish_reason is 'length' before content starts", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+
+    const truncatedBeforeContent =
+      '{"title":"矩阵微积分","summary":"雅可比矩阵链式法则推导';
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        createSseResponse([
+          createSseChunk(truncatedBeforeContent, "length"),
+          "data: [DONE]\n\n",
+        ]),
+      ),
+    );
+
+    const events: DeepSeekStreamingEvent[] = [];
+    for await (const event of streamDeepSeekReply({
+      instruction: "请推导矩阵微积分链式法则",
+    })) {
+      events.push(event);
+    }
+
+    const streamedContent = events
+      .filter((event): event is Extract<DeepSeekStreamingEvent, { type: "delta" }> =>
+        event.type === "delta",
+      )
+      .map((event) => event.contentDelta)
+      .join("");
+    const complete = events.find(
+      (event): event is Extract<DeepSeekStreamingEvent, { type: "complete" }> =>
+        event.type === "complete",
+    );
+
+    expect(streamedContent).toBe(
+      "雅可比矩阵链式法则推导\n\n*（回答已达单次输出长度上限，可继续追问展开后续内容。）*",
+    );
+    expect(complete?.reply).toEqual({
+      title: "矩阵微积分",
+      summary: "雅可比矩阵链式法则推导",
+      content: streamedContent,
+    });
+  });
+
+  it("streams long (> 8,000 char) valid JSON replies without failing schema validation", async () => {
+    vi.stubEnv("DEEPSEEK_API_KEY", "test-key");
+    vi.stubEnv("DEEPSEEK_MODEL", "test-model");
+    vi.stubEnv("DEEPSEEK_ALLOWED_MODELS", "test-model");
+
+    const longContent = "Detailed proof paragraph with $x^2 + y^2 = r^2$. ".repeat(220).trim();
+    expect(longContent.length).toBeGreaterThan(10_000);
+    const rawReply = JSON.stringify({
+      title: "Long Streaming Derivation",
+      summary: "Full proof streamed cleanly.",
+      content: longContent,
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        createSseResponse([
+          createSseChunk(rawReply.slice(0, 4000)),
+          createSseChunk(rawReply.slice(4000), "stop"),
+          "data: [DONE]\n\n",
+        ]),
+      ),
+    );
+
+    const events = await collectStreamingEvents();
+    const streamedContent = events
+      .filter((event): event is Extract<DeepSeekStreamingEvent, { type: "delta" }> =>
+        event.type === "delta",
+      )
+      .map((event) => event.contentDelta)
+      .join("");
+    const complete = events.find(
+      (event): event is Extract<DeepSeekStreamingEvent, { type: "complete" }> =>
+        event.type === "complete",
+    );
+
+    expect(streamedContent).toBe(longContent);
+    expect(complete?.reply).toEqual({
+      title: "Long Streaming Derivation",
+      summary: "Full proof streamed cleanly.",
+      content: longContent,
     });
   });
 

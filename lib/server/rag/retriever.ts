@@ -2,9 +2,9 @@ import { CHUNK_CONFIG } from "./config";
 import { getEmbeddingProvider, type EmbeddingProvider } from "./embeddings";
 import { RagError } from "./errors";
 import { getKeywordTerms } from "./text";
-import type { RagChunk, RetrievedChunk } from "./types";
+import type { RagChunk, RagChunkMatch, RetrievedChunk } from "./types";
 
-function cosineSimilarity(left: number[] | null, right: number[]) {
+export function cosineSimilarity(left: number[] | null, right: number[]): number {
   if (!left || left.length === 0 || right.length === 0) return 0;
   const length = Math.min(left.length, right.length);
   let dot = 0;
@@ -47,34 +47,41 @@ function diverseTopChunks(chunks: RetrievedChunk[], count: number) {
   return selected;
 }
 
-export async function retrieveRelevantChunks(
+export function computeRetrievalCandidateCount(options?: {
+  topK?: number;
+  finalContextChunks?: number;
+}): number {
+  const topK = options?.topK ?? CHUNK_CONFIG.retrievalTopK;
+  const finalContextChunks =
+    options?.finalContextChunks ?? CHUNK_CONFIG.finalContextChunks;
+  return Math.max(topK * 3, finalContextChunks * 4, 24);
+}
+
+export function rankMatchedChunks(
   question: string,
-  chunks: RagChunk[],
-  options: {
+  matches: RagChunkMatch[],
+  options?: {
     topK?: number;
     finalContextChunks?: number;
-    embeddingProvider?: EmbeddingProvider;
-  } = {},
-) {
-  if (chunks.length === 0) {
+  },
+): RetrievedChunk[] {
+  if (matches.length === 0) {
     throw new RagError("This document has no indexed chunks.", {
       code: "DOCUMENT_HAS_NO_CHUNKS",
       status: 409,
     });
   }
 
-  const provider = options.embeddingProvider ?? getEmbeddingProvider();
-  const queryEmbedding = await provider.embedQuery(question);
-  const topK = options.topK ?? CHUNK_CONFIG.retrievalTopK;
+  const topK = options?.topK ?? CHUNK_CONFIG.retrievalTopK;
   const finalContextChunks =
-    options.finalContextChunks ?? CHUNK_CONFIG.finalContextChunks;
+    options?.finalContextChunks ?? CHUNK_CONFIG.finalContextChunks;
 
-  const ranked = chunks
-    .map((chunk): RetrievedChunk => {
-      const vectorScore = cosineSimilarity(chunk.embedding, queryEmbedding);
-      const termScore = keywordScore(question, chunk.content);
+  const ranked = matches
+    .map((match): RetrievedChunk => {
+      const vectorScore = match.similarity;
+      const termScore = keywordScore(question, match.chunk.content);
       return {
-        chunk,
+        chunk: match.chunk,
         vectorScore,
         keywordScore: termScore,
         score: vectorScore + termScore * 0.15,
@@ -84,4 +91,37 @@ export async function retrieveRelevantChunks(
     .slice(0, Math.max(topK, finalContextChunks));
 
   return diverseTopChunks(ranked, finalContextChunks);
+}
+
+export async function retrieveRelevantChunks(
+  question: string,
+  chunks: RagChunk[],
+  options: {
+    topK?: number;
+    finalContextChunks?: number;
+    embeddingProvider?: EmbeddingProvider;
+    queryEmbedding?: number[];
+  } = {},
+): Promise<RetrievedChunk[]> {
+  if (chunks.length === 0) {
+    throw new RagError("This document has no indexed chunks.", {
+      code: "DOCUMENT_HAS_NO_CHUNKS",
+      status: 409,
+    });
+  }
+
+  const queryEmbedding =
+    options.queryEmbedding ??
+    (await (options.embeddingProvider ?? getEmbeddingProvider()).embedQuery(
+      question,
+    ));
+  const matches: RagChunkMatch[] = chunks.map((chunk) => ({
+    chunk,
+    similarity: cosineSimilarity(chunk.embedding, queryEmbedding),
+  }));
+
+  return rankMatchedChunks(question, matches, {
+    topK: options.topK,
+    finalContextChunks: options.finalContextChunks,
+  });
 }

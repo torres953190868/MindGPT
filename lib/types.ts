@@ -33,6 +33,8 @@ export type ChatDocumentContext = {
   documentId: string;
   fileName: string;
   title: string | null;
+  // Compressed document section outline (structural map only; never enters [[cite:N]]).
+  outline?: string;
   snippets: Array<{
     chunkId: string;
     pageStart: number;

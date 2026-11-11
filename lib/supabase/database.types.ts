@@ -1640,6 +1640,75 @@ export type Database = {
         };
         Relationships: [];
       };
+      branchmind_user_memory_profiles: {
+        Row: {
+          owner_id: string;
+          profile_summary: string;
+          preferred_style: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          owner_id: string;
+          profile_summary?: string;
+          preferred_style?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          owner_id?: string;
+          profile_summary?: string;
+          preferred_style?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      branchmind_user_memory_concepts: {
+        Row: {
+          id: string;
+          owner_id: string;
+          concept_key: string;
+          concept: string;
+          status: "mastered" | "learning" | "struggling";
+          note: string;
+          source_project_id: string | null;
+          source_node_id: string | null;
+          evidence_count: number;
+          last_seen_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          owner_id: string;
+          concept_key: string;
+          concept: string;
+          status: "mastered" | "learning" | "struggling";
+          note?: string;
+          source_project_id?: string | null;
+          source_node_id?: string | null;
+          evidence_count?: number;
+          last_seen_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          owner_id?: string;
+          concept_key?: string;
+          concept?: string;
+          status?: "mastered" | "learning" | "struggling";
+          note?: string;
+          source_project_id?: string | null;
+          source_node_id?: string | null;
+          evidence_count?: number;
+          last_seen_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
