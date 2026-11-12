@@ -30,8 +30,8 @@ The product also includes a selectable-text PDF reader and a RAG (retrieval-augm
 - `CLAUDE.md` — detailed architecture and conventions.
 - `README.md` — local setup, environment variables, PDF reader flow.
 - `docs/release-runbook.md` — production release checklist.
-- `RAG.md` — original PDF/RAG requirements spec.
-- `NeedsDoc.md` — original product requirements spec.
+- `docs/specs/RAG.md` — original PDF/RAG requirements spec.
+- `docs/specs/NeedsDoc.md` — original product requirements spec.
 
 ---
 
@@ -40,6 +40,7 @@ The product also includes a selectable-text PDF reader and a RAG (retrieval-augm
 ```text
 app/              # Next.js App Router pages and API routes
 components/       # React components, grouped by feature
+docs/             # Release runbook, specs, research notes, and reference assets
 lib/              # Shared business logic and server helpers
   agent-runtime/  # Dual-agent runtime: model adapter, run service + dual-backend repository, budget, errors, stream events
   client/         # Browser-side helpers (API client, streaming, pending sync)

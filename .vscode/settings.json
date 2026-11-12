@@ -1,0 +1,12 @@
+{
+  "files.exclude": {
+    "**/.DS_Store": true,
+    ".next": true,
+    ".next-dev*": true,
+    "playwright-report": true,
+    "test-results": true,
+    "screenshots": true,
+    "reports": true,
+    "*.tsbuildinfo": true
+  }
+}

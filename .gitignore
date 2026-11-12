@@ -40,4 +40,4 @@ screenshots/
 public/useElementInspector.js
 
 # Promo video render outputs
-promo-video/out/
+scripts/promo-video/out/

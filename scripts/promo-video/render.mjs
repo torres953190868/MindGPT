@@ -1,8 +1,8 @@
-// 将 promo-video/index.html 逐帧导出并编码为 MP4（H.264）。
+// 将 scripts/promo-video/index.html 逐帧导出并编码为 MP4（H.264）。
 //
-//   node promo-video/render.mjs                 # 完整导出 → promo-video/out/branchmind-promo.mp4
-//   node promo-video/render.mjs --stills 3,9,20 # 只导出指定秒数的静帧，便于检查画面
-//   node promo-video/render.mjs --fps 60        # 自定义帧率（默认 30）
+//   node scripts/promo-video/render.mjs                 # 完整导出 → scripts/promo-video/out/branchmind-promo.mp4
+//   node scripts/promo-video/render.mjs --stills 3,9,20 # 只导出指定秒数的静帧，便于检查画面
+//   node scripts/promo-video/render.mjs --fps 60        # 自定义帧率（默认 30）
 import { chromium } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";

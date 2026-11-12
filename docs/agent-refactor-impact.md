@@ -1,6 +1,6 @@
 # 双 Agent 学习系统重构 — 影响分析（Phase 0 交付物）
 
-> 依据 `MindGPT_TWO_AGENT_REFACTOR_SPEC.md` §0 / Phase 0 要求，本文档记录仓库审计结论、关键差距、实施决策与分阶段落点。
+> 依据 `docs/specs/MindGPT_TWO_AGENT_REFACTOR_SPEC.md` §0 / Phase 0 要求，本文档记录仓库审计结论、关键差距、实施决策与分阶段落点。
 > 审计日期：2026-08-04。审计基于 commit `6315c0b`。
 
 ---

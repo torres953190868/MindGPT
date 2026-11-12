@@ -1,9 +1,12 @@
 .env*
 !.env.example
 .next/
-.next-dev/
+.next-dev*/
 node_modules/
 test-results/
 playwright-report/
 reports/
+screenshots/
+docs/
+scripts/promo-video/
 data/
