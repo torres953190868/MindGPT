@@ -32,6 +32,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
     (state) => state.startPendingInitialProjectStream,
   );
   const createChildNode = useBranchMindStore((state) => state.createChildNode);
+  const appendNodeMessage = useBranchMindStore((state) => state.appendNodeMessage);
   const createBlankChildNode = useBranchMindStore(
     (state) => state.createBlankChildNode,
   );
@@ -220,6 +221,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
       onQuickCreateNode={handleQuickCreate}
       inlineNodeComposer={inlineNodeComposer}
       onCreateNode={handleCreateFromPanel}
+      onAppendNodeMessage={appendNodeMessage}
       onPopulateNode={populateBlankNode}
       onEditUserMessage={editUserMessage}
       onRetryAssistantMessage={retryAssistantMessage}

@@ -85,6 +85,15 @@ export const populateBlankNodeSchema = z.object({
   skill: chatSkillSchema.optional(),
 });
 
+export const appendNodeMessageSchema = z.object({
+  instruction: z.string().trim().min(1).max(1_500),
+  sourceText: z.string().trim().max(4_000).optional(),
+  attachments: z.array(chatAttachmentSchema).max(MAX_CHAT_ATTACHMENTS).optional().default([]),
+  expectedNodeUpdatedAt: z.string().trim().min(1).optional(),
+  modelSelection: chatModelSelectionSchema.optional(),
+  skill: chatSkillSchema.optional(),
+});
+
 export const regenerateNodeSchema = z
   .object({
     instruction: z.string().trim().min(1).max(1_500).optional(),

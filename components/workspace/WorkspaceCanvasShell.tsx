@@ -65,6 +65,15 @@ type CreateNodeHandler = (
   skill?: ChatSkill,
 ) => Promise<string | null>;
 
+type AppendNodeMessageHandler = (
+  nodeId: string,
+  instruction: string,
+  sourceText?: string,
+  attachments?: ChatAttachment[],
+  modelSelection?: ChatModelSelection,
+  skill?: ChatSkill,
+) => Promise<boolean>;
+
 type PopulateNodeHandler = (
   nodeId: string,
   instruction: string,
@@ -121,6 +130,7 @@ type WorkspaceCanvasShellProps = {
   onSelectNode: (nodeId: string) => void;
   onQuickCreateNode: (nodeId: string, mode: "continue" | "branch") => void | Promise<void>;
   onCreateNode: CreateNodeHandler;
+  onAppendNodeMessage: AppendNodeMessageHandler;
   onPopulateNode: PopulateNodeHandler;
   onEditUserMessage: EditUserMessageHandler;
   onRetryAssistantMessage: RetryAssistantMessageHandler;
@@ -316,6 +326,7 @@ export function WorkspaceCanvasShell({
   onSelectNode,
   onQuickCreateNode,
   onCreateNode,
+  onAppendNodeMessage,
   onPopulateNode,
   onEditUserMessage,
   onRetryAssistantMessage,
@@ -1219,6 +1230,7 @@ export function WorkspaceCanvasShell({
               conversationMessages={selectedConversationMessages}
               conversationFocusRequest={conversationFocusRequest}
               onCreateNode={onCreateNode}
+              onAppendNodeMessage={onAppendNodeMessage}
               onPopulateNode={onPopulateNode}
               onEditUserMessage={onEditUserMessage}
               onRetryAssistantMessage={onRetryAssistantMessage}

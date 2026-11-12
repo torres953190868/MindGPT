@@ -205,8 +205,13 @@ describe("resolveTreeContextModePolicy", () => {
       },
       modeGuidance: expect.stringContaining("Continue Down"),
     });
+    expect(
+      policy.modeGuidance.startsWith("Mode: Continue Down (mainline progression)."),
+    ).toBe(true);
     expect(policy.modeGuidance.toLowerCase()).toContain("root");
     expect(policy.modeGuidance.toLowerCase()).toContain("project notes");
+    expect(policy.modeGuidance.toLowerCase()).toContain("side-branch");
+    expect(policy.modeGuidance.toLowerCase()).toContain("derivation");
 
     expect(resolveTreeContextModePolicy("continue", { hasSourceText: true }).hasSourceText).toBe(
       true,
@@ -233,6 +238,10 @@ describe("resolveTreeContextModePolicy", () => {
       },
       modeGuidance: expect.stringContaining("Branch Right"),
     });
+    expect(
+      generalBranch.modeGuidance.startsWith("Mode: Branch Right (sub-topic deep dive)."),
+    ).toBe(true);
+    expect(generalBranch.modeGuidance).toContain("self-contained depth and clarity");
 
     expect(selectedTextBranch).toEqual({
       mode: "branch",
@@ -250,6 +259,12 @@ describe("resolveTreeContextModePolicy", () => {
       },
       modeGuidance: expect.stringContaining("selected source text"),
     });
+    expect(
+      selectedTextBranch.modeGuidance.startsWith(
+        "Mode: Branch Right on selected source text (inline deep dive).",
+      ),
+    ).toBe(true);
+    expect(selectedTextBranch.modeGuidance).toContain("unpacking the selected passage");
 
     // Selected-text inline deep dive anchors more tightly on the immediate parent than general branch or continue.
     const continuePolicy = resolveTreeContextModePolicy("continue");
@@ -282,6 +297,11 @@ describe("resolveTreeContextModePolicy", () => {
       },
       modeGuidance: expect.stringContaining("Root"),
     });
+    expect(rootPolicy.modeGuidance.startsWith("Mode: Root node (canvas entry).")).toBe(
+      true,
+    );
+    expect(rootPolicy.modeGuidance).toContain("mental model");
+    expect(rootPolicy.modeGuidance).toContain("subsequent branching");
 
     // Returns fresh budget objects per call so callers cannot mutate shared policy state.
     const secondRootPolicy = resolveTreeContextModePolicy("root");

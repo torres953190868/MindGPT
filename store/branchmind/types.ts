@@ -65,6 +65,15 @@ export type PopulateBlankNodeOptions = {
   skill?: ChatSkill;
 };
 
+export type AppendNodeMessageOptions = {
+  nodeId: string;
+  instruction: string;
+  sourceText?: string;
+  attachments?: ChatAttachment[];
+  modelSelection?: ChatModelSelection;
+  skill?: ChatSkill;
+};
+
 export type ProjectsResponse = {
   projects: Project[];
 };
@@ -148,6 +157,14 @@ export type BranchMindStreamingActions = {
   populateBlankNode: (
     nodeId: string,
     instruction: string,
+    attachments?: ChatAttachment[],
+    modelSelection?: ChatModelSelection,
+    skill?: ChatSkill,
+  ) => Promise<boolean>;
+  appendNodeMessage: (
+    nodeId: string,
+    instruction: string,
+    sourceText?: string,
     attachments?: ChatAttachment[],
     modelSelection?: ChatModelSelection,
     skill?: ChatSkill,

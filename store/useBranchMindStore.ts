@@ -15,6 +15,7 @@ import {
 } from "./branchmind/sync";
 import type {
   ApiErrorPayload,
+  AppendNodeMessageOptions,
   BlankChildNodeCreation,
   BranchMindCrudActions,
   BranchMindDataState,
@@ -26,7 +27,9 @@ import type {
   PendingInitialProjectStream,
   PendingNodePositionSync,
   PendingNodePositionSyncRecord,
+  PopulateBlankNodeOptions,
   ProjectsResponse,
+  RegenerateNodeOptions,
   RegenerateRollback,
   StoredPendingNodePositionSyncs,
   SyncProjectResponse,
@@ -36,6 +39,7 @@ import type {
 
 export type {
   ApiErrorPayload,
+  AppendNodeMessageOptions,
   BlankChildNodeCreation,
   BranchMindCrudActions,
   BranchMindDataState,
@@ -47,7 +51,9 @@ export type {
   PendingInitialProjectStream,
   PendingNodePositionSync,
   PendingNodePositionSyncRecord,
+  PopulateBlankNodeOptions,
   ProjectsResponse,
+  RegenerateNodeOptions,
   RegenerateRollback,
   StoredPendingNodePositionSyncs,
   SyncProjectResponse,

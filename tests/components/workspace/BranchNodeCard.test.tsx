@@ -8,7 +8,7 @@ import {
   type InlineNodeComposerData,
 } from "@/components/workspace/BranchNodeCard";
 import type { MindNode } from "@/lib/types";
-import { makeNode } from "../fixtures";
+import { makeMessage, makeNode } from "../fixtures";
 import { copy, renderWithProviders } from "../../setup/render";
 
 function FlowWrapper({ children }: { children: ReactNode }) {
@@ -94,6 +94,51 @@ describe("BranchNodeCard", () => {
     expect(screen.getByTestId("branch-node-card").querySelector("[data-kind]")).toHaveTextContent(
       label,
     );
+  });
+
+  it("hides the multi-turn badge when a node has 0 or 1 user turn and renders it for multi-turn nodes", () => {
+    const { unmount: unmountZero } = renderCard(withNode({ messages: [] }));
+    expect(screen.queryByTestId("branch-node-turn-count")).not.toBeInTheDocument();
+    unmountZero();
+
+    const { unmount: unmountOne } = renderCard(
+      withNode({
+        messages: [
+          makeMessage({ id: "u1", role: "user", content: "First question" }),
+          makeMessage({ id: "a1", role: "assistant", content: "First answer" }),
+          makeMessage({ id: "u-empty", role: "user", content: "   " }),
+        ],
+      }),
+    );
+    expect(screen.queryByTestId("branch-node-turn-count")).not.toBeInTheDocument();
+    unmountOne();
+
+    const threeTurnMessages = [
+      makeMessage({ id: "u1", role: "user", content: "Turn 1" }),
+      makeMessage({ id: "a1", role: "assistant", content: "Answer 1" }),
+      makeMessage({ id: "u2", role: "user", content: "Turn 2" }),
+      makeMessage({ id: "a2", role: "assistant", content: "Answer 2" }),
+      makeMessage({ id: "u3", role: "user", content: "Turn 3" }),
+      makeMessage({ id: "a3", role: "assistant", content: "Answer 3" }),
+    ];
+    const { unmount: unmountThree } = renderCard(withNode({ messages: threeTurnMessages }));
+    const badge = screen.getByTestId("branch-node-turn-count");
+    expect(badge).toHaveTextContent(copy.workspace.turnCountShort(3));
+    expect(badge).toHaveAttribute("aria-label", copy.workspace.turnCount(3));
+    unmountThree();
+
+    renderCard({
+      ...withNode({ messages: threeTurnMessages }),
+      inlineComposer: {
+        nodeId: "node-1",
+        isBusy: false,
+        error: null,
+        placeholder: "Ask anything",
+        submitLabel: "Send",
+        onSubmit: vi.fn(async () => "project-1"),
+      },
+    });
+    expect(screen.queryByTestId("branch-node-turn-count")).not.toBeInTheDocument();
   });
 
   it("reflects the selected state", () => {

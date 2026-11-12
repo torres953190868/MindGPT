@@ -641,7 +641,7 @@ export function resolveTreeContextModePolicy(
         userMemoryChars: 1000,
       },
       modeGuidance:
-        "Mode: Continue Down (mainline progression). Advance the main thread vertically from the parent node while maintaining continuity with the root goal and ancestor trajectory. Leverage clarified side-branch takeaways and pinned project notes without re-explaining them from scratch, and carry the reasoning forward.",
+        "Mode: Continue Down (mainline progression). Advance the main thread directly from the parent node—delivering the next logical step, deeper derivation, concrete implementation, or synthesis aligned with the root goal—while leveraging clarified side-branch takeaways and pinned project notes without re-explaining prior steps from scratch.",
     };
   }
 
@@ -662,7 +662,7 @@ export function resolveTreeContextModePolicy(
           userMemoryChars: 800,
         },
         modeGuidance:
-          "Mode: Branch Right on selected source text (inline deep dive). Focus sharply on explaining and analyzing the selected source text in the immediate context of its parent node without re-summarizing the entire main thread.",
+          "Mode: Branch Right on selected source text (inline deep dive). Zoom straight into unpacking the selected passage, formula, or term—clarifying its precise meaning, intuition, underlying mechanism, or a concrete example in its immediate parent context—without re-summarizing the main thread.",
       };
     }
 
@@ -681,7 +681,7 @@ export function resolveTreeContextModePolicy(
         userMemoryChars: 800,
       },
       modeGuidance:
-        "Mode: Branch Right (sub-topic deep dive). Explore this sub-topic thoroughly in an isolated side branch anchored to its parent context, without derailing the main thread or repeating the full mainline overview.",
+        "Mode: Branch Right (sub-topic deep dive). Explore this sub-topic with self-contained depth and clarity in an isolated side branch anchored to its parent context, without derailing or repeating the main thread.",
     };
   }
 
@@ -700,6 +700,6 @@ export function resolveTreeContextModePolicy(
       userMemoryChars: 1000,
     },
     modeGuidance:
-      "Mode: Root node (canvas entry). Establish a clear, well-structured foundation for the topic that frames core concepts and sets up clean directions for subsequent exploration.",
+      "Mode: Root node (canvas entry). Establish a clear mental model and substantive foundation for the topic while surfacing natural conceptual directions for subsequent branching.",
   };
 }

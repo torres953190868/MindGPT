@@ -252,6 +252,46 @@ export function populateBlankNode(
   };
 }
 
+export function appendNodeMessage(
+  project: Project,
+  nodeId: string,
+  instruction: string,
+  reply: MockReply,
+  attachments: ChatAttachment[] = [],
+) {
+  const node = project.nodes[nodeId];
+  const trimmed = instruction.trim();
+  if (!node || node.messages.length === 0 || !trimmed) return null;
+
+  const timestamp = now();
+  const nextNode: MindNode = {
+    ...node,
+    title: node.title.trim() ? node.title : reply.title,
+    titleManuallyEdited: node.titleManuallyEdited,
+    summary: reply.summary,
+    messages: [
+      ...node.messages,
+      makeMessage("user", trimmed, attachments),
+      makeMessage("assistant", reply.content, [], reply.citations ?? []),
+    ],
+    updatedAt: timestamp,
+  };
+
+  const nextProject: Project = {
+    ...project,
+    nodes: {
+      ...project.nodes,
+      [nodeId]: nextNode,
+    },
+    updatedAt: timestamp,
+  };
+
+  return {
+    node: nextNode,
+    project: nextProject,
+  };
+}
+
 export function regenerateNode(
   project: Project,
   nodeId: string,

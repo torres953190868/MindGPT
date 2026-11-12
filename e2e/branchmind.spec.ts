@@ -3380,7 +3380,8 @@ test("selected conversation text is attached as BranchMind context", async ({ pa
   const sourceProject = makeWorkspaceProject(`selection-context-${makeSeed()}`);
   const selectedPhrase = "stable workspace";
   const clearedPhrase = "release checks";
-  const streamPayloads: Array<Record<string, unknown>> = [];
+  const nodeStreamPayloads: Array<Record<string, unknown>> = [];
+  const messageStreamPayloads: Array<Record<string, unknown>> = [];
   let projectIdToDelete: string | null = null;
 
   try {
@@ -3388,7 +3389,15 @@ test("selected conversation text is attached as BranchMind context", async ({ pa
     projectIdToDelete = project.id;
 
     await page.route(`**/api/projects/${project.id}/nodes/stream`, async (route) => {
-      streamPayloads.push(route.request().postDataJSON() as Record<string, unknown>);
+      nodeStreamPayloads.push(route.request().postDataJSON() as Record<string, unknown>);
+      await route.fulfill({
+        status: 200,
+        headers: { "Content-Type": "text/event-stream; charset=utf-8" },
+        body: 'event: error\ndata: {"message":"Captured request"}\n\n',
+      });
+    });
+    await page.route(`**/api/projects/${project.id}/nodes/*/messages/stream`, async (route) => {
+      messageStreamPayloads.push(route.request().postDataJSON() as Record<string, unknown>);
       await route.fulfill({
         status: 200,
         headers: { "Content-Type": "text/event-stream; charset=utf-8" },
@@ -3398,6 +3407,9 @@ test("selected conversation text is attached as BranchMind context", async ({ pa
 
     await page.goto(`/workspace/${project.id}`);
     await expect(page.getByTestId("conversation-history")).toBeVisible();
+    await expect(
+      page.getByTestId("message-branch-mode").getByTestId("reply-in-node-button"),
+    ).toHaveAttribute("aria-pressed", "true");
 
     await selectConversationText(page, selectedPhrase);
     await expect(page.getByTestId("ask-branchmind-selection-button")).toBeVisible();
@@ -3419,9 +3431,9 @@ test("selected conversation text is attached as BranchMind context", async ({ pa
       .fill("Explain this selected context.");
     await page.getByTestId("send-message-button").click();
     await expect
-      .poll(() => streamPayloads.length, { message: "first stream request" })
+      .poll(() => nodeStreamPayloads.length, { message: "first stream request" })
       .toBe(1);
-    expect(streamPayloads[0]).toMatchObject({
+    expect(nodeStreamPayloads[0]).toMatchObject({
       instruction: "Explain this selected context.",
       mode: "branch",
       sourceText: selectedPhrase,
@@ -3429,25 +3441,32 @@ test("selected conversation text is attached as BranchMind context", async ({ pa
 
     await expect(page.getByTestId("selected-text-context-chip")).toHaveCount(0);
     await expect(page.getByTestId("send-message-button")).toHaveAttribute("aria-label", "发送");
+    await expect(page.getByTestId("message-instruction-input")).toBeEnabled();
 
     await selectConversationText(page, clearedPhrase);
     await page.getByTestId("ask-branchmind-selection-button").click();
     await expect(page.getByTestId("selected-text-context-chip")).toBeVisible();
+    await expect(
+      page.getByTestId("message-branch-mode").getByTestId("branch-right-button"),
+    ).toHaveAttribute("aria-pressed", "true");
     await page.getByTestId("remove-selected-text-context-button").click();
     await expect(page.getByTestId("selected-text-context-chip")).toHaveCount(0);
+    await expect(
+      page.getByTestId("message-branch-mode").getByTestId("reply-in-node-button"),
+    ).toHaveAttribute("aria-pressed", "true");
 
     await page
       .getByTestId("message-instruction-input")
       .fill("Ask without the selected context.");
     await page.getByTestId("send-message-button").click();
     await expect
-      .poll(() => streamPayloads.length, { message: "second stream request" })
-      .toBe(2);
-    expect(streamPayloads[1]).toMatchObject({
+      .poll(() => messageStreamPayloads.length, { message: "second stream request" })
+      .toBe(1);
+    expect(nodeStreamPayloads).toHaveLength(1);
+    expect(messageStreamPayloads[0]).toMatchObject({
       instruction: "Ask without the selected context.",
-      mode: "branch",
     });
-    expect(streamPayloads[1]).not.toHaveProperty("sourceText");
+    expect(messageStreamPayloads[0]).not.toHaveProperty("sourceText");
   } finally {
     if (projectIdToDelete) {
       await page.request
@@ -4736,6 +4755,7 @@ test("streams a node reply into a draft child node", async ({ page }, testInfo) 
     }).catch(() => undefined);
 
     await page.goto(`/workspace/${project.id}`);
+    await page.getByTestId("message-branch-mode").getByTestId("continue-down-button").click();
     await page.getByTestId("message-instruction-input").fill(instruction);
     await page.getByTestId("send-message-button").click();
 
@@ -4758,6 +4778,64 @@ test("streams a node reply into a draft child node", async ({ page }, testInfo) 
     await expect(messages.nth(2)).not.toHaveAttribute("data-inherited", "true");
     await expect(page.getByTestId("message-streaming-status")).toHaveCount(0);
     await expect(page.getByTestId("streaming-assistant-response")).toHaveCount(0);
+  } finally {
+    if (projectIdToDelete) {
+      await page.request
+        .delete(`/api/projects/${projectIdToDelete}`, { headers: API_MUTATION_HEADERS })
+        .catch(() => undefined);
+    }
+  }
+});
+
+test("streams a follow-up reply inside the current node by default", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "In-node follow-up streaming is covered once.");
+
+  const sourceProject = makeWorkspaceProject(`follow-up-${makeSeed()}`);
+  const instruction = "Stream a follow-up answer inside the current node.";
+  let projectIdToDelete: string | null = null;
+
+  try {
+    const project = await importProject(page, sourceProject);
+    projectIdToDelete = project.id;
+    await page.request
+      .post(`/api/projects/${project.id}/nodes/missing-node-for-route-warmup/messages/stream`, {
+        headers: API_MUTATION_HEADERS,
+        data: {
+          instruction: "Warm up the follow-up streaming route.",
+        },
+      })
+      .catch(() => undefined);
+
+    await page.goto(`/workspace/${project.id}`);
+    await expect(
+      page.getByTestId("message-branch-mode").getByTestId("reply-in-node-button"),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("branch-node-turn-count")).toHaveCount(0);
+
+    await page.getByTestId("message-instruction-input").fill(instruction);
+    await page.getByTestId("send-message-button").click();
+
+    await expect(page.getByTestId("branch-node-card")).toHaveCount(1);
+    const messages = page.getByTestId("conversation-message");
+    await expect(messages).toHaveCount(4);
+    await expect(
+      page.locator('[data-testid="conversation-message"][data-inherited="true"]'),
+    ).toHaveCount(0);
+
+    await expect(page.getByTestId("conversation-history")).toContainText(
+      `Instruction received: ${instruction}`,
+    );
+    await expect(messages).toHaveCount(4);
+    await expect(messages.nth(2)).toContainText(instruction);
+    await expect(page.getByTestId("message-streaming-status")).toHaveCount(0);
+    await expect(page.getByTestId("streaming-assistant-response")).toHaveCount(0);
+    await expect(page.getByTestId("node-detail-panel")).toContainText("Seeded root node");
+    await expect(page.getByTestId("branch-node-card")).toContainText("Seeded root node");
+    await expect(page.getByTestId("branch-node-turn-count")).toHaveText("2 轮");
+    await expect(page.getByTestId("branch-node-turn-count")).toHaveAttribute(
+      "aria-label",
+      "2 轮对话",
+    );
   } finally {
     if (projectIdToDelete) {
       await page.request
@@ -4815,7 +4893,10 @@ test("attaches file metadata to a sent message", async ({ page }, testInfo) => {
     await page.getByTestId("send-message-button").click();
 
     await expect(
-      page.locator('[data-testid="conversation-message"]:not([data-inherited="true"])').first(),
+      page
+        .locator('[data-testid="conversation-message"]:not([data-inherited="true"])')
+        .filter({ hasText: instruction })
+        .first(),
     ).toContainText(
       instruction,
     );
@@ -4893,7 +4974,7 @@ test("selects an indexed PDF knowledge document without re-uploading", async ({
   try {
     const project = await importProject(page, sourceProject);
     projectIdToDelete = project.id;
-    await page.route(`**/api/projects/${project.id}/nodes/stream`, async (route) => {
+    await page.route(`**/api/projects/${project.id}/nodes/*/messages/stream`, async (route) => {
       streamPayload = route.request().postDataJSON();
       await route.fulfill({
         status: 200,
@@ -5204,7 +5285,7 @@ test("opens the mobile chat drawer when a streamed reply finishes", async ({
   try {
     const project = await importProject(page, sourceProject);
     projectIdToDelete = project.id;
-    await page.route(`**/api/projects/${project.id}/nodes/stream`, async (route) => {
+    await page.route(`**/api/projects/${project.id}/nodes/*/messages/stream`, async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 2_500));
       await route.fallback();
     });

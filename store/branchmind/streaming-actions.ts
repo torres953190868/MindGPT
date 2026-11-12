@@ -1,10 +1,12 @@
 import {
   appendDraftAssistantDelta,
+  createAppendingNodeMessageProject,
   createDraftChildProject,
   createPopulatingBlankNodeProject,
   createRegeneratingNodeProject,
   createTextDeltaBatch,
   readNodeStreamingEvents,
+  removeAppendedDraftMessages,
   removeDraftChildNode,
 } from "@/lib/client/node-streaming";
 import type { PendingProjectSyncRecord } from "@/lib/client/pending-project-sync";
@@ -23,6 +25,7 @@ import {
   persistPendingSyncRecord,
 } from "./sync";
 import type {
+  AppendNodeMessageOptions,
   BranchMindGet,
   BranchMindSet,
   BranchMindStreamingActions,
@@ -296,6 +299,159 @@ export async function populateBlankNodeInPlace(
   return true;
 }
 
+export async function appendNodeMessageInPlace(
+  set: BranchMindSet,
+  get: BranchMindGet,
+  {
+    nodeId,
+    instruction,
+    sourceText,
+    attachments = [],
+    modelSelection,
+    skill,
+  }: AppendNodeMessageOptions,
+): Promise<boolean> {
+  const trimmed = instruction.trim();
+  if (!trimmed) return false;
+
+  const state = get();
+  const project = state.projects.find((item) => item.id === state.activeProjectId);
+  const node = project?.nodes[nodeId];
+  if (
+    !project ||
+    !node ||
+    node.messages.length === 0 ||
+    state.creatingNodeId ||
+    state.streamingNodeId ||
+    isProjectWaitingForSync(state, project.id)
+  ) {
+    return false;
+  }
+
+  const draft = createAppendingNodeMessageProject(project, nodeId, trimmed, attachments);
+  if (!draft) return false;
+
+  set({
+    projects: replaceProject(state.projects, draft.project),
+    selectedNodeId: nodeId,
+    creatingNodeId: nodeId,
+    streamingNodeId: nodeId,
+    streamingMessageId: draft.assistantMessageId,
+    aiError: null,
+  });
+
+  const deltaBatch = createTextDeltaBatch((contentDelta) => {
+    set((current) => {
+      const currentProject = current.projects.find((item) => item.id === project.id);
+      if (!currentProject) return current;
+
+      return {
+        projects: replaceProject(
+          current.projects,
+          appendDraftAssistantDelta(
+            currentProject,
+            nodeId,
+            draft.assistantMessageId,
+            contentDelta,
+          ),
+        ),
+      };
+    });
+  });
+
+  void (async () => {
+    let completed = false;
+
+    try {
+      const response = await fetch(
+        `/api/projects/${project.id}/nodes/${nodeId}/messages/stream`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            instruction: trimmed,
+            sourceText,
+            attachments,
+            expectedNodeUpdatedAt: node.updatedAt,
+            modelSelection,
+            ...(skill ? { skill } : {}),
+          }),
+        },
+      );
+
+      await readNodeStreamingEvents(response, (event) => {
+        if (event.type === "delta") {
+          deltaBatch.push(event.contentDelta);
+          return;
+        }
+
+        completed = true;
+        deltaBatch.flushNow();
+        set((current) => {
+          const currentProject = current.projects.find(
+            (item) => item.id === event.project.id,
+          );
+          const nextProjects = currentProject
+            ? replaceProject(current.projects, {
+                ...currentProject,
+                title: event.project.title,
+                updatedAt: newestTimestamp(
+                  currentProject.updatedAt,
+                  event.project.updatedAt,
+                ),
+                nodes: {
+                  ...currentProject.nodes,
+                  [event.node.id]: event.node,
+                },
+              })
+            : replaceProject(current.projects, event.project);
+
+          return {
+            projects: nextProjects,
+            selectedNodeId: event.node.id,
+            creatingNodeId: null,
+            streamingNodeId: null,
+            streamingMessageId: null,
+          };
+        });
+      });
+
+      if (!completed) throw new Error("Streaming response ended before completion.");
+    } catch (error) {
+      deltaBatch.cancel();
+      const errorMessage = isNodeConflictError(error)
+        ? getNodeConflictErrorMessage()
+        : getErrorMessage(error);
+
+      set((current) => {
+        const currentProject = current.projects.find((item) => item.id === project.id);
+        return {
+          projects:
+            completed || !currentProject
+              ? current.projects
+              : replaceProject(
+                  current.projects,
+                  removeAppendedDraftMessages(
+                    currentProject,
+                    nodeId,
+                    [draft.userMessageId, draft.assistantMessageId],
+                    node.updatedAt,
+                  ),
+                ),
+          selectedNodeId: nodeId,
+          creatingNodeId: null,
+          streamingNodeId: null,
+          streamingMessageId: null,
+          aiError: errorMessage,
+        };
+      });
+    }
+  })();
+
+  return true;
+}
+
 export function createStreamingActions(
   set: BranchMindSet,
   get: BranchMindGet,
@@ -473,6 +629,23 @@ export function createStreamingActions(
 
     populateBlankNode: (nodeId, instruction, attachments, modelSelection, skill) =>
       populateBlankNodeInPlace(set, get, { nodeId, instruction, attachments, modelSelection, skill }),
+
+    appendNodeMessage: (
+      nodeId,
+      instruction,
+      sourceText,
+      attachments,
+      modelSelection,
+      skill,
+    ) =>
+      appendNodeMessageInPlace(set, get, {
+        nodeId,
+        instruction,
+        sourceText,
+        attachments,
+        modelSelection,
+        skill,
+      }),
 
     editUserMessage: async (nodeId, userMessageId, instruction, modelSelection, skill) => {
       const trimmed = instruction.trim();

@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { GitBranch, Loader2, Send, Sparkles, Sprout, Ribbon } from "lucide-react";
+import { GitBranch, Loader2, MessageSquare, Send, Sparkles, Sprout, Ribbon } from "lucide-react";
 import {
   ActiveSkillChip,
   AttachmentMenuButton,
@@ -119,6 +119,11 @@ export function BranchNodeCard({ data }: NodeProps) {
   const hasChildren = mindNode.children.length > 0;
   const hasInlineComposer = Boolean(inlineComposer);
   const isHomeInlineComposer = inlineComposer?.variant === "home";
+  const turnCount = mindNode.messages.filter(
+    (message) => message.role === "user" && message.content.trim().length > 0,
+  ).length;
+  const shouldShowTurnCountBadge =
+    !isHomeInlineComposer && !hasInlineComposer && turnCount > 1;
   const quickActionHighlight = useHighlightedAction<QuickActionItem>();
   const isContinueQuickActionHighlighted = quickActionHighlight.isHighlighted("continue");
   const isBranchQuickActionHighlighted = quickActionHighlight.isHighlighted("branch");
@@ -290,17 +295,29 @@ export function BranchNodeCard({ data }: NodeProps) {
             }`}
           >
             <span className="flex items-start justify-between gap-3">
-              <span>
-                <span
-                  className="branch-node-kind-label flex items-center gap-1.5 text-xs font-black uppercase tracking-[0.16em] text-neutral-500"
-                  data-kind={mindNode.branchType}
-                >
-                  <span aria-hidden="true" className="branch-node-kind-dot h-1.5 w-1.5 shrink-0 rounded-full" />
-                  {mindNode.branchType === "root"
-                    ? copy.workspace.root
-                    : mindNode.branchType === "branch"
-                      ? copy.workspace.branch
-                      : copy.workspace.continue}
+              <span className="min-w-0">
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <span
+                    className="branch-node-kind-label inline-flex items-center gap-1.5 text-xs font-black uppercase tracking-[0.16em] text-neutral-500"
+                    data-kind={mindNode.branchType}
+                  >
+                    <span aria-hidden="true" className="branch-node-kind-dot h-1.5 w-1.5 shrink-0 rounded-full" />
+                    {mindNode.branchType === "root"
+                      ? copy.workspace.root
+                      : mindNode.branchType === "branch"
+                        ? copy.workspace.branch
+                        : copy.workspace.continue}
+                  </span>
+                  {shouldShowTurnCountBadge && (
+                    <span
+                      aria-label={copy.workspace.turnCount(turnCount)}
+                      data-testid="branch-node-turn-count"
+                      className="branch-node-turn-count inline-flex items-center gap-1 rounded-full border border-neutral-200/80 bg-neutral-100/90 px-2 py-0.5 text-[11px] font-extrabold tracking-normal text-neutral-600"
+                    >
+                      <MessageSquare size={11} aria-hidden="true" className="shrink-0" />
+                      {copy.workspace.turnCountShort(turnCount)}
+                    </span>
+                  )}
                 </span>
                 <span
                   id={nodeTitleId}

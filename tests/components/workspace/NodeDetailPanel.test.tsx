@@ -18,6 +18,7 @@ function createProps(overrides: Partial<NodeDetailPanelProps> = {}): NodeDetailP
       branchType: "continue",
     }),
     onCreateNode: vi.fn(async () => "node-new"),
+    onAppendNodeMessage: vi.fn(async () => true),
     onPopulateNode: vi.fn(async () => true),
     onEditUserMessage: vi.fn(async () => true),
     onRetryAssistantMessage: vi.fn(async () => true),
@@ -256,13 +257,53 @@ describe("NodeDetailPanel", () => {
       expect(getSendButton()).toBeEnabled();
     });
 
-    it("continues down by default and clears the input after success", async () => {
+    it("replies in the current node by default and clears the input after success", async () => {
       const { user, props } = renderPanel();
 
+      expect(screen.getByRole("group", { name: copy.workspace.composerModeGroup })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: copy.workspace.followUpInNode })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(screen.getByRole("button", { name: copy.workspace.continueDown })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+      expect(screen.getByRole("button", { name: copy.workspace.branchRight })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+      await user.type(getInstructionInput(), "  Explain the Calvin cycle  ");
+      await user.click(getSendButton());
+
+      await waitFor(() =>
+        expect(props.onAppendNodeMessage).toHaveBeenCalledWith(
+          "node-1",
+          "Explain the Calvin cycle",
+          undefined,
+          [],
+          undefined,
+          undefined,
+        ),
+      );
+      await waitFor(() => expect(getInstructionInput()).toHaveValue(""));
+      expect(props.onCreateNode).not.toHaveBeenCalled();
+      expect(props.onPopulateNode).not.toHaveBeenCalled();
+    });
+
+    it("continues down when Continue mode is selected", async () => {
+      const { user, props } = renderPanel();
+
+      await user.click(screen.getByRole("button", { name: copy.workspace.continueDown }));
       expect(screen.getByRole("button", { name: copy.workspace.continueDown })).toHaveAttribute(
         "aria-pressed",
         "true",
       );
+      expect(screen.getByRole("button", { name: copy.workspace.followUpInNode })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+
       await user.type(getInstructionInput(), "  Explain the Calvin cycle  ");
       await user.click(getSendButton());
 
@@ -278,6 +319,7 @@ describe("NodeDetailPanel", () => {
         ),
       );
       await waitFor(() => expect(getInstructionInput()).toHaveValue(""));
+      expect(props.onAppendNodeMessage).not.toHaveBeenCalled();
       expect(props.onPopulateNode).not.toHaveBeenCalled();
     });
 
@@ -288,6 +330,10 @@ describe("NodeDetailPanel", () => {
       expect(screen.getByRole("button", { name: copy.workspace.branchRight })).toHaveAttribute(
         "aria-pressed",
         "true",
+      );
+      expect(screen.getByRole("button", { name: copy.workspace.followUpInNode })).toHaveAttribute(
+        "aria-pressed",
+        "false",
       );
       expect(screen.getByRole("button", { name: copy.workspace.continueDown })).toHaveAttribute(
         "aria-pressed",
@@ -307,15 +353,33 @@ describe("NodeDetailPanel", () => {
         undefined,
         undefined,
       );
+      expect(props.onAppendNodeMessage).not.toHaveBeenCalled();
     });
 
-    it("keeps the draft when node creation fails", async () => {
+    it("keeps the draft when appending a follow-up message fails", async () => {
+      const { user, props } = renderPanel({ onAppendNodeMessage: vi.fn(async () => false) });
+
+      await user.type(getInstructionInput(), "Keep follow-up draft");
+      await user.click(getSendButton());
+
+      await waitFor(() => expect(props.onAppendNodeMessage).toHaveBeenCalledTimes(1));
+      expect(getInstructionInput()).toHaveValue("Keep follow-up draft");
+    });
+
+    it("keeps the draft when node creation fails in Continue or Branch mode", async () => {
       const { user, props } = renderPanel({ onCreateNode: vi.fn(async () => null) });
 
+      await user.click(screen.getByRole("button", { name: copy.workspace.continueDown }));
       await user.type(getInstructionInput(), "Keep me");
       await user.click(getSendButton());
 
       await waitFor(() => expect(props.onCreateNode).toHaveBeenCalledTimes(1));
+      expect(getInstructionInput()).toHaveValue("Keep me");
+
+      await user.click(screen.getByRole("button", { name: copy.workspace.branchRight }));
+      await user.click(getSendButton());
+
+      await waitFor(() => expect(props.onCreateNode).toHaveBeenCalledTimes(2));
       expect(getInstructionInput()).toHaveValue("Keep me");
     });
 
@@ -337,6 +401,7 @@ describe("NodeDetailPanel", () => {
         ),
       );
       expect(props.onCreateNode).not.toHaveBeenCalled();
+      expect(props.onAppendNodeMessage).not.toHaveBeenCalled();
     });
 
     it("locks the composer and marks the streaming message while a response streams", () => {
@@ -345,6 +410,7 @@ describe("NodeDetailPanel", () => {
 
       expect(getInstructionInput()).toBeDisabled();
       expect(getSendButton()).toBeDisabled();
+      expect(screen.getByRole("button", { name: copy.workspace.followUpInNode })).toBeDisabled();
       expect(screen.getByRole("button", { name: copy.workspace.continueDown })).toBeDisabled();
       expect(screen.getByRole("button", { name: copy.workspace.branchRight })).toBeDisabled();
       expect(screen.getByTestId("message-send-status")).toHaveTextContent(
@@ -522,11 +588,7 @@ describe("NodeDetailPanel", () => {
   });
 
   describe("selected text", () => {
-    afterEach(() => {
-      window.getSelection()?.removeAllRanges();
-    });
-
-    it("turns a text selection into a branch question with the selected source text", async () => {
+    function installSelectionRectMock() {
       // jsdom has no layout, so give the selection range a visible rect.
       const rect = { left: 10, top: 200, bottom: 220, width: 80, height: 20 } as DOMRect;
       Object.defineProperty(Range.prototype, "getBoundingClientRect", {
@@ -537,25 +599,44 @@ describe("NodeDetailPanel", () => {
         configurable: true,
         value: () => [rect],
       });
+      return () => {
+        delete (Range.prototype as Partial<Range>).getBoundingClientRect;
+        delete (Range.prototype as Partial<Range>).getClientRects;
+      };
+    }
+
+    async function selectAnswerText(user: ReturnType<typeof renderPanel>["user"]) {
+      const answer = screen.getByText("Plants turn light into chemical energy.");
+      act(() => {
+        const range = document.createRange();
+        range.selectNodeContents(answer);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      });
+      // The panel captures the selection on mouseup inside the conversation.
+      // (fireEvent, because user-event pointer actions would reset the selection.)
+      fireEvent.mouseUp(answer);
+      await user.click(
+        await screen.findByRole("button", { name: copy.workspace.askBranchMindSelection }),
+      );
+    }
+
+    afterEach(() => {
+      window.getSelection()?.removeAllRanges();
+    });
+
+    it("turns a text selection into a branch question with the selected source text and resets to reply after submit", async () => {
+      const restoreRect = installSelectionRectMock();
 
       try {
         const { user, props } = renderPanel();
-        const answer = screen.getByText("Plants turn light into chemical energy.");
-
-        act(() => {
-          const range = document.createRange();
-          range.selectNodeContents(answer);
-          const selection = window.getSelection();
-          selection?.removeAllRanges();
-          selection?.addRange(range);
-        });
-        // The panel captures the selection on mouseup inside the conversation.
-        // (fireEvent, because user-event pointer actions would reset the selection.)
-        fireEvent.mouseUp(answer);
-
-        await user.click(
-          await screen.findByRole("button", { name: copy.workspace.askBranchMindSelection }),
+        expect(screen.getByRole("button", { name: copy.workspace.followUpInNode })).toHaveAttribute(
+          "aria-pressed",
+          "true",
         );
+
+        await selectAnswerText(user);
 
         expect(screen.getByTestId("selected-text-context-chip")).toBeInTheDocument();
         expect(screen.getByRole("button", { name: copy.workspace.branchRight })).toHaveAttribute(
@@ -577,19 +658,78 @@ describe("NodeDetailPanel", () => {
             undefined,
           ),
         );
+        await waitFor(() =>
+          expect(
+            screen.getByRole("button", { name: copy.workspace.followUpInNode }),
+          ).toHaveAttribute("aria-pressed", "true"),
+        );
       } finally {
-        delete (Range.prototype as Partial<Range>).getBoundingClientRect;
-        delete (Range.prototype as Partial<Range>).getClientRects;
+        restoreRect();
+      }
+    });
+
+    it("restores reply mode when clearing an auto-switched selection, while preserving manual Continue choices before or after selection", async () => {
+      const restoreRect = installSelectionRectMock();
+
+      try {
+        const { user } = renderPanel();
+
+        // 1. Default reply -> select text auto-switches to branch -> removing chip resets to reply
+        await selectAnswerText(user);
+        expect(screen.getByRole("button", { name: copy.workspace.branchRight })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+        await user.click(screen.getByTestId("remove-selected-text-context-button"));
+        expect(screen.queryByTestId("selected-text-context-chip")).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: copy.workspace.followUpInNode })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+
+        // 2. Manual Continue chosen BEFORE selecting text -> removing chip preserves Continue
+        await user.click(screen.getByRole("button", { name: copy.workspace.continueDown }));
+        expect(screen.getByRole("button", { name: copy.workspace.continueDown })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+        await selectAnswerText(user);
+        expect(screen.getByRole("button", { name: copy.workspace.branchRight })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+        await user.click(screen.getByTestId("remove-selected-text-context-button"));
+        expect(screen.getByRole("button", { name: copy.workspace.continueDown })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+
+        // 3. Reset to reply, select text, then manually pick Continue AFTER selecting text -> removing chip preserves Continue
+        await user.click(screen.getByRole("button", { name: copy.workspace.followUpInNode }));
+        await selectAnswerText(user);
+        await user.click(screen.getByRole("button", { name: copy.workspace.continueDown }));
+        await user.click(screen.getByTestId("remove-selected-text-context-button"));
+        expect(screen.getByRole("button", { name: copy.workspace.continueDown })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+      } finally {
+        restoreRect();
       }
     });
   });
 
-  it("resets transient editing state when a different node is selected", async () => {
+  it("resets transient editing state and composer mode when a different node is selected", async () => {
     const props = createProps();
     const { user, rerender } = renderWithProviders(<NodeDetailPanel {...props} />);
 
     await user.click(screen.getByRole("button", { name: copy.workspace.editNodeTitle }));
     expect(screen.getByTestId("node-title-edit-input")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: copy.workspace.branchRight }));
+    expect(screen.getByRole("button", { name: copy.workspace.branchRight })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
 
     rerender(
       <NodeDetailPanel
@@ -600,5 +740,13 @@ describe("NodeDetailPanel", () => {
 
     expect(screen.queryByTestId("node-title-edit-input")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Respiration" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: copy.workspace.followUpInNode })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: copy.workspace.branchRight })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 });

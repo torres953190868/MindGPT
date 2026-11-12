@@ -5,7 +5,9 @@ import {
   getNodeConversationMessages,
 } from "@/lib/graph";
 import {
+  addBlankChildNode,
   addChildNode,
+  appendNodeMessage,
   createPendingRootProject,
   createRootProject,
   PENDING_ROOT_SUMMARY,
@@ -706,5 +708,147 @@ describe("project model helpers", () => {
         (item) => item.message.content,
       ),
     ).toEqual(["Next", "Child content"]);
+  });
+
+  describe("appendNodeMessage", () => {
+    it("appends user and assistant turns, updates summary, and preserves non-empty node and project titles", () => {
+      vi.useFakeTimers();
+
+      try {
+        vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+        const project = createRootProject("Graph search", rootReply);
+        const rootId = project.rootNodeId;
+        const attachment = {
+          id: "att_followup",
+          name: "followup.pdf",
+          mimeType: "application/pdf",
+          size: 512,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          documentId: "doc_followup",
+          documentStatus: "indexed" as const,
+        };
+
+        vi.setSystemTime(new Date("2026-01-01T00:00:05.000Z"));
+        const appended = appendNodeMessage(
+          project,
+          rootId,
+          "  Can you give a BFS walkthrough?  ",
+          {
+            title: "BFS Walkthrough Title That Must Not Overwrite",
+            summary: "Updated summary with BFS walkthrough",
+            content: "BFS visits vertices layer by layer [[cite:1]]",
+            citations: [citation],
+          },
+          [attachment],
+        );
+
+        expect(appended).not.toBeNull();
+        expect(appended!.project.title).toBe("Graph search");
+        expect(appended!.project.updatedAt).toBe("2026-01-01T00:00:05.000Z");
+        expect(appended!.node).toMatchObject({
+          id: rootId,
+          title: "Root concept",
+          titleManuallyEdited: false,
+          summary: "Updated summary with BFS walkthrough",
+          updatedAt: "2026-01-01T00:00:05.000Z",
+        });
+        expect(appended!.node.messages).toHaveLength(4);
+        expect(appended!.node.messages.map((m) => m.role)).toEqual([
+          "user",
+          "assistant",
+          "user",
+          "assistant",
+        ]);
+        expect(appended!.node.messages.map((m) => m.content)).toEqual([
+          "Graph search",
+          "Root content",
+          "Can you give a BFS walkthrough?",
+          "BFS visits vertices layer by layer [[cite:1]]",
+        ]);
+        expect(appended!.node.messages[2].attachments).toEqual([attachment]);
+        expect(appended!.node.messages[3].attachments).toEqual([]);
+        expect(appended!.node.messages[3].citations).toEqual([citation]);
+
+        // Original project and node remain unmutated
+        expect(project.nodes[rootId].messages).toHaveLength(2);
+        expect(project.nodes[rootId].summary).toBe("Root summary");
+        expectConsistentGraph(appended!.project);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("preserves manually edited node titles and titleManuallyEdited flag on follow-up turns", () => {
+      const base = createRootProject("Graph search", rootReply);
+      const continued = addChildNode(
+        base,
+        base.rootNodeId,
+        "continue",
+        "Next step",
+        childReply,
+      )!;
+      const renamedProject = updateNodeTitle(
+        continued.project,
+        continued.node.id,
+        "Custom Child Heading",
+      )!;
+
+      const appended = appendNodeMessage(
+        renamedProject,
+        continued.node.id,
+        "Follow-up question",
+        {
+          title: "New AI Title",
+          summary: "Follow-up summary",
+          content: "Follow-up answer",
+        },
+      );
+
+      expect(appended?.node.title).toBe("Custom Child Heading");
+      expect(appended?.node.titleManuallyEdited).toBe(true);
+      expect(appended?.node.summary).toBe("Follow-up summary");
+      expect(appended?.project.title).toBe("Graph search");
+    });
+
+    it("falls back to reply.title only when existing node.title is blank", () => {
+      const base = createRootProject("Graph search", {
+        ...rootReply,
+        title: "   ",
+      });
+
+      const appended = appendNodeMessage(
+        base,
+        base.rootNodeId,
+        "Follow-up",
+        {
+          title: "Recovered Title",
+          summary: "Recovered summary",
+          content: "Recovered answer",
+        },
+      );
+
+      expect(appended?.node.title).toBe("Recovered Title");
+      expect(appended?.project.title).toBe("Graph search");
+    });
+
+    it("returns null for missing nodes, blank nodes, or empty instructions", () => {
+      const base = createRootProject("Graph search", rootReply);
+      const blank = addBlankChildNode(
+        base,
+        base.rootNodeId,
+        "branch",
+        "node_blank_test",
+      )!;
+
+      expect(
+        appendNodeMessage(blank.project, "missing_node", "Follow-up", childReply),
+      ).toBeNull();
+      expect(
+        appendNodeMessage(blank.project, "node_blank_test", "Follow-up", childReply),
+      ).toBeNull();
+      expect(
+        appendNodeMessage(base, base.rootNodeId, "   ", childReply),
+      ).toBeNull();
+    });
   });
 });

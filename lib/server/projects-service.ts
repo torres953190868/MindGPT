@@ -9,6 +9,7 @@ import {
   createPendingRootProject,
   addBlankChildNode,
   addChildNode,
+  appendNodeMessage,
   populateBlankNode,
   regenerateNode,
   removeNode,
@@ -75,6 +76,21 @@ export type PrepareChildContextOptions = {
 type PopulateBlankNodeUpdate = {
   instruction: string;
   attachments?: ChatAttachment[];
+};
+
+export type PrepareAppendNodeMessageUpdate = {
+  instruction: string;
+  sourceText?: string;
+  attachments?: ChatAttachment[];
+  expectedNodeUpdatedAt?: string;
+  userMemory?: UserMemoryContextSlot;
+};
+
+export type AppendNodeMessageUpdate = {
+  instruction: string;
+  reply: MockReply;
+  attachments?: ChatAttachment[];
+  expectedNodeUpdatedAt?: string;
 };
 
 type ProjectUpdate = {
@@ -484,6 +500,124 @@ function isSameTimestamp(left: string, right: string) {
   const leftMs = Date.parse(left);
   const rightMs = Date.parse(right);
   return !Number.isNaN(leftMs) && !Number.isNaN(rightMs) && leftMs === rightMs;
+}
+
+export async function prepareAppendNodeMessageContext(
+  ownerId: string,
+  projectId: string,
+  nodeId: string,
+  update: PrepareAppendNodeMessageUpdate,
+) {
+  const instruction = update.instruction.trim();
+  if (!instruction) badRequest("Instruction is required.", "INSTRUCTION_REQUIRED");
+
+  const project = await readOwnedProject(ownerId, projectId);
+  const node = project?.nodes[nodeId];
+  if (!project || !node) notFound();
+
+  if (node.messages.length === 0) {
+    badRequest("Blank node must be populated first.", "NODE_IS_BLANK");
+  }
+
+  if (
+    update.expectedNodeUpdatedAt &&
+    !isSameTimestamp(node.updatedAt, update.expectedNodeUpdatedAt)
+  ) {
+    throw new HttpError(
+      "This conversation was updated in another window. Reload and try again.",
+      {
+        code: "NODE_CONFLICT",
+        expose: true,
+        status: 409,
+      },
+    );
+  }
+
+  const parentId = node.parentId;
+  const attachments = update.attachments ?? [];
+  const hasSourceText = Boolean(update.sourceText?.trim());
+  const treeContext = buildTreePromptContext({
+    project,
+    ancestorNodeId: parentId,
+    mode: node.branchType,
+    hasSourceText,
+    userMemory: update.userMemory,
+    excludeNodeId: node.id,
+    currentNodePrefixMessages: node.messages,
+    currentNode: node,
+  });
+  const inheritedAttachments = collectInheritedKnowledgeAttachments({
+    project,
+    ancestorNodeId: parentId,
+    explicitAttachments: attachments,
+    currentNodePrefixMessages: node.messages,
+  });
+  const retrievalQuery = buildContextualizedRetrievalQuery({
+    project,
+    ancestorNodeId: node.id,
+    instruction,
+    sourceText: update.sourceText,
+  });
+
+  return {
+    node,
+    instruction,
+    attachments,
+    inheritedAttachments,
+    retrievalQuery,
+    mode: node.branchType,
+    contextSummaries: buildContextSummariesFromPath(project, node.id),
+    messages: getNodeConversationMessages(project, node.id).map((item) => item.message),
+    treeContext,
+  };
+}
+
+export async function appendNodeMessageForOwner(
+  ownerId: string,
+  projectId: string,
+  nodeId: string,
+  update: AppendNodeMessageUpdate,
+) {
+  const project = await readOwnedProject(ownerId, projectId);
+  const node = project?.nodes[nodeId];
+  if (!project || !node) notFound();
+
+  if (node.messages.length === 0) {
+    badRequest("Blank node must be populated first.", "NODE_IS_BLANK");
+  }
+
+  if (
+    update.expectedNodeUpdatedAt &&
+    !isSameTimestamp(node.updatedAt, update.expectedNodeUpdatedAt)
+  ) {
+    throw new HttpError(
+      "This conversation was updated in another window. Reload and try again.",
+      {
+        code: "NODE_CONFLICT",
+        expose: true,
+        status: 409,
+      },
+    );
+  }
+
+  const result = appendNodeMessage(
+    project,
+    nodeId,
+    update.instruction,
+    update.reply,
+    update.attachments ?? [],
+  );
+  if (!result) {
+    badRequest("Node message could not be appended.", "NODE_APPEND_FAILED");
+  }
+
+  const ownedProject = withProjectOwner(result.project, ownerId);
+  await getProjectsRepository().saveProject(ownedProject);
+
+  return {
+    project: toProjectDto(ownedProject),
+    node: result.node,
+  };
 }
 
 export async function regenerateNodeForOwner(

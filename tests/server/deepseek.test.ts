@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { requestDeepSeekReply } from "@/lib/server/deepseek";
 import {
   appendLengthTruncationNotice,
+  buildMessages,
   createDeepSeekPayload,
   DEFAULT_CHAT_MAX_TOKENS,
   MAX_REPLY_CONTENT_LENGTH,
@@ -22,6 +23,67 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+});
+
+describe("buildMessages", () => {
+  it("separates scannable node metadata from adaptive reading-panel content without a hardcoded 300-600 char cap", () => {
+    const bareMessages = buildMessages({
+      instruction: "Derive the Euler-Lagrange equation step by step.",
+    });
+
+    const systemPrompt = bareMessages[0].content;
+    expect(bareMessages[0].role).toBe("system");
+    expect(systemPrompt.indexOf("You are BranchMind,")).toBe(0);
+    expect(systemPrompt).not.toContain("300-600");
+    expect(systemPrompt).not.toContain("300–600");
+    expect(systemPrompt).not.toContain("concise learning assistant");
+    expect(systemPrompt).not.toContain("Workspace context:");
+
+    // JSON schema & language contracts preserved
+    expect(systemPrompt).toContain(
+      "Return only valid JSON with keys title, summary, content.",
+    );
+    expect(systemPrompt).toContain(
+      "Match the user's language: answer in English when the user writes in English, and answer in Chinese when the user writes in Chinese.",
+    );
+
+    // Distinct field guidance for title, summary, and content
+    expect(systemPrompt).toContain("- title:");
+    expect(systemPrompt).toContain("canvas node card");
+    expect(systemPrompt).toContain("<= 40 characters");
+    expect(systemPrompt).toContain("- summary:");
+    expect(systemPrompt).toContain("<= 100 characters");
+    expect(systemPrompt).toContain("This node explains...");
+    expect(systemPrompt).toContain("- content:");
+    expect(systemPrompt).toContain(
+      "depth, structure, and length adapt to the question's complexity and user intent",
+    );
+    expect(systemPrompt).toContain("simple factual or definition questions");
+    expect(systemPrompt).toContain("mathematical derivations");
+    expect(systemPrompt).toContain("User learning memory");
+
+    // LaTeX + JSON backslash-escaping guidance
+    expect(systemPrompt).toContain("$...$");
+    expect(systemPrompt).toContain("$$...$$");
+    expect(systemPrompt).toContain("\\\\frac");
+    expect(systemPrompt).toContain("\\\\theta");
+    expect(systemPrompt).toContain("\\f, \\t, \\b");
+
+    // Static prefix remains at offset 0 followed by Workspace context when userMemory/treeContext is present
+    const withMemoryMessages = buildMessages({
+      instruction: "Derive the Euler-Lagrange equation step by step.",
+      userMemory: {
+        profileSummary: "Graduate physics student",
+        preferredStyle: "Rigorous variational derivations",
+      },
+    });
+    const systemWithWorkspace = withMemoryMessages[0].content;
+    expect(systemWithWorkspace.indexOf("You are BranchMind,")).toBe(0);
+    expect(systemWithWorkspace.startsWith(systemPrompt)).toBe(true);
+    const workspaceIndex = systemWithWorkspace.indexOf("Workspace context:");
+    expect(workspaceIndex).toBeGreaterThan(systemPrompt.length);
+    expect(systemWithWorkspace).toContain("User learning memory:");
+  });
 });
 
 describe("requestDeepSeekReply", () => {

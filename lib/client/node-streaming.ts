@@ -181,6 +181,65 @@ export function createPopulatingBlankNodeProject(
   };
 }
 
+export function createAppendingNodeMessageProject(
+  project: Project,
+  nodeId: string,
+  instruction: string,
+  attachments: ChatAttachment[] = [],
+) {
+  const node = project.nodes[nodeId];
+  const trimmed = instruction.trim();
+  if (!node || node.messages.length === 0 || !trimmed) return null;
+
+  const timestamp = now();
+  const userMessage = makeMessage("user", trimmed, attachments);
+  const assistantMessage = makeMessage("assistant", "");
+  const nextNode: MindNode = {
+    ...node,
+    messages: [...node.messages, userMessage, assistantMessage],
+    updatedAt: timestamp,
+  };
+  const nextProject: Project = {
+    ...project,
+    nodes: {
+      ...project.nodes,
+      [nodeId]: nextNode,
+    },
+    updatedAt: timestamp,
+  };
+
+  return {
+    userMessageId: userMessage.id,
+    assistantMessageId: assistantMessage.id,
+    node: nextNode,
+    project: nextProject,
+  };
+}
+
+export function removeAppendedDraftMessages(
+  project: Project,
+  nodeId: string,
+  messageIds: string[],
+  previousNodeUpdatedAt?: string,
+): Project {
+  const node = project.nodes[nodeId];
+  if (!node) return project;
+
+  const idsToRemove = new Set(messageIds);
+
+  return {
+    ...project,
+    nodes: {
+      ...project.nodes,
+      [nodeId]: {
+        ...node,
+        messages: node.messages.filter((message) => !idsToRemove.has(message.id)),
+        updatedAt: previousNodeUpdatedAt ?? node.updatedAt,
+      },
+    },
+  };
+}
+
 export function appendDraftAssistantDelta(
   project: Project,
   nodeId: string,

@@ -547,11 +547,13 @@ describe("budget-compiler & pipeline wiring (Tree Context Point 4)", () => {
 
       // 0. Static system prefix stays at byte offset 0; background workspace context follows.
       expect(messages[0].role).toBe("system");
+      expect(messages[0].content.indexOf("You are BranchMind,")).toBe(0);
       expect(
         messages[0].content.startsWith(
-          "You are BranchMind, a concise learning assistant.",
+          "You are BranchMind, a visual branching learning and research assistant.",
         ),
       ).toBe(true);
+      expect(messages[0].content.indexOf("Workspace context:")).toBeGreaterThan(0);
       expect(messages[0].content).toContain("Workspace context:");
       expect(messages[0].content).toContain(
         "Canvas root goal (Transformer Scaling Goal): How do modern transformers train stably at scale? -> Overview of attention, normalization, and optimization stability.",

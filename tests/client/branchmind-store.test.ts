@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PENDING_PROJECT_SYNC_KEY } from "@/lib/client/pending-project-sync";
-import type { Project } from "@/lib/types";
+import { LANGUAGE_STORAGE_KEY } from "@/lib/language";
+import { LANGUAGE_COPY } from "@/lib/language-copy";
+import type {
+  ChatAttachment,
+  ChatModelSelection,
+  ChatSkill,
+  Project,
+} from "@/lib/types";
 import { ReadOnlyStorage, stubBlockedStorageWindow, stubStorageWindow } from "./blocked-storage";
 
 class MemoryStorage implements Storage {
@@ -758,6 +765,543 @@ describe("useBranchMindStore regenerate", () => {
     expect(body.expectedNodeUpdatedAt).toBe("2026-01-01T00:00:00.000Z");
     expect(body.userMessageId).toBe("user_b");
     expect(body.assistantMessageId).toBe("assistant_b");
+  });
+});
+
+describe("useBranchMindStore appendNodeMessage", () => {
+  let localStorage: MemoryStorage;
+  let rafQueue: Map<number, FrameRequestCallback>;
+  let nextRafId: number;
+  let requestAnimationFrameMock: ReturnType<typeof vi.fn>;
+  let cancelAnimationFrameMock: ReturnType<typeof vi.fn>;
+
+  function flushAnimationFrames() {
+    const callbacks = Array.from(rafQueue.values());
+    rafQueue.clear();
+    callbacks.forEach((callback) => callback(16));
+  }
+
+  beforeEach(() => {
+    vi.resetModules();
+    localStorage = new MemoryStorage();
+    rafQueue = new Map();
+    nextRafId = 1;
+    requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {
+      const id = nextRafId;
+      nextRafId += 1;
+      rafQueue.set(id, callback);
+      return id;
+    });
+    cancelAnimationFrameMock = vi.fn((id: number) => {
+      rafQueue.delete(id);
+    });
+    vi.stubGlobal("window", {
+      localStorage,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      requestAnimationFrame: requestAnimationFrameMock,
+      cancelAnimationFrame: cancelAnimationFrameMock,
+      setTimeout: globalThis.setTimeout.bind(globalThis),
+      clearTimeout: globalThis.clearTimeout.bind(globalThis),
+    });
+    vi.stubGlobal("document", {
+      addEventListener: vi.fn(),
+      visibilityState: "visible",
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("streams an in-node follow-up with optimistic user+assistant messages, preserves title while streaming, batches deltas, and finalizes node on complete", async () => {
+    const project = makeRegenerateProject();
+    const nodeId = project.rootNodeId;
+    const encoder = new TextEncoder();
+    let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller;
+      },
+    });
+
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === "/api/projects" && !init?.method) {
+        return Promise.resolve(Response.json({ projects: [project] }));
+      }
+      if (
+        url === `/api/projects/${project.id}/nodes/${nodeId}/messages/stream` &&
+        init?.method === "POST"
+      ) {
+        return Promise.resolve(
+          new Response(stream, {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        );
+      }
+      return Promise.reject(new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+    useBranchMindStore.getState().selectProject(project.id);
+
+    const attachment: ChatAttachment = {
+      id: "att_followup",
+      name: "notes.pdf",
+      mimeType: "application/pdf",
+      size: 2048,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      documentId: "doc_followup",
+      documentStatus: "indexed",
+    };
+    const modelSelection: ChatModelSelection = {
+      providerId: "deepseek",
+      model: "deepseek-chat",
+    };
+    const skill: ChatSkill = {
+      id: "skill_1",
+      name: "Socratic",
+      description: "Ask probing questions",
+      instructions: "Guide step by step",
+      version: "1.0.0",
+    };
+
+    const started = await useBranchMindStore
+      .getState()
+      .appendNodeMessage(
+        nodeId,
+        "  Can you give a concrete example?  ",
+        "Second answer snippet",
+        [attachment],
+        modelSelection,
+        skill,
+      );
+    expect(started).toBe(true);
+
+    const optimisticState = useBranchMindStore.getState();
+    const optimisticProject = optimisticState.projects[0];
+    const optimisticNode = optimisticProject.nodes[nodeId];
+
+    // Does not spawn a child node; preserves title & summary while streaming.
+    expect(Object.keys(optimisticProject.nodes)).toEqual([
+      nodeId,
+      "project_regenerate_child",
+    ]);
+    expect(optimisticNode.children).toEqual(["project_regenerate_child"]);
+    expect(optimisticNode.title).toBe("Root");
+    expect(optimisticNode.titleManuallyEdited).toBe(false);
+    expect(optimisticNode.summary).toBe("Summary");
+    expect(optimisticNode.messages).toHaveLength(6);
+    expect(optimisticNode.messages[4]).toMatchObject({
+      role: "user",
+      content: "Can you give a concrete example?",
+      attachments: [attachment],
+    });
+    expect(optimisticNode.messages[5]).toMatchObject({
+      id: optimisticState.streamingMessageId,
+      role: "assistant",
+      content: "",
+      attachments: [],
+    });
+    expect(optimisticState.selectedNodeId).toBe(nodeId);
+    expect(optimisticState.creatingNodeId).toBe(nodeId);
+    expect(optimisticState.streamingNodeId).toBe(nodeId);
+    expect(optimisticState.aiError).toBeNull();
+
+    // Verify request contract.
+    const streamCall = fetchMock.mock.calls.find(([input]) =>
+      input.toString().endsWith(`/nodes/${nodeId}/messages/stream`),
+    );
+    expect(streamCall).toBeDefined();
+    expect(streamCall?.[1]).toMatchObject({
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(JSON.parse(String(streamCall?.[1]?.body))).toEqual({
+      instruction: "Can you give a concrete example?",
+      sourceText: "Second answer snippet",
+      attachments: [attachment],
+      expectedNodeUpdatedAt: "2026-01-01T00:00:00.000Z",
+      modelSelection,
+      skill,
+    });
+
+    // Wait for stream reader to attach and push two deltas in one chunk to verify batching.
+    await vi.waitFor(() => {
+      expect(streamController).not.toBeNull();
+    });
+    streamController!.enqueue(
+      encoder.encode(
+        `event: delta\ndata: ${JSON.stringify({ contentDelta: "Here is " })}\n\nevent: delta\ndata: ${JSON.stringify({ contentDelta: "an example." })}\n\n`,
+      ),
+    );
+
+    await vi.waitFor(() => {
+      expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1);
+    });
+    // Before animation frame flushes, draft message is still empty.
+    expect(
+      useBranchMindStore.getState().projects[0].nodes[nodeId].messages[5].content,
+    ).toBe("");
+
+    flushAnimationFrames();
+    const midStreamNode = useBranchMindStore.getState().projects[0].nodes[nodeId];
+    expect(midStreamNode.messages[5].content).toBe("Here is an example.");
+    expect(midStreamNode.title).toBe("Root");
+    expect(midStreamNode.summary).toBe("Summary");
+    expect(useBranchMindStore.getState().streamingNodeId).toBe(nodeId);
+
+    // Concurrent edits on project notes and sibling/child node position while streaming.
+    useBranchMindStore.setState((state) => ({
+      projects: state.projects.map((item) =>
+        item.id === project.id
+          ? {
+              ...item,
+              notes: "Concurrent notes during follow-up",
+              updatedAt: "2026-01-05T00:00:00.000Z",
+              nodes: {
+                ...item.nodes,
+                project_regenerate_child: {
+                  ...item.nodes.project_regenerate_child,
+                  position: { x: 42, y: 84 },
+                },
+              },
+            }
+          : item,
+      ),
+    }));
+
+    const serverNode = {
+      ...project.nodes[nodeId],
+      title: "Root",
+      summary: "Updated summary covering concrete example",
+      messages: [
+        ...project.nodes[nodeId].messages,
+        {
+          id: "server_user_c",
+          role: "user" as const,
+          content: "Can you give a concrete example?",
+          attachments: [attachment],
+          createdAt: "2026-01-02T00:00:00.000Z",
+        },
+        {
+          id: "server_assistant_c",
+          role: "assistant" as const,
+          content: "Here is an example with full details.",
+          attachments: [],
+          createdAt: "2026-01-02T00:00:01.000Z",
+        },
+      ],
+      updatedAt: "2026-01-02T00:00:01.000Z",
+    };
+    const serverProject: Project = {
+      ...project,
+      updatedAt: "2026-01-02T00:00:01.000Z",
+      nodes: {
+        ...project.nodes,
+        [nodeId]: serverNode,
+      },
+    };
+
+    streamController!.enqueue(
+      encoder.encode(
+        `event: complete\ndata: ${JSON.stringify({ project: serverProject, node: serverNode })}\n\n`,
+      ),
+    );
+    streamController!.close();
+
+    await vi.waitFor(() => {
+      expect(useBranchMindStore.getState().streamingNodeId).toBeNull();
+    });
+
+    const finalState = useBranchMindStore.getState();
+    const finalProject = finalState.projects[0];
+    expect(finalState.creatingNodeId).toBeNull();
+    expect(finalState.streamingMessageId).toBeNull();
+    expect(finalState.selectedNodeId).toBe(nodeId);
+    expect(finalState.aiError).toBeNull();
+    expect(finalProject.notes).toBe("Concurrent notes during follow-up");
+    expect(finalProject.updatedAt).toBe("2026-01-05T00:00:00.000Z");
+    expect(finalProject.nodes.project_regenerate_child.position).toEqual({ x: 42, y: 84 });
+    expect(finalProject.nodes[nodeId].title).toBe("Root");
+    expect(finalProject.nodes[nodeId].summary).toBe(
+      "Updated summary covering concrete example",
+    );
+    expect(
+      finalProject.nodes[nodeId].messages.map((message) => [message.id, message.content]),
+    ).toEqual([
+      ["user_a", "First prompt"],
+      ["assistant_a", "First answer"],
+      ["user_b", "Second prompt"],
+      ["assistant_b", "Second answer"],
+      ["server_user_c", "Can you give a concrete example?"],
+      ["server_assistant_c", "Here is an example with full details."],
+    ]);
+  });
+
+  it("rolls back optimistic appended messages and restores updatedAt on HTTP or stream error while preserving concurrent updates", async () => {
+    const project = makeRegenerateProject();
+    const nodeId = project.rootNodeId;
+    let resolveStream: (response: Response) => void = () => {};
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === "/api/projects" && !init?.method) {
+        return Promise.resolve(Response.json({ projects: [project] }));
+      }
+      if (
+        url === `/api/projects/${project.id}/nodes/${nodeId}/messages/stream` &&
+        init?.method === "POST"
+      ) {
+        return new Promise<Response>((resolve) => {
+          resolveStream = resolve;
+        });
+      }
+      return Promise.reject(new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+    useBranchMindStore.getState().selectProject(project.id);
+
+    const started = await useBranchMindStore
+      .getState()
+      .appendNodeMessage(nodeId, "Follow-up that will fail");
+    expect(started).toBe(true);
+    expect(useBranchMindStore.getState().projects[0].nodes[nodeId].messages).toHaveLength(6);
+
+    // Concurrent position update while request is in flight.
+    useBranchMindStore.setState((state) => ({
+      projects: state.projects.map((item) =>
+        item.id === project.id
+          ? {
+              ...item,
+              nodes: {
+                ...item.nodes,
+                project_regenerate_child: {
+                  ...item.nodes.project_regenerate_child,
+                  position: { x: 99, y: 99 },
+                },
+              },
+            }
+          : item,
+      ),
+    }));
+
+    resolveStream(
+      Response.json(
+        { error: { code: "UPSTREAM_FAILED", message: "Provider unavailable" } },
+        { status: 502 },
+      ),
+    );
+
+    await vi.waitFor(() => {
+      expect(useBranchMindStore.getState().streamingNodeId).toBeNull();
+    });
+
+    const rolledBackState = useBranchMindStore.getState();
+    const rolledBackNode = rolledBackState.projects[0].nodes[nodeId];
+    expect(rolledBackState.creatingNodeId).toBeNull();
+    expect(rolledBackState.streamingMessageId).toBeNull();
+    expect(rolledBackState.selectedNodeId).toBe(nodeId);
+    expect(rolledBackState.aiError).toBe("Provider unavailable");
+    expect(rolledBackNode.updatedAt).toBe("2026-01-01T00:00:00.000Z");
+    expect(rolledBackNode.messages.map((message) => message.id)).toEqual([
+      "user_a",
+      "assistant_a",
+      "user_b",
+      "assistant_b",
+    ]);
+    expect(rolledBackState.projects[0].nodes.project_regenerate_child.position).toEqual({
+      x: 99,
+      y: 99,
+    });
+  });
+
+  it("rolls back optimistic appended messages when an SSE stream ends without a complete event", async () => {
+    const project = makeRegenerateProject();
+    const nodeId = project.rootNodeId;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === "/api/projects" && !init?.method) {
+        return Promise.resolve(Response.json({ projects: [project] }));
+      }
+      if (
+        url === `/api/projects/${project.id}/nodes/${nodeId}/messages/stream` &&
+        init?.method === "POST"
+      ) {
+        return Promise.resolve(
+          new Response(`event: delta\ndata: ${JSON.stringify({ contentDelta: "Partial" })}\n\n`, {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        );
+      }
+      return Promise.reject(new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+    useBranchMindStore.getState().selectProject(project.id);
+
+    await expect(
+      useBranchMindStore.getState().appendNodeMessage(nodeId, "Prematurely closed stream"),
+    ).resolves.toBe(true);
+
+    await vi.waitFor(() => {
+      expect(useBranchMindStore.getState().streamingNodeId).toBeNull();
+    });
+
+    const state = useBranchMindStore.getState();
+    expect(cancelAnimationFrameMock).toHaveBeenCalled();
+    expect(state.aiError).toBe("Streaming response ended before completion.");
+    expect(state.projects[0].nodes[nodeId].messages).toHaveLength(4);
+    expect(state.projects[0].nodes[nodeId].updatedAt).toBe("2026-01-01T00:00:00.000Z");
+  });
+
+  it("surfaces the localized regenerateConflict message on 409 NODE_CONFLICT", async () => {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, "en");
+    const project = makeRegenerateProject();
+    const nodeId = project.rootNodeId;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === "/api/projects" && !init?.method) {
+        return Promise.resolve(Response.json({ projects: [project] }));
+      }
+      if (
+        url === `/api/projects/${project.id}/nodes/${nodeId}/messages/stream` &&
+        init?.method === "POST"
+      ) {
+        return Promise.resolve(
+          Response.json(
+            {
+              error: {
+                code: "NODE_CONFLICT",
+                message: "Node was updated elsewhere.",
+              },
+            },
+            { status: 409 },
+          ),
+        );
+      }
+      return Promise.reject(new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+    useBranchMindStore.getState().selectProject(project.id);
+
+    await expect(
+      useBranchMindStore.getState().appendNodeMessage(nodeId, "Conflicting follow-up"),
+    ).resolves.toBe(true);
+
+    await vi.waitFor(() => {
+      expect(useBranchMindStore.getState().streamingNodeId).toBeNull();
+    });
+
+    const state = useBranchMindStore.getState();
+    expect(state.aiError).toBe(LANGUAGE_COPY.en.workspace.regenerateConflict);
+    expect(state.projects[0].nodes[nodeId].messages).toHaveLength(4);
+    expect(state.projects[0].nodes[nodeId].updatedAt).toBe("2026-01-01T00:00:00.000Z");
+  });
+
+  it("rejects blank nodes, empty instructions, unsynced projects, and concurrent streams", async () => {
+    const baseProject = makeRegenerateProject();
+    const blankNodeId = "blank_child_node";
+    const project: Project = {
+      ...baseProject,
+      nodes: {
+        ...baseProject.nodes,
+        [baseProject.rootNodeId]: {
+          ...baseProject.nodes[baseProject.rootNodeId],
+          children: [...baseProject.nodes[baseProject.rootNodeId].children, blankNodeId],
+        },
+        [blankNodeId]: {
+          ...baseProject.nodes.project_regenerate_child,
+          id: blankNodeId,
+          messages: [],
+        },
+      },
+    };
+
+    let resolveFirstStream: (response: Response) => void = () => {};
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === "/api/projects" && !init?.method) {
+        return Promise.resolve(Response.json({ projects: [project] }));
+      }
+      if (
+        url === `/api/projects/${project.id}/nodes/${project.rootNodeId}/messages/stream` &&
+        init?.method === "POST"
+      ) {
+        return new Promise<Response>((resolve) => {
+          resolveFirstStream = resolve;
+        });
+      }
+      return Promise.reject(new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+    useBranchMindStore.getState().selectProject(project.id);
+
+    // Rejects blank node (messages.length === 0)
+    await expect(
+      useBranchMindStore.getState().appendNodeMessage(blankNodeId, "First prompt in blank node"),
+    ).resolves.toBe(false);
+    expect(useBranchMindStore.getState().projects[0].nodes[blankNodeId].messages).toEqual([]);
+
+    // Rejects whitespace-only instruction
+    await expect(
+      useBranchMindStore.getState().appendNodeMessage(project.rootNodeId, "   "),
+    ).resolves.toBe(false);
+
+    // Rejects project waiting for sync
+    useBranchMindStore.setState((state) => ({
+      pendingProjectSyncs: {
+        ...state.pendingProjectSyncs,
+        [project.id]: {
+          project,
+          nodeId: project.rootNodeId,
+          assistantMessageId: "assistant_b",
+          status: "syncing",
+          error: null,
+          updatedAt: "2026-01-01T00:00:01.000Z",
+        },
+      },
+    }));
+    await expect(
+      useBranchMindStore.getState().appendNodeMessage(project.rootNodeId, "Blocked by sync"),
+    ).resolves.toBe(false);
+    useBranchMindStore.setState({ pendingProjectSyncs: {} });
+
+    // No stream calls should have been issued yet
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Start one valid stream, then verify concurrent appendNodeMessage is rejected
+    await expect(
+      useBranchMindStore.getState().appendNodeMessage(project.rootNodeId, "First follow-up"),
+    ).resolves.toBe(true);
+    await expect(
+      useBranchMindStore.getState().appendNodeMessage(project.rootNodeId, "Concurrent follow-up"),
+    ).resolves.toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // Finish first stream cleanly
+    resolveFirstStream(
+      Response.json({ error: "Aborted in test" }, { status: 500 }),
+    );
+    await vi.waitFor(() => {
+      expect(useBranchMindStore.getState().streamingNodeId).toBeNull();
+    });
   });
 });
 

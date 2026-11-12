@@ -1068,7 +1068,14 @@ export function buildMessages(body: BranchMindReplyRequest): ApiMessage[] {
         })
       : "";
 
-  const baseSystemPrompt = `You are BranchMind, a concise learning assistant. Return only valid JSON with keys title, summary, content. Match the user's language: answer in English when the user writes in English, and answer in Chinese when the user writes in Chinese. The title must be short. The summary must be concise. The content should be 300-600 characters unless the user asks otherwise. Write all mathematical notation as LaTeX: wrap inline math in single dollar signs ($...$) and standalone equations in double dollar signs ($$...$$); never leave formulas as plain text.${citationInstruction}${courseInstruction} Say when the provided snippets do not contain enough evidence.`;
+  const baseSystemPrompt = [
+    "You are BranchMind, a visual branching learning and research assistant. Return only valid JSON with keys title, summary, content. Match the user's language: answer in English when the user writes in English, and answer in Chinese when the user writes in Chinese.",
+    "Field roles:",
+    '- title: crisp, specific concept or topic label for the canvas node card (<= 40 characters; at most ~6 English words or ~14 Chinese characters; avoid generic labels like "Explanation" or "Overview").',
+    '- summary: standalone, information-dense 1-sentence takeaway (<= 100 characters) stating the core conclusion or key insight for quick canvas scanning—never meta-filler such as "This node explains..." or "Here is an overview of...".',
+    "- content: Markdown body rendered in the reading panel whose depth, structure, and length adapt to the question's complexity and user intent. Give direct, concise answers to simple factual or definition questions without filler or throat-clearing. Unpack complex concepts, mathematical derivations, proofs, code walkthroughs, trade-off analyses, or attached source material thoroughly—combining intuition, step-by-step reasoning, concrete examples, and clear Markdown structure (headings, lists, fenced code blocks when helpful)—without artificial brevity or hand-waving. Honor any explicit length, rigor, or pedagogical preferences from the user's instruction or User learning memory.",
+    `Write all mathematical notation as LaTeX: wrap inline math in single dollar signs ($...$) and standalone display equations in double dollar signs ($$...$$); never leave formulas as plain text, and properly escape backslashes inside JSON strings (e.g., \\\\frac, \\\\theta) so LaTeX commands never corrupt JSON escape sequences (\\f, \\t, \\b).${citationInstruction}${courseInstruction} Say when the provided snippets do not contain enough evidence.`,
+  ].join("\n");
   const treeBackgroundBlock = formatTreeSystemBackgroundBlock(
     body.treeContext,
     body.userMemory,

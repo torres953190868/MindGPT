@@ -29,7 +29,7 @@ import type { ModeActionItem } from "./node-detail-helpers";
 
 type NodeDetailComposerProps = {
   input: string;
-  mode: "continue" | "branch";
+  mode: ModeActionItem;
   isInitialSubmit: boolean;
   isBlankNode: boolean;
   hasSelectedTextContext: boolean;
@@ -42,7 +42,7 @@ type NodeDetailComposerProps = {
   composerControls: ReturnType<typeof useChatComposerControls>;
   modeHighlight: ReturnType<typeof useHighlightedAction<ModeActionItem>>;
   onInputChange: (value: string) => void;
-  onModeChange: (mode: "continue" | "branch") => void;
+  onModeChange: (mode: ModeActionItem) => void;
   onClearSelectedSourceText: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onResizePointerDown: (event: PointerEvent<HTMLDivElement>) => void;
@@ -71,6 +71,7 @@ export function NodeDetailComposer({
   onResizeMouseDown,
 }: NodeDetailComposerProps) {
   const { copy } = useLanguage();
+  const isReplyModeHighlighted = modeHighlight.isHighlighted("reply");
   const isContinueModeHighlighted = modeHighlight.isHighlighted("continue");
   const isBranchModeHighlighted = modeHighlight.isHighlighted("branch");
 
@@ -99,11 +100,28 @@ export function NodeDetailComposer({
           {!isInitialSubmit && !isBlankNode && (
             <div
               role="group"
-              aria-label={copy.workspace.branch}
+              aria-label={copy.workspace.composerModeGroup}
               data-testid="message-branch-mode"
               onMouseLeave={modeHighlight.clearHighlightedAction}
-              className="grid grid-cols-2 gap-2"
+              className="grid grid-cols-3 gap-1.5 sm:gap-2"
             >
+              <button
+                type="button"
+                onClick={() => onModeChange("reply")}
+                disabled={isComposerBusy}
+                aria-label={copy.workspace.followUpInNode}
+                aria-pressed={mode === "reply"}
+                data-testid="reply-in-node-button"
+                data-highlighted={modeHighlight.getDataHighlighted("reply")}
+                {...modeHighlight.getPointerHoverHandlers("reply")}
+                className={`node-detail-mode-button node-detail-mode-reply inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-black transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 sm:h-11 sm:text-sm ${getHighlightedActionClass(
+                  isReplyModeHighlighted,
+                  "bg-neutral-100 text-neutral-700",
+                )}`}
+              >
+                <MessageSquare size={15} className="shrink-0" />
+                <span className="truncate">{copy.workspace.followUp}</span>
+              </button>
               <button
                 type="button"
                 onClick={() => onModeChange("continue")}
@@ -113,13 +131,13 @@ export function NodeDetailComposer({
                 data-testid="continue-down-button"
                 data-highlighted={modeHighlight.getDataHighlighted("continue")}
                 {...modeHighlight.getPointerHoverHandlers("continue")}
-                className={`node-detail-mode-button node-detail-mode-continue inline-flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 sm:h-11 ${getHighlightedActionClass(
+                className={`node-detail-mode-button node-detail-mode-continue inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-black transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 sm:h-11 sm:text-sm ${getHighlightedActionClass(
                   isContinueModeHighlighted,
                   "bg-neutral-100 text-neutral-700",
                 )}`}
               >
-                <Sprout size={16} />
-                {copy.workspace.continue}
+                <Sprout size={15} className="shrink-0" />
+                <span className="truncate">{copy.workspace.continue}</span>
               </button>
               <button
                 type="button"
@@ -130,13 +148,13 @@ export function NodeDetailComposer({
                 data-testid="branch-right-button"
                 data-highlighted={modeHighlight.getDataHighlighted("branch")}
                 {...modeHighlight.getPointerHoverHandlers("branch")}
-                className={`node-detail-mode-button node-detail-mode-branch inline-flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-black transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 sm:h-11 ${getHighlightedActionClass(
+                className={`node-detail-mode-button node-detail-mode-branch inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-black transition-all focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:cursor-not-allowed disabled:opacity-65 sm:h-11 sm:text-sm ${getHighlightedActionClass(
                   isBranchModeHighlighted,
                   "bg-neutral-100 text-neutral-700",
                 )}`}
               >
-                <GitBranch size={16} />
-                {copy.workspace.branch}
+                <GitBranch size={15} className="shrink-0" />
+                <span className="truncate">{copy.workspace.branch}</span>
               </button>
             </div>
           )}

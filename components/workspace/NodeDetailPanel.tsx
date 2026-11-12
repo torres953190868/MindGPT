@@ -40,6 +40,7 @@ export function NodeDetailPanel({
   conversationMessages,
   conversationFocusRequest = 0,
   onCreateNode,
+  onAppendNodeMessage,
   onPopulateNode,
   onEditUserMessage,
   onRetryAssistantMessage,
@@ -70,7 +71,8 @@ export function NodeDetailPanel({
   const deleteDialogTitleId = `${panelId}-delete-dialog-title`;
   const deleteDialogDescriptionId = `${panelId}-delete-dialog-description`;
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState<"continue" | "branch">("continue");
+  const [mode, setMode] = useState<ModeActionItem>("reply");
+  const modeAutoSwitchedFromRef = useRef<ModeActionItem | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -146,6 +148,8 @@ export function NodeDetailPanel({
   useEffect(() => {
     clearSelectedSourceText();
     resetComposerAttachments();
+    setMode("reply");
+    modeAutoSwitchedFromRef.current = null;
     setEditingMessageId(null);
     setEditingValue("");
     setIsEditingTitle(false);
@@ -214,6 +218,24 @@ export function NodeDetailPanel({
     }
 
     const sourceText = hasSelectedTextContext ? selectedSourceText : undefined;
+    if (mode === "reply") {
+      const appended = await onAppendNodeMessage(
+        node.id,
+        trimmed,
+        sourceText,
+        preparedAttachments,
+        composerControls.modelSelection,
+        skill,
+      );
+      if (appended) {
+        setInput("");
+        composerControls.resetAttachments();
+        clearSelectedSourceText();
+        modeAutoSwitchedFromRef.current = null;
+      }
+      return;
+    }
+
     const createdNodeId = await onCreateNode(
       node.id,
       mode,
@@ -227,6 +249,10 @@ export function NodeDetailPanel({
       setInput("");
       composerControls.resetAttachments();
       clearSelectedSourceText();
+      if (modeAutoSwitchedFromRef.current !== null) {
+        modeAutoSwitchedFromRef.current = null;
+        setMode("reply");
+      }
     }
   }
 
@@ -235,13 +261,30 @@ export function NodeDetailPanel({
     void submitComposer();
   }
 
+  function handleModeChange(nextMode: ModeActionItem) {
+    modeAutoSwitchedFromRef.current = null;
+    setMode(nextMode);
+  }
+
   function handleAskBranchMindSelection() {
     if (isInitialSubmit || isBlankNode || !node || !selectionAction || isComposerBusy) {
       return;
     }
     setSelectedSourceText(selectionAction.text);
+    if (mode !== "branch") {
+      modeAutoSwitchedFromRef.current = mode;
+    }
     setMode("branch");
     dismissBrowserSelection();
+  }
+
+  function handleClearSelectedSourceText() {
+    clearSelectedSourceText();
+    if (modeAutoSwitchedFromRef.current !== null) {
+      const previousMode = modeAutoSwitchedFromRef.current;
+      modeAutoSwitchedFromRef.current = null;
+      setMode(previousMode);
+    }
   }
 
   function handleStartEdit(message: ChatMessage) {
@@ -413,8 +456,8 @@ export function NodeDetailPanel({
           composerControls={composerControls}
           modeHighlight={modeHighlight}
           onInputChange={setInput}
-          onModeChange={setMode}
-          onClearSelectedSourceText={clearSelectedSourceText}
+          onModeChange={handleModeChange}
+          onClearSelectedSourceText={handleClearSelectedSourceText}
           onSubmit={handleSubmit}
           onResizePointerDown={handleComposerResizePointerDown}
           onResizeMouseDown={handleComposerResizeMouseDown}

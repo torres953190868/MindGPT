@@ -969,6 +969,12 @@ textarea {
   color: var(--theme-text-secondary);
 }
 
+[data-theme="warm-limestone"] .branch-node-turn-count {
+  border: 1px solid var(--theme-border-default);
+  background: var(--theme-surface-muted);
+  color: var(--theme-text-secondary);
+}
+
 [data-theme="warm-limestone"] .branch-node-quick-action {
   border: 1px solid var(--theme-border-default);
   border-radius: 8px;

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { MAX_CHAT_ATTACHMENTS } from "@/lib/chat-attachments";
 import {
+  appendNodeMessageSchema,
   chatSkillSchema,
   createNodeSchema,
   populateBlankNodeSchema,
@@ -121,5 +123,96 @@ describe("regenerateNodeSchema with skill", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+});
+
+describe("appendNodeMessageSchema", () => {
+  it("accepts a minimal request, trims instruction, and defaults attachments to []", () => {
+    const result = appendNodeMessageSchema.safeParse({
+      instruction: "  Give a concrete example.  ",
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual({
+        instruction: "Give a concrete example.",
+        attachments: [],
+      });
+    }
+  });
+
+  it("accepts optional sourceText, attachments, expectedNodeUpdatedAt, modelSelection, and skill", () => {
+    const result = appendNodeMessageSchema.safeParse({
+      instruction: "Explain this selected sentence.",
+      sourceText: "  Gradient descent updates parameters along the negative gradient.  ",
+      attachments: [
+        {
+          id: "att_1",
+          name: "lecture.pdf",
+          mimeType: "application/pdf",
+          size: 1024,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          documentId: "doc_1",
+          documentStatus: "indexed",
+        },
+      ],
+      expectedNodeUpdatedAt: "2026-01-01T00:00:00.000Z",
+      modelSelection: {
+        providerId: "deepseek",
+        model: "deepseek-chat",
+      },
+      skill: {
+        id: "skill_followup",
+        name: "Follow-up Skill",
+        description: "Guides follow-ups",
+        instructions: "Stay focused on the current node.",
+        version: "v1",
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sourceText).toBe(
+        "Gradient descent updates parameters along the negative gradient.",
+      );
+      expect(result.data.attachments).toHaveLength(1);
+      expect(result.data.expectedNodeUpdatedAt).toBe("2026-01-01T00:00:00.000Z");
+    }
+  });
+
+  it("rejects empty or oversized instruction and sourceText", () => {
+    expect(appendNodeMessageSchema.safeParse({ instruction: "   " }).success).toBe(false);
+    expect(
+      appendNodeMessageSchema.safeParse({ instruction: "a".repeat(1_501) }).success,
+    ).toBe(false);
+    expect(
+      appendNodeMessageSchema.safeParse({
+        instruction: "Valid",
+        sourceText: "s".repeat(4_001),
+      }).success,
+    ).toBe(false);
+    expect(
+      appendNodeMessageSchema.safeParse({
+        instruction: "Valid",
+        expectedNodeUpdatedAt: "   ",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects attachment lists exceeding MAX_CHAT_ATTACHMENTS", () => {
+    const attachments = Array.from({ length: MAX_CHAT_ATTACHMENTS + 1 }, (_, i) => ({
+      id: `att_${i}`,
+      name: `file-${i}.pdf`,
+      mimeType: "application/pdf",
+      size: 10,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }));
+
+    const result = appendNodeMessageSchema.safeParse({
+      instruction: "Too many attachments",
+      attachments,
+    });
+
+    expect(result.success).toBe(false);
   });
 });

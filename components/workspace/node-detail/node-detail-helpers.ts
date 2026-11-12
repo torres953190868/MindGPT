@@ -17,7 +17,7 @@ export const SELECTION_ACTION_MARGIN = 12;
 export const SELECTION_ACTION_VERTICAL_OFFSET = 52;
 
 export type HeaderActionItem = "edit" | "delete" | "notes";
-export type ModeActionItem = "continue" | "branch";
+export type ModeActionItem = "reply" | "continue" | "branch";
 
 export type SelectionAction = {
   text: string;
@@ -43,6 +43,14 @@ export type NodeDetailPanelProps = {
     modelSelection?: ChatModelSelection,
     skill?: ChatSkill,
   ) => Promise<string | null>;
+  onAppendNodeMessage: (
+    nodeId: string,
+    instruction: string,
+    sourceText?: string,
+    attachments?: ChatAttachment[],
+    modelSelection?: ChatModelSelection,
+    skill?: ChatSkill,
+  ) => Promise<boolean>;
   onPopulateNode: (
     nodeId: string,
     instruction: string,
