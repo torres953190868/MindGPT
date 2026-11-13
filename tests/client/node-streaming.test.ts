@@ -77,7 +77,7 @@ describe("node streaming helpers", () => {
       id: "node_occupied",
       parentId: parent.id,
       branchType: "branch" as const,
-      position: { x: 510, y: 120 },
+      position: { x: 590, y: 120 },
     };
     const positionedProject: Project = {
       ...project,
@@ -95,7 +95,7 @@ describe("node streaming helpers", () => {
       "node_persisted",
     );
 
-    expect(draft?.node.position).toEqual({ x: 510, y: 384 });
+    expect(draft?.node.position).toEqual({ x: 590, y: 384 });
     expect(persisted?.node.position).toEqual(draft?.node.position);
   });
 

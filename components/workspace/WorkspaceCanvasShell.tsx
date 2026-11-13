@@ -1212,6 +1212,7 @@ export function WorkspaceCanvasShell({
                 canvasIntro ? setCanvasIntroPanOffsetY : undefined
               }
               homeCanvasLeftInset={canvasIntro ? homeCanvasLeftInset : 0}
+              canvasLeftInset={isWorkspaceSidebarCollapsed ? 0 : workspaceSidebarWidth}
             />
           </div>
         </section>

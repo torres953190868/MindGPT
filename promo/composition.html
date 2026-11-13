@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>BranchMind 宣传片 (9:16)</title>
+<!--
+  Frame-accurate composition. Nothing here animates on its own: render.mjs calls
+  window.renderFrame(seconds) for every frame and screenshots the result.
+  Open this file in a browser and use the scrubber at the bottom to preview.
+  Layout units are CSS px on a 540×960 stage, rendered at 2× → 1080×1920.
+-->
+<style>
+  :root {
+    --bg: #f1eadf;
+    --canvas: #ebe3d6;
+    --grid: rgb(74 60 46 / 0.07);
+    --surface: #fcf9f4;
+    --muted: #f3ece1;
+    --border: #d9cdbb;
+    --text: #2a2420;
+    --text-2: #5f554b;
+    --text-muted: #73685c;
+    --brand: #2b2622;
+    --vine: #5a4d42;
+    --fold: #5b5045;
+    --accent: #627f55;
+    --shadow-md: 0 8px 24px rgb(60 45 30 / 0.08), 0 1px 2px rgb(60 45 30 / 0.06);
+    --shadow-lg: 0 18px 40px rgb(60 45 30 / 0.11), 0 2px 6px rgb(60 45 30 / 0.06);
+    --shadow-xl: 0 24px 60px rgb(60 45 30 / 0.16);
+    --font: system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #222; }
+  body { font-family: var(--font); color: var(--text); -webkit-font-smoothing: antialiased; }
+  #stage {
+    position: relative; width: 540px; height: 960px; overflow: hidden;
+    background:
+      linear-gradient(180deg, rgb(252 249 244 / 0.55) 0%, rgb(252 249 244 / 0) 60%),
+      linear-gradient(180deg, #f1eadf 0%, #e7ddce 100%);
+  }
+  .grid {
+    position: absolute; inset: -60px;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+  .scene { position: absolute; inset: 0; will-change: opacity, transform; }
+  .abs { position: absolute; }
+  .center-x { left: 0; right: 0; text-align: center; }
+  .card {
+    position: absolute; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: var(--shadow-md);
+  }
+  .headline { font-weight: 800; letter-spacing: -0.01em; color: var(--text); }
+  .kicker {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px;
+    border-radius: 999px; background: color-mix(in srgb, var(--surface) 90%, transparent);
+    border: 1px solid var(--border); font-size: 13px; font-weight: 700; color: var(--text-2);
+    letter-spacing: 0.08em;
+  }
+  .bar { height: 7px; border-radius: 4px; background: #e2d8ca; }
+  svg { overflow: visible; }
+
+  /* --- scene 1: linear chat overload --- */
+  #chatColumn { position: absolute; left: 40px; right: 40px; top: 0; }
+  .msg { display: flex; margin-bottom: 14px; }
+  .msg.user { justify-content: flex-end; }
+  .msg .bubble {
+    max-width: 78%; padding: 11px 14px; border-radius: 16px; font-size: 15px; line-height: 22px;
+  }
+  .msg.user .bubble { background: var(--brand); color: var(--surface); border-bottom-right-radius: 5px; font-weight: 600; }
+  .msg.ai .bubble {
+    background: var(--surface); border: 1px solid var(--border); color: var(--text-2);
+    border-bottom-left-radius: 5px; width: 84%; max-width: 84%; padding: 12px 15px 13px;
+    font-size: 13.5px; line-height: 21px; box-shadow: var(--shadow-md);
+  }
+  .ai-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 11px; font-weight: 800; letter-spacing: .08em; color: var(--text-muted); }
+  .ai-head .dot { width: 18px; height: 18px; border-radius: 6px; background: var(--brand); display: grid; place-items: center; color: var(--surface); }
+  .ai-head .meta { margin-left: auto; font-weight: 600; letter-spacing: 0; opacity: .8; }
+  .msg.ai b { color: var(--text); font-weight: 800; }
+  .msg.ai ul { margin: 6px 0 0; padding: 0; list-style: none; }
+  .msg.ai li { position: relative; padding-left: 14px; margin-top: 3px; }
+  .msg.ai li::before { content: ""; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px; border-radius: 2px; background: var(--accent); }
+  .msg.ai .eq {
+    margin: 8px 0 4px; padding: 8px 10px; border-radius: 9px; background: var(--muted); border: 1px solid #e6dccd;
+    font-family: "Times New Roman", Times, serif; font-size: 15px; color: var(--text); text-align: center; white-space: nowrap;
+  }
+  .msg.ai .eq .fr { display: inline-flex; flex-direction: column; vertical-align: middle; line-height: 15px; font-size: 13px; margin: 0 2px; }
+  .msg.ai .eq .fr > span:first-child { border-bottom: 1px solid currentColor; padding: 0 3px; }
+  .msg.ai .code {
+    margin: 8px 0 2px; padding: 8px 10px; border-radius: 9px; background: #2f2924; color: #efe6d8;
+    font: 12px/18px ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre;
+  }
+  .msg.ai .code .c { color: #a89a87; }
+  .msg.ai .code .k { color: #d4ad6c; }
+  .msg.ai .tags { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .msg.ai .tag { padding: 2px 8px; border-radius: 999px; background: var(--muted); border: 1px solid var(--border); font-size: 11px; font-weight: 700; color: var(--text-2); }
+  .msg.ai .warn { margin-top: 8px; padding: 6px 9px; border-radius: 8px; background: #f3e3c4; color: #6e4a1f; font-size: 12px; font-weight: 700; }
+  .hook-pill {
+    display: inline-block; padding: 18px 26px; border-radius: 22px;
+    background: var(--surface); border: 1px solid var(--border);
+    box-shadow: var(--shadow-xl);
+  }
+
+  /* --- demo captions --- */
+  .caption {
+    position: absolute; left: 34px; right: 34px; bottom: 64px; padding: 18px 22px;
+    border-radius: 20px; background: color-mix(in srgb, var(--brand) 94%, transparent);
+    color: var(--surface); box-shadow: var(--shadow-xl);
+    display: flex; align-items: center; gap: 16px;
+  }
+  .caption .icon {
+    flex: none; width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center;
+    background: color-mix(in srgb, var(--surface) 14%, transparent);
+  }
+  .caption .t1 { font-size: 23px; font-weight: 800; line-height: 30px; }
+  .caption .t2 { margin-top: 3px; font-size: 15px; font-weight: 500; line-height: 21px; opacity: 0.78; }
+
+  /* --- feature scenes --- */
+  .feature-head { position: absolute; left: 0; right: 0; top: 96px; text-align: center; }
+  .feature-head .h { margin-top: 16px; font-size: 38px; line-height: 48px; font-weight: 800; }
+  .feature-head .s { margin-top: 10px; font-size: 17px; line-height: 26px; color: var(--text-muted); font-weight: 500; }
+  .node {
+    position: absolute; width: 210px; height: 70px; padding: 10px 14px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-md);
+  }
+  .node .k { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; letter-spacing: 0.14em; color: var(--text-muted); }
+  .node .t { margin-top: 5px; font-size: 15px; font-weight: 800; line-height: 21px; color: var(--brand); white-space: nowrap; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 999px;
+    background: var(--muted); border: 1px solid var(--border); font-size: 13px; font-weight: 700; color: var(--text-2);
+    white-space: nowrap;
+  }
+  .cite {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 20px; padding: 0 6px;
+    margin: 0 2px; border-radius: 6px; background: var(--brand); color: var(--surface); font-size: 11px; font-weight: 800;
+    vertical-align: 2px;
+  }
+
+  .pdf-p { margin: 8px 0 0; font-size: 11px; line-height: 15.5px; text-align: justify; hyphens: auto; }
+  .pdf-p sub, .pdf-foot sub { font-size: 0.7em; line-height: 0; }
+  .pdf-p sup, .pdf-foot sup { font-size: 0.7em; line-height: 0; }
+  .pdf-eq { position: relative; display: flex; align-items: center; justify-content: center; gap: 2px; margin: 10px 0 4px; font-size: 12px; }
+  .frac { display: inline-flex; flex-direction: column; align-items: center; margin: 0 2px; line-height: 14px; }
+  .frac > span:first-child { border-bottom: 1px solid currentColor; padding: 0 3px 1px; }
+  .frac > span:last-child { padding-top: 1px; }
+  .pdf-mark {
+    background-image: linear-gradient(rgba(212, 173, 108, 0.5), rgba(212, 173, 108, 0.5));
+    background-repeat: no-repeat; background-size: 0% 100%; border-radius: 2px;
+  }
+  .pdf-foot { margin-top: 10px; padding-top: 6px; border-top: 1px solid #d9cdbb; font-size: 9px; line-height: 12.5px; color: #554b42; }
+  /* preview controls (hidden while rendering) */
+  #controls { width: 540px; padding: 8px 0; color: #ddd; font: 12px/1.4 system-ui; display: flex; gap: 8px; align-items: center; }
+  #controls input { flex: 1; }
+  body.rendering #controls { display: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="grid" id="grid"></div>
+
+  <!-- 1. Hook: linear chat gets lost -->
+  <section class="scene" id="s1">
+    <div id="chatColumn"></div>
+    <div class="abs" style="left:0;right:0;top:0;height:150px;background:linear-gradient(180deg,#efe7db,rgba(239,231,219,0))"></div>
+    <div class="abs" style="left:0;right:0;bottom:0;height:200px;background:linear-gradient(0deg,#e8dfd1,rgba(232,223,209,0))"></div>
+    <div class="abs center-x" id="hook1" style="top:318px;z-index:2">
+      <div class="hook-pill">
+        <div style="font-size:19px;font-weight:700;color:var(--text-muted)">和 AI 聊到第 <span id="hookCount" style="display:inline-block;min-width:1.4em;color:var(--text);font-weight:900">1</span> 轮</div>
+        <div class="headline" style="margin-top:8px;font-size:34px;line-height:44px">对话太长，<br />知识点梳理困难？</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Real product demo -->
+  <section class="scene" id="s3">
+    <img id="demoFrame" alt="" style="position:absolute;left:0;top:0;width:540px;height:960px" />
+    <div class="abs" id="demoBadge" style="left:0;right:0;top:215px;text-align:center">
+      <span class="kicker"><span style="width:7px;height:7px;border-radius:9px;background:#c0533f;display:inline-block"></span>真实产品演示</span>
+    </div>
+    <div class="caption" id="cap0"><div class="icon" id="cap0i"></div><div><div class="t1">先写下想搞懂的问题</div><div class="t2">一个节点，就是一段独立的对话</div></div></div>
+    <div class="caption" id="cap1"><div class="icon" id="cap1i"></div><div><div class="t1">向下延续 · 深挖主线</div><div class="t2">顺着当前思路继续追问，脉络一路向下</div></div></div>
+    <div class="caption" id="cap2"><div class="icon" id="cap2i"></div><div><div class="t1">向右分支 · 支线不乱</div><div class="t2">冒出新疑问？开个分支，主线原封不动</div></div></div>
+    <div class="caption" id="cap3"><div class="icon" id="cap3i"></div><div><div class="t1">读研还是工作？分开推演</div><div class="t2">每种可能各走一条线，对比一目了然</div></div></div>
+  </section>
+
+  <!-- 4a. Whole tree -->
+  <section class="scene" id="s4">
+    <div class="feature-head" id="s4head">
+      <span class="kicker">01 · 思维地图</span>
+      <div class="h">整个思考过程<br />一张图看清</div>
+      <div class="s">主线向下，支线向右，随时回到任何一步</div>
+    </div>
+    <div class="abs" id="treeWrap" style="left:0;top:0;width:540px;height:960px">
+      <svg class="abs" id="treeEdges" style="left:0;top:0" width="540" height="960"></svg>
+      <div id="treeNodes"></div>
+    </div>
+  </section>
+
+  <!-- 4b. PDF + citations -->
+  <section class="scene" id="s5">
+    <div class="feature-head">
+      <span class="kicker">02 · PDF 精读</span>
+      <div class="h">回答有出处<br />引用精确到页</div>
+      <div class="s">上传 PDF 建立索引，追问时自动检索原文</div>
+    </div>
+    <!-- Excerpt from "Attention Is All You Need" (Vaswani et al., 2017), §3.2.1, page 4. -->
+    <div class="card" id="pdfPage" style="left:34px;top:330px;width:350px;padding:20px 22px 18px;border-radius:8px;box-shadow:var(--shadow-lg);font-family:'Times New Roman',Times,serif;color:#2b2622">
+      <div style="display:flex;justify-content:space-between;align-items:center;font-family:var(--font)">
+        <div style="font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--text-muted)">ATTENTION IS ALL YOU NEED.PDF</div>
+        <div id="pdfPageNo" style="font-size:11px;font-weight:800;color:var(--text-muted)">第 4 页</div>
+      </div>
+      <div style="margin-top:12px;font-size:14px;font-weight:700">3.2.1&nbsp; Scaled Dot-Product Attention</div>
+      <p class="pdf-p">The input consists of queries and keys of dimension <i>d<sub>k</sub></i>, and values of dimension <i>d<sub>v</sub></i>. We compute the dot products of the query with all keys, divide each by <span class="sqrt">√<i>d<sub>k</sub></i></span>, and apply a softmax function to obtain the weights on the values.</p>
+      <div class="pdf-eq">
+        <span>Attention(<i>Q</i>, <i>K</i>, <i>V</i>) = softmax(</span>
+        <span class="frac"><span><i>QK</i><sup>T</sup></span><span>√<i>d<sub>k</sub></i></span></span>
+        <span>)<i>V</i></span>
+        <span style="position:absolute;right:0">(1)</span>
+      </div>
+      <p class="pdf-p">While for small values of <i>d<sub>k</sub></i> the two mechanisms perform similarly, additive attention outperforms dot product attention without scaling for larger values of <i>d<sub>k</sub></i> [3]. <span id="pdfMark" class="pdf-mark">We suspect that for large values of <i>d<sub>k</sub></i>, the dot products grow large in magnitude, pushing the softmax function into regions where it has extremely small gradients<sup>4</sup>. To counteract this effect, we scale the dot products by 1/√<i>d<sub>k</sub></i>.</span></p>
+      <div class="pdf-foot"><sup>4</sup>To illustrate why the dot products get large, assume that the components of <i>q</i> and <i>k</i> are independent random variables with mean 0 and variance 1. Then their dot product, <i>q</i> · <i>k</i> = Σ<i>q<sub>i</sub>k<sub>i</sub></i>, has mean 0 and variance <i>d<sub>k</sub></i>.</div>
+    </div>
+    <div class="card" id="pdfAnswer" style="left:118px;top:702px;width:390px;padding:16px 18px;box-shadow:var(--shadow-xl)">
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800;letter-spacing:.14em;color:var(--text-muted)">AI 回答 · 基于原文</div>
+      <div id="pdfAnswerText" style="margin-top:8px;font-size:15px;line-height:24px;font-weight:600;color:var(--text);min-height:72px"></div>
+    </div>
+    <div class="abs" id="pdfQuestion" style="right:30px;top:302px">
+      <div style="padding:10px 14px;border-radius:16px;border-bottom-right-radius:5px;background:var(--brand);color:var(--surface);font-size:15px;font-weight:700;box-shadow:var(--shadow-lg)">为什么要除以 √d？</div>
+    </div>
+  </section>
+
+  <!-- 4c. Attach knowledge -->
+  <section class="scene" id="s6">
+    <div class="feature-head">
+      <span class="kicker">03 · 知识上下文</span>
+      <div class="h">挂上你的资料<br />AI 有据可依</div>
+      <div class="s">PDF、课程资料按节点挂载，回答只围绕你的内容</div>
+    </div>
+    <div class="card" id="kNode" style="left:70px;top:430px;width:400px;height:260px;padding:20px 22px;box-shadow:var(--shadow-xl)">
+      <div style="font-size:12px;font-weight:800;letter-spacing:.16em;color:var(--text-muted)">期末复习</div>
+      <div style="margin-top:6px;font-size:21px;font-weight:800;color:var(--brand)">卷积神经网络，考点有哪些？</div>
+      <div id="kSlots" style="position:relative;margin-top:14px;height:34px"></div>
+      <div id="kAnswer" style="margin-top:14px;font-size:15px;line-height:24px;color:var(--text-2);font-weight:600"></div>
+    </div>
+    <div id="kChips"></div>
+  </section>
+
+  <!-- 5. Outro -->
+  <section class="scene" id="s7">
+    <div class="abs center-x" id="outroQuote" style="top:330px">
+      <div id="q1" class="headline" style="font-size:36px;line-height:50px"></div>
+      <div id="q2" class="headline" style="font-size:36px;line-height:50px"></div>
+    </div>
+    <div class="abs center-x" id="outroBrand" style="top:370px">
+      <svg id="outroSprout" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:0 auto 10px"></svg>
+      <div style="font-size:72px;line-height:80px;font-weight:900;letter-spacing:0;color:var(--brand)">BranchMind</div>
+      <div style="margin-top:14px;font-size:20px;font-weight:700;color:var(--text-2)">让灵感发散，让理解收束。</div>
+    </div>
+  </section>
+</div>
+<div id="controls"><button id="play">▶</button><input id="scrub" type="range" min="0" max="38" step="0.0333" value="0" /><span id="tlabel">0.00s</span></div>
+
+<script>
+const DURATION = 38;
+const FPS = 30;
+// Demo frames were captured at 30fps from the live homepage (promo/capture-demo.mjs).
+const DEMO_START = 4.4;   // composition time when demo frame 0 shows (straight after the hook)
+const DEMO_FRAMES = 720;
+const DEMO_USE_SECONDS = 17.6; // loop 1 (11.5s) + the first branch of loop 2
+
+const $ = (id) => document.getElementById(id);
+const clamp01 = (v) => Math.min(1, Math.max(0, v));
+const E = {
+  linear: (t) => t,
+  inOut: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+  out: (t) => 1 - Math.pow(1 - t, 3),
+  outQuint: (t) => 1 - Math.pow(1 - t, 5),
+  in: (t) => t * t * t,
+  outBack: (t) => { const c1 = 1.5, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); },
+};
+const ramp = (t, a, b, from = 0, to = 1, ease = E.inOut) => from + (to - from) * ease(clamp01((t - a) / (b - a)));
+// 0 → 1 → 0 window with fade in [a, a+fi] and fade out [b-fo, b]
+const win = (t, a, b, fi = 0.35, fo = 0.35) => Math.min(ramp(t, a, a + fi, 0, 1, E.out), ramp(t, b - fo, b, 1, 0, E.inOut));
+const typed = (text, t, a, perChar) => { const chars = Array.from(text); return chars.slice(0, Math.max(0, Math.min(chars.length, Math.floor((t - a) / perChar)))).join(""); };
+// Feature scenes slide in from the right and out to the left, without overlapping text.
+const sceneIO = (t, a, b) => {
+  const pin = ramp(t, a, a + 0.4, 0, 1, E.out), pout = ramp(t, b - 0.3, b, 0, 1, E.in);
+  return { o: Math.min(pin, 1 - pout), transform: `translateX(${(1 - pin) * 50 - pout * 50}px)` };
+};
+const set = (el, styles) => { for (const k in styles) el.style[k] = styles[k]; };
+
+const ICONS = {
+  sprout: '<path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/>',
+  branch: '<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+  pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4Z"/>',
+  split: '<path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/>',
+  file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+  book: '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>',
+  note: '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M8 13h8"/><path d="M8 17h5"/>',
+};
+const icon = (name, size = 24, color = "currentColor", width = 1.9) =>
+  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
+
+// ---------- scene 1 setup ----------
+// Hook chat: realistic, nicely formatted AI answers that still drift away from the original question.
+const CHAT = [
+  ["user", "帮我从零讲讲 Transformer"],
+  ["ai", "思考 3 秒", `<b>Transformer</b> 是 2017 年提出的序列模型，完全基于注意力机制，抛弃了 RNN 的循环结构。
+    <ul><li><b>编码器</b>：把输入序列编码成上下文表示</li><li><b>解码器</b>：结合上下文逐步生成输出</li><li><b>核心组件</b>：自注意力 + 前馈网络 + 残差连接</li></ul>
+    <div class="tags"><span class="tag">NLP</span><span class="tag">深度学习</span><span class="tag">2017 · Google</span></div>`],
+  ["user", "自注意力具体怎么算？"],
+  ["ai", "思考 5 秒", `每个词先映射成 <b>Q、K、V</b> 三个向量，再用 Q 和所有 K 的相似度给 V 加权求和：
+    <div class="eq">Attention(<i>Q</i>,<i>K</i>,<i>V</i>) = softmax(<span class="fr"><span><i>QK</i><sup>T</sup></span><span>√<i>d</i></span></span>)<i>V</i></div>
+    权重越大，说明两个词之间的关联越强。`],
+  ["user", "等等，为什么要除以 √d？"],
+  ["ai", "思考 4 秒", `维度 d 越大，点积的<b>方差越大</b>，softmax 会被推向极端值，梯度几乎消失。
+    <div class="code"><span class="c"># q、k 各分量独立，均值 0、方差 1</span>
+<span class="k">Var</span>(q · k) = d
+<span class="k">Var</span>(q · k / √d) = 1  <span class="c"># 缩放后回到稳定区间</span></div>`],
+  ["user", "softmax 饱和又是什么意思"],
+  ["ai", "思考 3 秒", `输入之间差距过大时，softmax 的输出会接近 <b>one-hot</b>：
+    <ul><li>最大的一项 ≈ 1，其余全部 ≈ 0</li><li>反向传播时梯度趋近于 0</li><li>参数几乎不再更新，训练停滞</li></ul>`],
+  ["user", "那梯度消失和残差有关系吗"],
+  ["ai", "思考 6 秒", `有关系。残差连接给梯度开了一条<b>“捷径”</b>，可以跳过子层直接回传：
+    <div class="eq"><i>y</i> = <i>x</i> + <i>F</i>(<i>x</i>) &nbsp;⇒&nbsp; ∂<i>y</i>/∂<i>x</i> = 1 + ∂<i>F</i>/∂<i>x</i></div>
+    即使 F 的梯度很小，整体梯度也不会低于 1。`],
+  ["user", "我们最开始在聊什么来着？"],
+  ["ai", "思考 2 秒", `我们刚才在讨论 <b>LayerNorm 应该放在残差之前还是之后</b>，再往前是残差连接、softmax 饱和和缩放因子……
+    <div class="warn">⚠︎ 对话已超过 12,000 字，较早的内容可能被遗忘</div>`],
+  ["user", "不对，往上翻翻……"],
+  ["ai", "思考 4 秒", `<b>多头注意力</b>把 d 维向量拆成 h 个子空间并行计算，每个头关注不同的关系：
+    <div class="code">head<span class="k">ᵢ</span> = Attention(Q·W<span class="k">ᵢ</span><sup>Q</sup>, K·W<span class="k">ᵢ</span><sup>K</sup>, V·W<span class="k">ᵢ</span><sup>V</sup>)
+MultiHead = Concat(head<span class="k">₁</span>…head<span class="k">ₕ</span>)·W<sup>O</sup></div>`],
+  ["user", "位置编码又是怎么回事"],
+  ["ai", "思考 5 秒", `注意力本身<b>不感知词序</b>，需要额外注入位置信息：
+    <ul><li><b>正弦编码</b>：不同频率的 sin / cos，可外推到更长序列</li><li><b>可学习编码</b>：每个位置一个向量，简单直接</li><li><b>RoPE</b>：用旋转矩阵表达相对位置，主流大模型都在用</li></ul>`],
+];
+{
+  const col = $("chatColumn");
+  const avatar = icon("sprout", 12, "#fcf9f4", 2.2);
+  let html = "";
+  for (let r = 0; r < 2; r += 1) for (const m of CHAT) {
+    if (m[0] === "user") html += `<div class="msg user"><div class="bubble">${m[1]}</div></div>`;
+    else html += `<div class="msg ai"><div class="bubble"><div class="ai-head"><span class="dot">${avatar}</span>AI 助手<span class="meta">${m[1]}</span></div>${m[2]}</div></div>`;
+  }
+  col.innerHTML = html;
+}
+
+// ---------- scene 3 setup ----------
+$("cap0i").innerHTML = icon("pen", 26, "#fcf9f4");
+$("cap1i").innerHTML = icon("sprout", 26, "#fcf9f4");
+$("cap2i").innerHTML = icon("branch", 26, "#fcf9f4");
+$("cap3i").innerHTML = icon("split", 26, "#fcf9f4");
+
+// ---------- scene 4a setup: tree ----------
+const COLS = [36, 294];
+const ROWS = [330, 436, 542, 648, 754];
+const TREE = [
+  // id, col, row, kind, title, parent, appearAt (relative)
+  ["r", 0, 0, "主题", "从零搞懂 Transformer", null, 0.25],
+  ["a", 0, 1, "继续", "拆解自注意力怎么算", "r", 0.6],
+  ["a1", 1, 1, "分支", "为什么要除以 √d？", "a", 1.0],
+  ["b", 0, 2, "继续", "多头注意力的意义", "a", 1.3],
+  ["a2", 1, 2, "继续", "softmax 饱和是什么", "a1", 1.55],
+  ["c", 0, 3, "继续", "位置编码怎么加", "b", 1.85],
+  ["c1", 1, 3, "分支", "RoPE 旋转位置编码", "c", 2.1],
+  ["d", 0, 4, "继续", "残差与 LayerNorm", "c", 2.35],
+  ["d1", 1, 4, "分支", "Pre-LN 还是 Post-LN", "d", 2.6],
+];
+const NODE_W = 210, NODE_H = 70;
+const treeById = Object.fromEntries(TREE.map((n) => [n[0], n]));
+{
+  let nodes = "", edges = "";
+  for (const n of TREE) {
+    const [id, col, row, kind, title, parent] = n;
+    const ic = kind === "分支" ? icon("branch", 13) : kind === "继续" ? icon("sprout", 13) : icon("note", 13);
+    nodes += `<div class="node" id="tn-${id}" style="left:${COLS[col]}px;top:${ROWS[row]}px"><div class="k">${ic}${kind}</div><div class="t">${title}</div></div>`;
+    if (parent) {
+      const p = treeById[parent];
+      let d;
+      if (p[1] === col) { // continue: bottom center → top center
+        const x = COLS[col] + NODE_W / 2, y1 = ROWS[p[2]] + NODE_H, y2 = ROWS[row];
+        d = `M${x} ${y1} C ${x - 8} ${y1 + 14}, ${x + 8} ${y2 - 14}, ${x} ${y2}`;
+      } else { // branch: right middle → left middle
+        const x1 = COLS[p[1]] + NODE_W, y = ROWS[row] + NODE_H / 2, x2 = COLS[col];
+        d = `M${x1} ${y} C ${x1 + 18} ${y - 10}, ${x2 - 18} ${y + 10}, ${x2} ${y}`;
+      }
+      edges += `<path id="te-${id}" d="${d}" fill="none" stroke="var(--vine)" stroke-width="2.2" stroke-linecap="round" stroke-opacity=".75" pathLength="1" stroke-dasharray="1 1"/>`;
+    }
+  }
+  $("treeNodes").innerHTML = nodes;
+  $("treeEdges").innerHTML = edges;
+}
+
+// ---------- scene 4b setup: pdf (page markup lives in the HTML) ----------
+const PDF_ANSWER = [
+  ["text", "d 很大时点积数值会变得很大，把 softmax 推到梯度极小的区域"],
+  ["cite", "p.4"],
+  ["text", "。除以 √d 能把点积的方差拉回 1，原文脚注 4 给出了推导"],
+  ["cite", "p.4"],
+  ["text", "。"],
+];
+
+// ---------- scene 4c setup: knowledge chips ----------
+const K_CHIPS = [
+  { label: "CNN 讲义.pdf", icon: "file", from: [-40, 300], to: [0, 0], at: 0.55 },
+  { label: "深度学习课程 · 第 3 章", icon: "book", from: [420, 820], to: [140, 0], at: 0.85 },
+];
+$("kChips").innerHTML = K_CHIPS.map((c, i) => `<div class="chip abs" id="kc${i}">${icon(c.icon, 14)}${c.label}</div>`).join("");
+const K_ANSWER = "根据《深度学习课程》第 3 章，重点是卷积核与感受野、池化的作用，以及参数共享为什么能减少过拟合……";
+
+// ---------- scene 5 setup ----------
+$("outroSprout").innerHTML = ICONS.sprout;
+
+// ---------- demo frame loading ----------
+let lastDemoSrc = "";
+function demoSrc(index) { return `frames/demo/${String(index).padStart(5, "0")}.jpg`; }
+function setDemoFrame(index) {
+  const src = demoSrc(Math.max(0, Math.min(DEMO_FRAMES - 1, index)));
+  if (src === lastDemoSrc) return Promise.resolve();
+  lastDemoSrc = src;
+  const img = $("demoFrame");
+  return new Promise((resolve) => {
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+    img.src = src;
+  });
+}
+
+// ---------- the timeline ----------
+async function renderFrame(t) {
+  const pending = [];
+
+  // background drift so static scenes never feel frozen
+  set($("grid"), { transform: `translate(${(-t * 6) % 28}px, ${(-t * 10) % 28}px)` });
+
+  // ===== Scene 1: 0 – 4.6 =====
+  {
+    const o = ramp(t, 3.9, 4.6, 1, 0);
+    const el = $("s1");
+    set(el, { opacity: o, display: o > 0 ? "block" : "none", filter: `blur(${ramp(t, 3.7, 4.6, 0, 8)}px)` });
+    if (o > 0) {
+      const scroll = 120 + 70 * t + 95 * t * t; // accelerating scroll = growing confusion
+      set($("chatColumn"), { transform: `translateY(${-scroll + 560}px)` });
+      const h = $("hook1");
+      const hi = ramp(t, 0.35, 0.95, 0, 1, E.outBack);
+      set(h, { opacity: ramp(t, 0.35, 0.8), transform: `translateY(${(1 - hi) * 30}px) scale(${0.92 + 0.08 * hi})` });
+      $("hookCount").textContent = String(Math.max(1, Math.round(ramp(t, 0.5, 2.6, 1, 47, E.out))));
+    }
+  }
+
+  // ===== Scene 3: real demo 4.4 – 22.0 =====
+  {
+    const end = DEMO_START + DEMO_USE_SECONDS;
+    const o = Math.min(ramp(t, DEMO_START - 0.2, DEMO_START + 0.25), ramp(t, end - 0.4, end, 1, 0));
+    set($("s3"), { opacity: o, display: o > 0 ? "block" : "none" });
+    if (o > 0) {
+      const local = t - DEMO_START;
+      const s = 1;
+      set($("demoFrame"), { transform: `scale(${s})` });
+      pending.push(setDemoFrame(Math.round(Math.max(0, local) * FPS)));
+      set($("demoBadge"), { opacity: win(local, 0.2, 3.2, 0.4, 0.5) });
+      // Captions are keyed to the demo timeline in lib/home-onboarding-demo.ts:
+      // typing 0.5s, first growth 2.4s, second growth 6.45s, return 10.2s, loop 11.5s.
+      const caps = [
+        ["cap0", 0.4, 2.55],
+        ["cap1", 2.6, 6.55],
+        ["cap2", 6.6, 11.0],
+        ["cap3", 11.7, 17.6],
+      ];
+      for (const [id, a, b] of caps) {
+        const c = win(local, a, b, 0.35, 0.3);
+        set($(id), { opacity: c, transform: `translateY(${(1 - c) * 18}px)`, display: c > 0 ? "flex" : "none" });
+      }
+    }
+  }
+
+  // ===== Scene 4a: tree 21.75 – 26.0 =====
+  {
+    const a = 21.75, b = 26.0, L = t - a;
+    const { o, transform } = sceneIO(t, a, b);
+    set($("s4"), { opacity: o, transform, display: o > 0 ? "block" : "none" });
+    if (o > 0) {
+      set($("s4head"), { transform: `translateY(${ramp(L, 0, 0.6, 20, 0, E.out)}px)` });
+      for (const n of TREE) {
+        const [id, , , , , parent, at] = n;
+        const p = ramp(L, at, at + 0.4, 0, 1, E.outBack);
+        set($("tn-" + id), { opacity: clamp01(ramp(L, at, at + 0.25)), transform: `scale(${0.85 + 0.15 * p})` });
+        if (parent) $("te-" + id).setAttribute("stroke-dashoffset", String(1 - ramp(L, at - 0.3, at, 0, 1, E.inOut)));
+      }
+      // gentle camera push-in
+      const z = ramp(L, 0, 4.5, 1.0, 1.05, E.linear);
+      set($("treeWrap"), { transform: `scale(${z})`, transformOrigin: "270px 540px" });
+    }
+  }
+
+  // ===== Scene 4b: pdf 25.95 – 30.0 =====
+  {
+    const a = 25.95, b = 30.0, L = t - a;
+    const { o, transform } = sceneIO(t, a, b);
+    set($("s5"), { opacity: o, transform, display: o > 0 ? "block" : "none" });
+    if (o > 0) {
+      const pp = ramp(L, 0.1, 0.6, 0, 1, E.out);
+      set($("pdfPage"), { opacity: pp, transform: `translateY(${(1 - pp) * 30}px) rotate(${-1 * pp}deg)` });
+      const q = ramp(L, 0.6, 1.0, 0, 1, E.outBack);
+      set($("pdfQuestion"), { opacity: clamp01(q * 1.3), transform: `translateY(${(1 - q) * 16}px) scale(${0.9 + 0.1 * q})`, transformOrigin: "100% 100%" });
+      // Highlighter sweeps across the retrieved passage (an inline span, so it flows line by line).
+      set($("pdfMark"), { backgroundSize: `${ramp(L, 1.0, 1.9, 0, 100, E.inOut)}% 100%` });
+      const ap = ramp(L, 1.6, 2.1, 0, 1, E.out);
+      set($("pdfAnswer"), { opacity: ap, transform: `translateY(${(1 - ap) * 26}px)` });
+      // stream the answer; citations pop in as chips
+      const perChar = 0.02;
+      let clock = 1.95, html = "";
+      for (const [kind, value] of PDF_ANSWER) {
+        if (kind === "text") { html += typed(value, L, clock, perChar); clock += Array.from(value).length * perChar; }
+        else {
+          if (L >= clock) {
+            const s = ramp(L, clock, clock + 0.25, 0.4, 1, E.outBack);
+            html += `<span class="cite" style="transform:scale(${s});display:inline-flex">${value}</span>`;
+          }
+          clock += 0.15;
+        }
+      }
+      $("pdfAnswerText").innerHTML = html + (L > 1.9 && L < clock + 0.2 ? '<span style="display:inline-block;width:2px;height:1em;background:var(--text);vertical-align:-2px;margin-left:2px"></span>' : "");
+    }
+  }
+
+  // ===== Scene 4c: knowledge 29.95 – 33.3 =====
+  {
+    const a = 29.95, b = 33.3, L = t - a;
+    const { o, transform } = sceneIO(t, a, b);
+    set($("s6"), { opacity: o, transform, display: o > 0 ? "block" : "none" });
+    if (o > 0) {
+      const np = ramp(L, 0.1, 0.6, 0, 1, E.out);
+      set($("kNode"), { opacity: np, transform: `translateY(${(1 - np) * 26}px)` });
+      const baseX = 70 + 22, baseY = 430 + 20 + 30 + 14 + 6; // inside kNode, aligned with kSlots
+      K_CHIPS.forEach((c, i) => {
+        const p = ramp(L, c.at, c.at + 0.6, 0, 1, E.outQuint);
+        const x = c.from[0] + (baseX + c.to[0] - c.from[0]) * p;
+        const y = c.from[1] + (baseY + 6 - c.from[1]) * p;
+        set($("kc" + i), { left: `${x}px`, top: `${y}px`, opacity: ramp(L, c.at, c.at + 0.2), transform: `rotate(${(1 - p) * (i ? 8 : -8)}deg)` });
+      });
+      $("kAnswer").textContent = typed(K_ANSWER, L, 1.6, 0.028);
+    }
+  }
+
+  // ===== Scene 5: outro 33.25 – 38 (quote, then brand) =====
+  // Quote starts first and brand lands at the end.
+  {
+    const a = 33.25, L = t - a;
+    const o = ramp(t, a, a + 0.35);
+    set($("s7"), { opacity: o, display: o > 0 ? "block" : "none" });
+    if (o > 0) {
+      // the quote takes ~1.5s, then the brand holds until the end
+      $("q1").textContent = typed("你可以外包思考，", L, 0.1, 0.06);
+      $("q2").textContent = typed("但是无法外包理解。", L, 0.65, 0.06);
+      const qOut = ramp(L, 1.55, 1.85, 1, 0);
+      set($("outroQuote"), { opacity: qOut, transform: `translateY(${ramp(L, 1.55, 1.85, 0, -24)}px)` });
+      const bp = ramp(L, 1.8, 2.3, 0, 1, E.outBack);
+      set($("outroBrand"), { opacity: clamp01(ramp(L, 1.8, 2.1)), transform: `translateY(${(1 - bp) * 26}px)` });
+    }
+  }
+
+  await Promise.all(pending);
+  // make sure layout/paint reflects the new styles before the screenshot
+  await new Promise((r) => requestAnimationFrame(() => r()));
+}
+window.renderFrame = renderFrame;
+window.PROMO = { DURATION, FPS };
+
+// ---------- preview controls ----------
+const scrub = $("scrub"), label = $("tlabel");
+let playing = false, playStart = 0, playFrom = 0;
+async function show(t) { label.textContent = t.toFixed(2) + "s"; scrub.value = t; await renderFrame(t); }
+scrub.addEventListener("input", () => { playing = false; show(Number(scrub.value)); });
+$("play").addEventListener("click", () => {
+  playing = !playing; playFrom = Number(scrub.value) >= DURATION ? 0 : Number(scrub.value); playStart = performance.now();
+  const loop = async () => {
+    if (!playing) return;
+    const t = playFrom + (performance.now() - playStart) / 1000;
+    if (t >= DURATION) { playing = false; return; }
+    await show(t); requestAnimationFrame(loop);
+  };
+  loop();
+});
+if (!new URLSearchParams(location.search).has("render")) show(0);
+else document.body.classList.add("rendering");
+</script>
+</body>
+</html>

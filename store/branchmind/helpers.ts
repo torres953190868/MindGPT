@@ -1,3 +1,4 @@
+import { removeNodeProject } from "@/lib/client/node-streaming";
 import type { PendingProjectSyncRecord } from "@/lib/client/pending-project-sync";
 import {
   getBranchMindLanguage,
@@ -295,6 +296,142 @@ export function rollbackRegeneratedMessages(
       [rollback.nodeId]: { ...node, messages },
     },
   });
+}
+
+export function stripConfirmedDeletedNodes(
+  project: Project,
+  confirmedDeletedNodeIds: ReadonlySet<string>,
+): Project {
+  let nextProject = project;
+  for (const nodeId of confirmedDeletedNodeIds) {
+    const stripped = removeNodeProject(nextProject, nodeId);
+    if (stripped) {
+      nextProject = stripped.project;
+    }
+  }
+  return nextProject;
+}
+
+export function reconcileConfirmedNodeDeletion(
+  currentProject: Project,
+  previousConfirmedProject: Project,
+  serverProject: Project,
+  deletedNodeId: string,
+  pendingDeletedNodeIds: readonly string[],
+): Project {
+  const removedIds = new Set<string>([deletedNodeId]);
+  for (const id of Object.keys(previousConfirmedProject.nodes)) {
+    if (!serverProject.nodes[id]) {
+      removedIds.add(id);
+    }
+  }
+
+  let hasRemovedNodeInCurrent = false;
+  for (const id of removedIds) {
+    if (currentProject.nodes[id]) {
+      hasRemovedNodeInCurrent = true;
+      break;
+    }
+  }
+
+  let nextNodes = currentProject.nodes;
+  if (hasRemovedNodeInCurrent) {
+    nextNodes = { ...currentProject.nodes };
+    for (const id of removedIds) {
+      delete nextNodes[id];
+    }
+    for (const [id, node] of Object.entries(nextNodes)) {
+      if (node.children.some((childId) => removedIds.has(childId))) {
+        nextNodes[id] = {
+          ...node,
+          children: node.children.filter((childId) => !removedIds.has(childId)),
+          updatedAt: newestTimestamp(node.updatedAt, serverProject.nodes[id]?.updatedAt),
+        };
+      }
+    }
+  } else {
+    const parentId = previousConfirmedProject.nodes[deletedNodeId]?.parentId;
+    if (parentId && nextNodes[parentId] && serverProject.nodes[parentId]) {
+      const currentParent = nextNodes[parentId];
+      const nextParentUpdatedAt = newestTimestamp(
+        currentParent.updatedAt,
+        serverProject.nodes[parentId].updatedAt,
+      );
+      if (nextParentUpdatedAt !== currentParent.updatedAt) {
+        nextNodes = {
+          ...nextNodes,
+          [parentId]: {
+            ...currentParent,
+            updatedAt: nextParentUpdatedAt,
+          },
+        };
+      }
+    }
+  }
+
+  let reconciled: Project = {
+    ...currentProject,
+    nodes: nextNodes,
+    updatedAt: newestTimestamp(currentProject.updatedAt, serverProject.updatedAt),
+  };
+
+  for (const pendingNodeId of pendingDeletedNodeIds) {
+    const replayed = removeNodeProject(reconciled, pendingNodeId);
+    if (replayed) {
+      reconciled = replayed.project;
+    }
+  }
+
+  return reconciled;
+}
+
+export function reconcileFailedNodeDeletion(
+  currentProject: Project,
+  authoritativeProject: Project,
+  confirmedDeletedNodeIds: ReadonlySet<string>,
+  pendingDeletedNodeIds: readonly string[],
+): Project {
+  const baseProject = stripConfirmedDeletedNodes(
+    authoritativeProject,
+    confirmedDeletedNodeIds,
+  );
+  const baseNodeIds = new Set(Object.keys(baseProject.nodes));
+  const mergedNodes: Project["nodes"] = {};
+
+  for (const [id, authNode] of Object.entries(baseProject.nodes)) {
+    const localNode = currentProject.nodes[id];
+    const cleanChildren = authNode.children.filter((childId) => baseNodeIds.has(childId));
+    if (localNode) {
+      mergedNodes[id] = {
+        ...localNode,
+        parentId: authNode.parentId,
+        children: cleanChildren,
+        updatedAt: newestTimestamp(localNode.updatedAt, authNode.updatedAt),
+      };
+    } else {
+      mergedNodes[id] =
+        cleanChildren.length === authNode.children.length
+          ? authNode
+          : { ...authNode, children: cleanChildren };
+    }
+  }
+
+  let reconciled: Project = {
+    ...baseProject,
+    title: currentProject.title,
+    notes: currentProject.notes,
+    nodes: mergedNodes,
+    updatedAt: newestTimestamp(currentProject.updatedAt, baseProject.updatedAt),
+  };
+
+  for (const pendingNodeId of pendingDeletedNodeIds) {
+    const replayed = removeNodeProject(reconciled, pendingNodeId);
+    if (replayed) {
+      reconciled = replayed.project;
+    }
+  }
+
+  return reconciled;
 }
 
 export function readLegacyProjects(): {

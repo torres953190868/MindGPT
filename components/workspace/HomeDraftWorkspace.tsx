@@ -69,23 +69,19 @@ async function ignoreMessageMutation() {
 
 function ignoreNodeMutation() {}
 
+const HOME_DEMO_E2E_SKIP_STORAGE_KEY = "branchmind-e2e-skip-home-demo";
+
 function shouldShowHomeOnboardingDemo() {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
   try {
-    return window.localStorage.getItem(HOME_DEMO_DISMISSED_STORAGE_KEY) !== "1";
+    window.localStorage.removeItem(HOME_DEMO_DISMISSED_STORAGE_KEY);
+    return window.localStorage.getItem(HOME_DEMO_E2E_SKIP_STORAGE_KEY) !== "1";
   } catch {
-    // Storage blocked: skip the demo rather than show it on every visit.
-    return false;
+    return true;
   }
 }
 
-function rememberHomeOnboardingDemoDismissed() {
-  try {
-    window.localStorage.setItem(HOME_DEMO_DISMISSED_STORAGE_KEY, "1");
-  } catch {
-    // Nothing to do; the demo simply shows again next time.
-  }
-}
+function noopDismissHomeOnboardingDemo() {}
 
 export function HomeDraftWorkspace() {
   const { copy } = useLanguage();
@@ -266,7 +262,7 @@ export function HomeDraftWorkspace() {
           suggestionsAnimationPhase: taglinePhase,
           onboardingDemo: showOnboardingDemo === null
             ? undefined
-            : { autoPlay: showOnboardingDemo, onDismiss: rememberHomeOnboardingDemoDismissed },
+            : { autoPlay: showOnboardingDemo, onDismiss: noopDismissHomeOnboardingDemo },
         }}
         nodeDetailOptions={{
           initialSubmit: true,

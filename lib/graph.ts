@@ -1,8 +1,11 @@
 import type { BranchType, ChatMessage, MindNode, NodePosition, Project } from "./types";
 
 export const ROOT_POSITION: NodePosition = { x: 120, y: 120 };
-const BRANCH_GAP_X = 390;
-const CONTINUE_GAP_Y = 290;
+// 292px card + ~8px of handles + the home demo's 170px branch stem, so a branch grows with
+// the same stem length as the demo (see lib/node-growth.ts).
+const BRANCH_GAP_X = 470;
+// Leaves room for the home demo's 150px continue stem below a typical (~240-290px) card.
+const CONTINUE_GAP_Y = 440;
 const NODE_LAYOUT_WIDTH = 316;
 const NODE_LAYOUT_HEIGHT = 240;
 const NODE_LAYOUT_GAP = 24;

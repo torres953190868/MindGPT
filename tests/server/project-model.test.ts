@@ -223,7 +223,7 @@ describe("project model helpers", () => {
     expect(continued?.node).toMatchObject({
       parentId: rootId,
       titleManuallyEdited: false,
-      position: { x: 120, y: 410 },
+      position: { x: 120, y: 560 },
       branchType: "continue",
     });
 
@@ -237,7 +237,7 @@ describe("project model helpers", () => {
     expect(branched?.node).toMatchObject({
       parentId: rootId,
       titleManuallyEdited: false,
-      position: { x: 510, y: 120 },
+      position: { x: 590, y: 120 },
       branchType: "branch",
     });
     expect(branched?.project.nodes[rootId].children).toEqual([
@@ -249,20 +249,20 @@ describe("project model helpers", () => {
   it("places new children in the closest free directional slot", () => {
     const project = createRootProject("Graph search", rootReply);
     const root = project.nodes[project.rootNodeId];
-    const preferredBranch = { ...root, id: "occupied_branch", position: { x: 510, y: 120 } };
+    const preferredBranch = { ...root, id: "occupied_branch", position: { x: 590, y: 120 } };
     const preferredContinue = {
       ...root,
       id: "occupied_continue",
-      position: { x: 120, y: 410 },
+      position: { x: 120, y: 560 },
     };
 
     expect(getChildPosition(root, "branch", [root, preferredBranch])).toEqual({
-      x: 510,
+      x: 590,
       y: 384,
     });
     expect(getChildPosition(root, "continue", [root, preferredContinue])).toEqual({
       x: 460,
-      y: 410,
+      y: 560,
     });
   });
 

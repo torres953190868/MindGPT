@@ -80,39 +80,25 @@
   --radius-2xl: 24px;
 }
 
-.branchmind-entering-edge {
-  animation: branchmind-draw-edge 280ms ease-out forwards;
-}
-
+/* New nodes grow like the home onboarding demo: BranchEdge draws the stem, leaflets and the
+   leaf that springs into the card shape, and the real card fades in on top of it with the
+   demo's content timing (1.3s -> 1.55s, easeInOutCubic). */
 .branch-node-card-surface[data-entering="true"] {
   pointer-events: none;
   opacity: 0;
-  transform: scale(0.96);
-  animation: branchmind-enter-node 220ms ease-out 280ms forwards;
+  animation: branchmind-grow-node 250ms cubic-bezier(0.65, 0, 0.35, 1) 1300ms forwards;
 }
 
-@keyframes branchmind-draw-edge {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-@keyframes branchmind-enter-node {
+@keyframes branchmind-grow-node {
   to {
     opacity: 1;
-    transform: scale(1);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .branchmind-entering-edge,
   .branch-node-card-surface[data-entering="true"] {
     animation: none;
-  }
-
-  .branch-node-card-surface[data-entering="true"] {
     opacity: 1;
-    transform: none;
   }
 }
 
@@ -213,7 +199,8 @@
   --menu-shadow: 0 18px 45px rgb(32 40 36 / 0.16);
   --popover-shadow: 0 22px 55px rgb(32 40 36 / 0.2);
   --node-handle-branch: #5eaa90;
-  --node-handle-continue: #7da8db;
+  /* 继续与分支连线同色，跟随主题的分支色 */
+  --node-handle-continue: var(--node-handle-branch);
   --shadow-color-ambient: rgb(32 40 36 / 0.1);
 }
 
@@ -325,9 +312,9 @@
   --editor-code-bg: rgb(243 236 225 / 0.95);
   --menu-shadow: 0 18px 45px rgb(60 45 30 / 0.15);
   --popover-shadow: 0 22px 55px rgb(60 45 30 / 0.19);
-  /* 连线：主线（继续）橄榄金实线，分支深棕虚线 */
+  /* 连线：继续与分支同为深棕虚线 */
   --node-handle-branch: #5a4d42;
-  --node-handle-continue: #8a7448;
+  --node-handle-continue: var(--node-handle-branch);
   --shadow-color-ambient: rgb(60 45 30 / 0.09);
 
   /* 对话气泡 */
@@ -434,7 +421,7 @@
   --menu-shadow: 0 18px 45px rgba(76, 54, 105, 0.18);
   --popover-shadow: 0 22px 55px rgba(76, 54, 105, 0.22);
   --node-handle-branch: #a489c8;
-  --node-handle-continue: #91caa8;
+  --node-handle-continue: var(--node-handle-branch);
   --shadow-color-ambient: rgba(44, 35, 62, 0.1);
 }
 

@@ -358,6 +358,780 @@ describe("useBranchMindStore node deletion", () => {
     await deletion;
     expect(useBranchMindStore.getState().creatingNodeId).toBeNull();
   });
+
+  function makeDeletionTreeProject(projectId = "project_delete_race"): Project {
+    const timestamp = "2026-01-01T00:00:00.000Z";
+    const rootId = `${projectId}_root`;
+    const makeTestNode = (
+      id: string,
+      parentId: string | null,
+      children: string[] = [],
+      title = id,
+      position = { x: 0, y: 0 },
+    ) => ({
+      id,
+      projectId,
+      parentId,
+      title,
+      titleManuallyEdited: false,
+      summary: `${title} summary`,
+      messages: [
+        {
+          id: `${id}_user`,
+          role: "user" as const,
+          content: `${title} prompt`,
+          attachments: [],
+          createdAt: timestamp,
+        },
+        {
+          id: `${id}_assistant`,
+          role: "assistant" as const,
+          content: `${title} answer`,
+          attachments: [],
+          createdAt: timestamp,
+        },
+      ],
+      children,
+      position,
+      branchType: (parentId === null ? "root" : "branch") as "root" | "branch",
+      collapsed: false,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+
+    return {
+      id: projectId,
+      title: `Project ${projectId}`,
+      notes: "",
+      rootNodeId: rootId,
+      nodes: {
+        [rootId]: makeTestNode(
+          rootId,
+          null,
+          [
+            `${projectId}_a`,
+            `${projectId}_b`,
+            `${projectId}_c`,
+            `${projectId}_parent`,
+            `${projectId}_keep`,
+          ],
+          "Root",
+          { x: 0, y: 0 },
+        ),
+        [`${projectId}_a`]: makeTestNode(`${projectId}_a`, rootId, [], "Node A", {
+          x: 320,
+          y: 0,
+        }),
+        [`${projectId}_b`]: makeTestNode(`${projectId}_b`, rootId, [], "Node B", {
+          x: 320,
+          y: 260,
+        }),
+        [`${projectId}_c`]: makeTestNode(`${projectId}_c`, rootId, [], "Node C", {
+          x: 320,
+          y: 520,
+        }),
+        [`${projectId}_parent`]: makeTestNode(
+          `${projectId}_parent`,
+          rootId,
+          [`${projectId}_child`],
+          "Parent",
+          { x: 640, y: 0 },
+        ),
+        [`${projectId}_child`]: makeTestNode(
+          `${projectId}_child`,
+          `${projectId}_parent`,
+          [`${projectId}_grandchild`],
+          "Child",
+          { x: 960, y: 0 },
+        ),
+        [`${projectId}_grandchild`]: makeTestNode(
+          `${projectId}_grandchild`,
+          `${projectId}_child`,
+          [],
+          "Grandchild",
+          { x: 1280, y: 0 },
+        ),
+        [`${projectId}_keep`]: makeTestNode(`${projectId}_keep`, rootId, [], "Keep", {
+          x: 320,
+          y: 780,
+        }),
+      },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+  }
+
+  function serverDeleteSubtree(
+    project: Project,
+    nodeId: string,
+    updatedAt: string,
+  ): { project: Project; selectedNodeId: string } {
+    const target = project.nodes[nodeId];
+    if (!target || target.parentId === null) {
+      throw new Error(`Cannot delete ${nodeId}`);
+    }
+    const toRemove = new Set<string>();
+    const stack = [nodeId];
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      if (toRemove.has(current)) continue;
+      toRemove.add(current);
+      project.nodes[current]?.children.forEach((childId) => stack.push(childId));
+    }
+
+    const nextNodes = { ...project.nodes };
+    toRemove.forEach((id) => delete nextNodes[id]);
+    const parent = nextNodes[target.parentId];
+    if (parent) {
+      nextNodes[target.parentId] = {
+        ...parent,
+        children: parent.children.filter((id) => id !== nodeId),
+        updatedAt,
+      };
+    }
+
+    return {
+      selectedNodeId: target.parentId,
+      project: {
+        ...project,
+        nodes: nextNodes,
+        updatedAt,
+      },
+    };
+  }
+
+  it("rapidly deletes three independent nodes sequentially with a delayed first response and never resurrects deleted nodes", async () => {
+    const initialProject = makeDeletionTreeProject();
+    let serverProject = initialProject;
+    const deleteCalls: Array<{
+      nodeId: string;
+      resolve: (response: Response) => void;
+    }> = [];
+
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === "/api/projects" && !init?.method) {
+        return Promise.resolve(Response.json({ projects: [serverProject] }));
+      }
+      const prefix = `/api/projects/${initialProject.id}/nodes/`;
+      if (url.startsWith(prefix) && init?.method === "DELETE") {
+        const nodeId = url.slice(prefix.length);
+        return new Promise<Response>((resolve) => {
+          deleteCalls.push({ nodeId, resolve });
+        });
+      }
+      return Promise.reject(new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+    useBranchMindStore.getState().selectProject(initialProject.id);
+
+    const nodeA = `${initialProject.id}_a`;
+    const nodeB = `${initialProject.id}_b`;
+    const nodeC = `${initialProject.id}_c`;
+
+    const observedNodeIdSets: string[][] = [];
+    const unsubscribe = useBranchMindStore.subscribe((state) => {
+      const active = state.projects.find((item) => item.id === initialProject.id);
+      if (active) {
+        observedNodeIdSets.push(Object.keys(active.nodes));
+      }
+    });
+
+    // Rapidly trigger three deletions back-to-back without awaiting.
+    const delA = useBranchMindStore.getState().deleteNode(nodeA);
+    const delB = useBranchMindStore.getState().deleteNode(nodeB);
+    const delC = useBranchMindStore.getState().deleteNode(nodeC);
+
+    // Optimistic UI: all three nodes disappear immediately before any network response.
+    const optimisticNodes = useBranchMindStore.getState().projects[0].nodes;
+    expect(optimisticNodes[nodeA]).toBeUndefined();
+    expect(optimisticNodes[nodeB]).toBeUndefined();
+    expect(optimisticNodes[nodeC]).toBeUndefined();
+    expect(useBranchMindStore.getState().creatingNodeId).toBe(nodeC);
+
+    // Per-project serialization: only the first DELETE has been issued while delayed.
+    await waitForPendingResponseCount(deleteCalls, 1);
+    expect(deleteCalls.map((call) => call.nodeId)).toEqual([nodeA]);
+
+    // Deliberately delay the first DELETE response; its server snapshot still contains B and C!
+    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    expect(deleteCalls).toHaveLength(1);
+    const afterA = serverDeleteSubtree(serverProject, nodeA, "2026-01-01T00:00:01.000Z");
+    serverProject = afterA.project;
+    expect(serverProject.nodes[nodeB]).toBeDefined();
+    expect(serverProject.nodes[nodeC]).toBeDefined();
+    deleteCalls[0].resolve(Response.json(afterA));
+
+    await delA;
+    await waitForPendingResponseCount(deleteCalls, 2);
+    expect(deleteCalls.map((call) => call.nodeId)).toEqual([nodeA, nodeB]);
+    expect(useBranchMindStore.getState().creatingNodeId).not.toBeNull();
+    expect(useBranchMindStore.getState().projects[0].nodes[nodeB]).toBeUndefined();
+    expect(useBranchMindStore.getState().projects[0].nodes[nodeC]).toBeUndefined();
+
+    const afterB = serverDeleteSubtree(serverProject, nodeB, "2026-01-01T00:00:02.000Z");
+    serverProject = afterB.project;
+    deleteCalls[1].resolve(Response.json(afterB));
+
+    await delB;
+    await waitForPendingResponseCount(deleteCalls, 3);
+    expect(deleteCalls.map((call) => call.nodeId)).toEqual([nodeA, nodeB, nodeC]);
+    expect(useBranchMindStore.getState().creatingNodeId).not.toBeNull();
+    expect(useBranchMindStore.getState().projects[0].nodes[nodeC]).toBeUndefined();
+
+    const afterC = serverDeleteSubtree(serverProject, nodeC, "2026-01-01T00:00:03.000Z");
+    serverProject = afterC.project;
+    deleteCalls[2].resolve(Response.json(afterC));
+
+    await delC;
+    unsubscribe();
+
+    const finalProject = useBranchMindStore.getState().projects[0];
+    expect(useBranchMindStore.getState().creatingNodeId).toBeNull();
+    expect(useBranchMindStore.getState().aiError).toBeNull();
+    expect(finalProject.nodes[nodeA]).toBeUndefined();
+    expect(finalProject.nodes[nodeB]).toBeUndefined();
+    expect(finalProject.nodes[nodeC]).toBeUndefined();
+    expect(finalProject.nodes[`${initialProject.id}_keep`]).toBeDefined();
+
+    // After the 3rd optimistic deletion (snapshot index >= 2), none of A, B, C ever reappeared.
+    for (const snapshot of observedNodeIdSets.slice(2)) {
+      expect(snapshot).not.toContain(nodeA);
+      expect(snapshot).not.toContain(nodeB);
+      expect(snapshot).not.toContain(nodeC);
+    }
+  });
+
+  it("operates independently across different projects and handles out-of-order concurrent responses", async () => {
+    const alphaInitial = makeDeletionTreeProject("alpha");
+    const betaInitial = makeDeletionTreeProject("beta");
+    let serverAlpha = alphaInitial;
+    let serverBeta = betaInitial;
+    const inFlight: Record<string, (response: Response) => void> = {};
+
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === "/api/projects" && !init?.method) {
+        return Promise.resolve(Response.json({ projects: [serverAlpha, serverBeta] }));
+      }
+      if (init?.method === "DELETE") {
+        return new Promise<Response>((resolve) => {
+          inFlight[url] = resolve;
+        });
+      }
+      return Promise.reject(new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+
+    // Start two sequential deletes on project alpha.
+    useBranchMindStore.getState().selectProject("alpha");
+    const delAlphaA = useBranchMindStore.getState().deleteNode("alpha_a");
+    const delAlphaB = useBranchMindStore.getState().deleteNode("alpha_b");
+
+    // Switch to project beta and start a delete concurrently while alpha_a is still pending.
+    useBranchMindStore.getState().selectProject("beta");
+    const delBetaA = useBranchMindStore.getState().deleteNode("beta_a");
+
+    expect(Object.keys(inFlight)).toEqual([
+      "/api/projects/alpha/nodes/alpha_a",
+      "/api/projects/beta/nodes/beta_a",
+    ]);
+
+    // Return beta's response BEFORE alpha's first response (out-of-order across concurrent queues).
+    const afterBetaA = serverDeleteSubtree(serverBeta, "beta_a", "2026-01-01T00:00:01.000Z");
+    serverBeta = afterBetaA.project;
+    inFlight["/api/projects/beta/nodes/beta_a"](Response.json(afterBetaA));
+    await delBetaA;
+
+    const midState = useBranchMindStore.getState();
+    expect(midState.activeProjectId).toBe("beta");
+    expect(midState.projects.find((p) => p.id === "beta")?.nodes.beta_a).toBeUndefined();
+    expect(midState.projects.find((p) => p.id === "alpha")?.nodes.alpha_a).toBeUndefined();
+    expect(midState.projects.find((p) => p.id === "alpha")?.nodes.alpha_b).toBeUndefined();
+    expect(midState.creatingNodeId).not.toBeNull();
+
+    // Now resolve alpha_a -> triggers alpha_b -> resolve alpha_b.
+    const afterAlphaA = serverDeleteSubtree(
+      serverAlpha,
+      "alpha_a",
+      "2026-01-01T00:00:02.000Z",
+    );
+    serverAlpha = afterAlphaA.project;
+    inFlight["/api/projects/alpha/nodes/alpha_a"](Response.json(afterAlphaA));
+    await delAlphaA;
+
+    await vi.waitFor(() => {
+      expect(inFlight["/api/projects/alpha/nodes/alpha_b"]).toBeDefined();
+    });
+    const afterAlphaB = serverDeleteSubtree(
+      serverAlpha,
+      "alpha_b",
+      "2026-01-01T00:00:03.000Z",
+    );
+    serverAlpha = afterAlphaB.project;
+    inFlight["/api/projects/alpha/nodes/alpha_b"](Response.json(afterAlphaB));
+    await delAlphaB;
+
+    const finalState = useBranchMindStore.getState();
+    expect(finalState.creatingNodeId).toBeNull();
+    expect(finalState.activeProjectId).toBe("beta");
+    expect(finalState.projects.find((p) => p.id === "alpha")?.nodes.alpha_a).toBeUndefined();
+    expect(finalState.projects.find((p) => p.id === "alpha")?.nodes.alpha_b).toBeUndefined();
+    expect(finalState.projects.find((p) => p.id === "beta")?.nodes.beta_a).toBeUndefined();
+  });
+
+  it("recovers from a failed deletion by retrieving authoritative state and replaying pending deletions while subsequent deletions succeed", async () => {
+    const initialProject = makeDeletionTreeProject();
+    let serverProject = initialProject;
+    const deleteCalls: Array<{
+      nodeId: string;
+      resolve: (response: Response) => void;
+    }> = [];
+
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === "/api/projects" && !init?.method) {
+        return Promise.resolve(Response.json({ projects: [serverProject] }));
+      }
+      const prefix = `/api/projects/${initialProject.id}/nodes/`;
+      if (url.startsWith(prefix) && init?.method === "DELETE") {
+        const nodeId = url.slice(prefix.length);
+        return new Promise<Response>((resolve) => {
+          deleteCalls.push({ nodeId, resolve });
+        });
+      }
+      return Promise.reject(new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+    useBranchMindStore.getState().selectProject(initialProject.id);
+
+    const nodeA = `${initialProject.id}_a`;
+    const nodeB = `${initialProject.id}_b`;
+    const nodeC = `${initialProject.id}_c`;
+
+    const observedNodeIdSets: string[][] = [];
+    const unsubscribe = useBranchMindStore.subscribe((state) => {
+      const active = state.projects.find((item) => item.id === initialProject.id);
+      if (active) {
+        observedNodeIdSets.push(Object.keys(active.nodes));
+      }
+    });
+
+    // Queue A (succeeds), B (fails), C (succeeds).
+    const delA = useBranchMindStore.getState().deleteNode(nodeA);
+    const delB = useBranchMindStore.getState().deleteNode(nodeB);
+    const delC = useBranchMindStore.getState().deleteNode(nodeC);
+
+    await waitForPendingResponseCount(deleteCalls, 1);
+    const afterA = serverDeleteSubtree(serverProject, nodeA, "2026-01-01T00:00:01.000Z");
+    serverProject = afterA.project;
+    deleteCalls[0].resolve(Response.json(afterA));
+    await delA;
+
+    // Fail B with a 500 error while C is still pending in the queue.
+    await waitForPendingResponseCount(deleteCalls, 2);
+    deleteCalls[1].resolve(
+      Response.json(
+        { error: { code: "INTERNAL_ERROR", message: "Failed to delete Node B" } },
+        { status: 500 },
+      ),
+    );
+    await delB;
+
+    // Immediately after B fails (before C resolves):
+    // - A must NOT come back
+    // - B MUST be restored from authoritative state
+    // - C MUST remain optimistically deleted (pending replay)
+    const stateAfterBFailure = useBranchMindStore.getState();
+    const projectAfterBFailure = stateAfterBFailure.projects[0];
+    expect(projectAfterBFailure.nodes[nodeA]).toBeUndefined();
+    expect(projectAfterBFailure.nodes[nodeB]).toBeDefined();
+    expect(projectAfterBFailure.nodes[initialProject.rootNodeId].children).toContain(nodeB);
+    expect(projectAfterBFailure.nodes[nodeC]).toBeUndefined();
+    expect(projectAfterBFailure.nodes[initialProject.rootNodeId].children).not.toContain(
+      nodeC,
+    );
+    expect(stateAfterBFailure.aiError).toBe("Failed to delete Node B");
+
+    // Subsequent deletion C executes and succeeds.
+    await waitForPendingResponseCount(deleteCalls, 3);
+    const afterC = serverDeleteSubtree(serverProject, nodeC, "2026-01-01T00:00:02.000Z");
+    serverProject = afterC.project;
+    deleteCalls[2].resolve(Response.json(afterC));
+    await delC;
+    unsubscribe();
+
+    const finalState = useBranchMindStore.getState();
+    const finalProject = finalState.projects[0];
+    expect(finalState.creatingNodeId).toBeNull();
+    expect(finalState.aiError).toBe("Failed to delete Node B");
+    expect(finalProject.nodes[nodeA]).toBeUndefined();
+    expect(finalProject.nodes[nodeB]).toBeDefined();
+    expect(finalProject.nodes[nodeC]).toBeUndefined();
+
+    // Neither A nor C ever reappeared in any intermediate state after initial optimistic removal.
+    for (const snapshot of observedNodeIdSets.slice(2)) {
+      expect(snapshot).not.toContain(nodeA);
+      expect(snapshot).not.toContain(nodeC);
+    }
+  });
+
+  it("handles overlapping parent and descendant deletions and already-deleted server nodes safely", async () => {
+    const initialProject = makeDeletionTreeProject();
+    let serverProject = initialProject;
+    const deleteCalls: Array<{
+      nodeId: string;
+      resolve: (response: Response) => void;
+    }> = [];
+
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === "/api/projects" && !init?.method) {
+        return Promise.resolve(Response.json({ projects: [serverProject] }));
+      }
+      const prefix = `/api/projects/${initialProject.id}/nodes/`;
+      if (url.startsWith(prefix) && init?.method === "DELETE") {
+        const nodeId = url.slice(prefix.length);
+        return new Promise<Response>((resolve) => {
+          deleteCalls.push({ nodeId, resolve });
+        });
+      }
+      return Promise.reject(new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+    useBranchMindStore.getState().selectProject(initialProject.id);
+
+    const parentId = `${initialProject.id}_parent`;
+    const childId = `${initialProject.id}_child`;
+    const grandchildId = `${initialProject.id}_grandchild`;
+    const alreadyGoneId = `${initialProject.id}_a`;
+
+    const observedNodeIdSets: string[][] = [];
+    const unsubscribe = useBranchMindStore.subscribe((state) => {
+      const active = state.projects.find((item) => item.id === initialProject.id);
+      if (active) {
+        observedNodeIdSets.push(Object.keys(active.nodes));
+      }
+    });
+
+    // Case 1: Delete parent first, then immediately delete its descendant while parent DELETE is in flight.
+    const delParent = useBranchMindStore.getState().deleteNode(parentId);
+    const delChild = useBranchMindStore.getState().deleteNode(childId);
+
+    await waitForPendingResponseCount(deleteCalls, 1);
+    expect(deleteCalls[0].nodeId).toBe(parentId);
+
+    const afterParent = serverDeleteSubtree(
+      serverProject,
+      parentId,
+      "2026-01-01T00:00:01.000Z",
+    );
+    serverProject = afterParent.project;
+    deleteCalls[0].resolve(Response.json(afterParent));
+
+    await Promise.all([delParent, delChild]);
+    // Descendant was already cascade-deleted on the server, so no redundant DELETE child request is sent.
+    expect(deleteCalls).toHaveLength(1);
+    expect(useBranchMindStore.getState().aiError).toBeNull();
+    expect(useBranchMindStore.getState().projects[0].nodes[parentId]).toBeUndefined();
+    expect(useBranchMindStore.getState().projects[0].nodes[childId]).toBeUndefined();
+    expect(useBranchMindStore.getState().projects[0].nodes[grandchildId]).toBeUndefined();
+
+    // Case 2: Node was already deleted on the server out-of-band (server returns 400 NODE_CANNOT_BE_DELETED,
+    // and authoritative GET /api/projects confirms it is already gone).
+    serverProject = serverDeleteSubtree(
+      serverProject,
+      alreadyGoneId,
+      "2026-01-01T00:00:02.000Z",
+    ).project;
+
+    const delAlreadyGone = useBranchMindStore.getState().deleteNode(alreadyGoneId);
+    await waitForPendingResponseCount(deleteCalls, 2);
+    deleteCalls[1].resolve(
+      Response.json(
+        { error: { code: "NODE_CANNOT_BE_DELETED", message: "Node cannot be deleted." } },
+        { status: 400 },
+      ),
+    );
+    await delAlreadyGone;
+    unsubscribe();
+
+    const finalState = useBranchMindStore.getState();
+    expect(finalState.aiError).toBeNull();
+    expect(finalState.creatingNodeId).toBeNull();
+    expect(finalState.projects[0].nodes[alreadyGoneId]).toBeUndefined();
+
+    for (const snapshot of observedNodeIdSets) {
+      expect(snapshot).not.toContain(parentId);
+      expect(snapshot).not.toContain(childId);
+      expect(snapshot).not.toContain(grandchildId);
+    }
+  });
+
+  it("handles deleting a descendant followed by its parent even when the descendant request fails", async () => {
+    const initialProject = makeDeletionTreeProject();
+    let serverProject = initialProject;
+    const deleteCalls: Array<{
+      nodeId: string;
+      resolve: (response: Response) => void;
+    }> = [];
+
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === "/api/projects" && !init?.method) {
+        return Promise.resolve(Response.json({ projects: [serverProject] }));
+      }
+      const prefix = `/api/projects/${initialProject.id}/nodes/`;
+      if (url.startsWith(prefix) && init?.method === "DELETE") {
+        const nodeId = url.slice(prefix.length);
+        return new Promise<Response>((resolve) => {
+          deleteCalls.push({ nodeId, resolve });
+        });
+      }
+      return Promise.reject(new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+    useBranchMindStore.getState().selectProject(initialProject.id);
+
+    const parentId = `${initialProject.id}_parent`;
+    const childId = `${initialProject.id}_child`;
+
+    const observedNodeIdSets: string[][] = [];
+    const unsubscribe = useBranchMindStore.subscribe((state) => {
+      const active = state.projects.find((item) => item.id === initialProject.id);
+      if (active) {
+        observedNodeIdSets.push(Object.keys(active.nodes));
+      }
+    });
+
+    const delChild = useBranchMindStore.getState().deleteNode(childId);
+    const delParent = useBranchMindStore.getState().deleteNode(parentId);
+
+    await waitForPendingResponseCount(deleteCalls, 1);
+    expect(deleteCalls[0].nodeId).toBe(childId);
+
+    // Child deletion fails, while parent deletion is still pending.
+    deleteCalls[0].resolve(
+      Response.json(
+        { error: { code: "INTERNAL_ERROR", message: "Transient failure" } },
+        { status: 500 },
+      ),
+    );
+    await delChild;
+
+    // Replaying pending parent deletion keeps both parent and child absent without flicker.
+    expect(useBranchMindStore.getState().projects[0].nodes[parentId]).toBeUndefined();
+    expect(useBranchMindStore.getState().projects[0].nodes[childId]).toBeUndefined();
+
+    await waitForPendingResponseCount(deleteCalls, 2);
+    expect(deleteCalls[1].nodeId).toBe(parentId);
+    const afterParent = serverDeleteSubtree(
+      serverProject,
+      parentId,
+      "2026-01-01T00:00:01.000Z",
+    );
+    serverProject = afterParent.project;
+    deleteCalls[1].resolve(Response.json(afterParent));
+    await delParent;
+    unsubscribe();
+
+    expect(useBranchMindStore.getState().projects[0].nodes[parentId]).toBeUndefined();
+    expect(useBranchMindStore.getState().projects[0].nodes[childId]).toBeUndefined();
+    for (const snapshot of observedNodeIdSets.slice(1)) {
+      expect(snapshot).not.toContain(parentId);
+      expect(snapshot).not.toContain(childId);
+    }
+  });
+
+  it("preserves unrelated node and project modifications across successful and failed deletions", async () => {
+    const initialProject = makeDeletionTreeProject();
+    let serverProject = initialProject;
+    const deleteCalls: Array<{
+      nodeId: string;
+      resolve: (response: Response) => void;
+    }> = [];
+    const deferredPatches: Array<() => void> = [];
+
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === "/api/projects" && !init?.method) {
+        return Promise.resolve(Response.json({ projects: [serverProject] }));
+      }
+      const prefix = `/api/projects/${initialProject.id}/nodes/`;
+      if (url.startsWith(prefix) && init?.method === "DELETE") {
+        const nodeId = url.slice(prefix.length);
+        return new Promise<Response>((resolve) => {
+          deleteCalls.push({ nodeId, resolve });
+        });
+      }
+      if (init?.method === "PATCH") {
+        return new Promise<Response>((resolve) => {
+          deferredPatches.push(() => resolve(Response.json({ project: serverProject })));
+        });
+      }
+      return Promise.reject(new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+    useBranchMindStore.getState().selectProject(initialProject.id);
+
+    const nodeA = `${initialProject.id}_a`;
+    const nodeB = `${initialProject.id}_b`;
+    const keepId = `${initialProject.id}_keep`;
+
+    // Start an optimistic title edit on an unrelated node before its PATCH settles.
+    void useBranchMindStore.getState().updateNodeTitle(keepId, "Renamed Keep Node");
+
+    // Rapidly delete nodeA (will succeed) and nodeB (will fail).
+    const delA = useBranchMindStore.getState().deleteNode(nodeA);
+    const delB = useBranchMindStore.getState().deleteNode(nodeB);
+
+    // Perform unrelated modifications while deletions are in flight.
+    useBranchMindStore.getState().selectNode(keepId);
+    await useBranchMindStore.getState().updateNodePosition(keepId, { x: 777, y: 888 });
+    void useBranchMindStore.getState().toggleNodeCollapsed(keepId);
+    void useBranchMindStore.getState().updateProjectNotes(initialProject.id, "Unrelated notes");
+
+    // Server returns a snapshot for DELETE A that still has the old untouched Keep node and empty notes.
+    await waitForPendingResponseCount(deleteCalls, 1);
+    const afterA = serverDeleteSubtree(serverProject, nodeA, "2026-01-01T00:00:01.000Z");
+    serverProject = afterA.project;
+    deleteCalls[0].resolve(Response.json(afterA));
+    await delA;
+
+    const midProject = useBranchMindStore.getState().projects[0];
+    expect(midProject.notes).toBe("Unrelated notes");
+    expect(midProject.nodes[keepId].title).toBe("Renamed Keep Node");
+    expect(midProject.nodes[keepId].position).toEqual({ x: 777, y: 888 });
+    expect(midProject.nodes[keepId].collapsed).toBe(true);
+    expect(useBranchMindStore.getState().selectedNodeId).toBe(keepId);
+
+    // Now fail DELETE B; authoritative GET /api/projects also still has the old Keep fields on server.
+    await waitForPendingResponseCount(deleteCalls, 2);
+    deleteCalls[1].resolve(
+      Response.json(
+        { error: { code: "INTERNAL_ERROR", message: "Delete B failed" } },
+        { status: 500 },
+      ),
+    );
+    await delB;
+
+    const finalState = useBranchMindStore.getState();
+    const finalProject = finalState.projects[0];
+    expect(finalState.selectedNodeId).toBe(keepId);
+    expect(finalState.creatingNodeId).toBeNull();
+    expect(finalProject.nodes[nodeA]).toBeUndefined();
+    expect(finalProject.nodes[nodeB]).toBeDefined();
+    expect(finalProject.notes).toBe("Unrelated notes");
+    expect(finalProject.nodes[keepId].title).toBe("Renamed Keep Node");
+    expect(finalProject.nodes[keepId].titleManuallyEdited).toBe(true);
+    expect(finalProject.nodes[keepId].position).toEqual({ x: 777, y: 888 });
+    expect(finalProject.nodes[keepId].collapsed).toBe(true);
+  });
+
+  it("falls back to lastConfirmedProject and replays pending deletions when both the first DELETE and authoritative GET fail", async () => {
+    const initialProject = makeDeletionTreeProject();
+    let serverProject = initialProject;
+    let offline = false;
+    const deleteCalls: Array<{
+      nodeId: string;
+      resolve: (response: Response) => void;
+      reject: (error: Error) => void;
+    }> = [];
+
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === "/api/projects" && !init?.method) {
+        if (offline) {
+          return Promise.reject(new Error("Network offline"));
+        }
+        return Promise.resolve(Response.json({ projects: [serverProject] }));
+      }
+      const prefix = `/api/projects/${initialProject.id}/nodes/`;
+      if (url.startsWith(prefix) && init?.method === "DELETE") {
+        const nodeId = url.slice(prefix.length);
+        return new Promise<Response>((resolve, reject) => {
+          deleteCalls.push({ nodeId, resolve, reject });
+        });
+      }
+      return Promise.reject(new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useBranchMindStore } = await import("@/store/useBranchMindStore");
+    await useBranchMindStore.getState().hydrate({ force: true });
+    useBranchMindStore.getState().selectProject(initialProject.id);
+
+    const nodeA = `${initialProject.id}_a`;
+    const nodeB = `${initialProject.id}_b`;
+    const nodeC = `${initialProject.id}_c`;
+
+    const observedNodeIdSets: string[][] = [];
+    const unsubscribe = useBranchMindStore.subscribe((state) => {
+      const active = state.projects.find((item) => item.id === initialProject.id);
+      if (active) {
+        observedNodeIdSets.push(Object.keys(active.nodes));
+      }
+    });
+
+    const delA = useBranchMindStore.getState().deleteNode(nodeA);
+    const delB = useBranchMindStore.getState().deleteNode(nodeB);
+    const delC = useBranchMindStore.getState().deleteNode(nodeC);
+
+    await waitForPendingResponseCount(deleteCalls, 1);
+    offline = true;
+    deleteCalls[0].reject(new Error("Network disconnected"));
+    await delA;
+
+    // A is restored via lastConfirmedProject fallback, while B and C remain deleted via pending replay.
+    expect(useBranchMindStore.getState().projects[0].nodes[nodeA]).toBeDefined();
+    expect(useBranchMindStore.getState().projects[0].nodes[nodeB]).toBeUndefined();
+    expect(useBranchMindStore.getState().projects[0].nodes[nodeC]).toBeUndefined();
+    expect(useBranchMindStore.getState().aiError).toBe("Network disconnected");
+
+    // Connectivity recovers; subsequent deletions B and C succeed.
+    offline = false;
+    await waitForPendingResponseCount(deleteCalls, 2);
+    const afterB = serverDeleteSubtree(serverProject, nodeB, "2026-01-01T00:00:01.000Z");
+    serverProject = afterB.project;
+    deleteCalls[1].resolve(Response.json(afterB));
+    await delB;
+
+    await waitForPendingResponseCount(deleteCalls, 3);
+    const afterC = serverDeleteSubtree(serverProject, nodeC, "2026-01-01T00:00:02.000Z");
+    serverProject = afterC.project;
+    deleteCalls[2].resolve(Response.json(afterC));
+    await delC;
+    unsubscribe();
+
+    const finalProject = useBranchMindStore.getState().projects[0];
+    expect(useBranchMindStore.getState().creatingNodeId).toBeNull();
+    expect(finalProject.nodes[nodeA]).toBeDefined();
+    expect(finalProject.nodes[nodeB]).toBeUndefined();
+    expect(finalProject.nodes[nodeC]).toBeUndefined();
+
+    for (const snapshot of observedNodeIdSets.slice(2)) {
+      expect(snapshot).not.toContain(nodeB);
+      expect(snapshot).not.toContain(nodeC);
+    }
+  });
 });
 
 describe("useBranchMindStore node title updates", () => {

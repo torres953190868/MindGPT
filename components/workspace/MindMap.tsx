@@ -12,25 +12,35 @@ import {
 } from "react";
 import { EyeOff } from "lucide-react";
 import {
-  BaseEdge,
   Controls,
   ReactFlow,
   applyNodeChanges,
-  getBezierPath,
   getViewportForBounds,
-  type Edge,
-  type EdgeProps,
   type EdgeTypes,
   type Node,
   type NodeChange,
+  type OnMoveStart,
   type OnNodeDrag,
   type ReactFlowInstance,
   type NodeTypes,
   type Viewport,
 } from "@xyflow/react";
 import { getVisibleNodeIds } from "@/lib/graph";
-import { HOME_DEMO_IDLE_REPLAY_MS } from "@/lib/home-onboarding-demo";
+import {
+  HOME_DEMO_CAMERA_STEP,
+  HOME_DEMO_COMPACT_LAYOUT,
+  HOME_DEMO_COMPACT_MEDIA_QUERY,
+  HOME_DEMO_IDLE_REPLAY_MS,
+  HOME_DEMO_REGULAR_LAYOUT,
+  getStemProgress,
+  mix,
+  stepCamera,
+  type HomeDemoCameraState,
+  type HomeDemoKind,
+} from "@/lib/home-onboarding-demo";
+import { NODE_GROWTH_DURATION_MS, getGrowthCameraTarget } from "@/lib/node-growth";
 import type { NodePosition, Project } from "@/lib/types";
+import { BranchEdge, type BranchEdgeType } from "./BranchEdge";
 import {
   BranchNodeCard,
   type BranchNodeData,
@@ -54,50 +64,8 @@ const MOBILE_NODE_LONG_PRESS_CANCEL_DISTANCE = 8;
 const MOBILE_NODE_DRAG_LOCKED_THRESHOLD = 100_000;
 const MOBILE_NODE_DRAG_ACTIVE_THRESHOLD = 1;
 const MOBILE_MOUSE_LONG_PRESS_POINTER_ID = -1;
-const NODE_ENTRANCE_EDGE_DURATION_MS = 280;
-const NODE_ENTRANCE_NODE_DURATION_MS = 220;
-const NODE_ENTRANCE_CAMERA_DURATION_MS = 450;
 const NODE_FOCUS_FALLBACK_WIDTH = 292;
 const NODE_FOCUS_FALLBACK_HEIGHT = 220;
-
-type MindMapEdgeData = {
-  isEntering?: boolean;
-};
-
-type MindMapEdge = Edge<MindMapEdgeData>;
-
-function BranchEdge({
-  id,
-  sourceX,
-  sourceY,
-  sourcePosition,
-  targetX,
-  targetY,
-  targetPosition,
-  data,
-  markerEnd,
-  style,
-}: EdgeProps<MindMapEdge>) {
-  const [edgePath] = getBezierPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-  });
-
-  return (
-    <BaseEdge
-      id={id}
-      path={edgePath}
-      pathLength={data?.isEntering ? 1 : undefined}
-      markerEnd={markerEnd}
-      style={style}
-      className={data?.isEntering ? "branchmind-entering-edge" : undefined}
-    />
-  );
-}
 
 const nodeTypes: NodeTypes = {
   branchNode: BranchNodeCard,
@@ -122,6 +90,8 @@ type MindMapProps = {
   inlineNodeComposer?: InlineNodeComposerData;
   onHomeCanvasPanOffsetChange?: (offsetY: number) => void;
   homeCanvasLeftInset?: number;
+  /** Width of a desktop sidebar floating over the left of the canvas. */
+  canvasLeftInset?: number;
 };
 
 type HomeCanvasGesture = {
@@ -160,6 +130,7 @@ export function MindMap({
   inlineNodeComposer,
   onHomeCanvasPanOffsetChange,
   homeCanvasLeftInset = 0,
+  canvasLeftInset = 0,
 }: MindMapProps) {
   const flowContainerRef = useRef<HTMLDivElement | null>(null);
   const homeCanvasPanOffsetYRef = useRef(0);
@@ -181,11 +152,16 @@ export function MindMap({
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [mobileLongPressDragNodeId, setMobileLongPressDragNodeId] =
     useState<string | null>(null);
-  const [enteringNodeIds, setEnteringNodeIds] = useState<Set<string>>(
-    () => new Set(),
+  const [enteringNodeIds, setEnteringNodeIds] = useState<Map<string, number>>(
+    () => new Map(),
   );
+  const growthCameraFrameRef = useRef(0);
+  const canvasLeftInsetRef = useRef(canvasLeftInset);
+  useLayoutEffect(() => {
+    canvasLeftInsetRef.current = canvasLeftInset;
+  }, [canvasLeftInset]);
   const [reactFlowInstance, setReactFlowInstance] =
-    useState<ReactFlowInstance<Node<BranchNodeData>, Edge> | null>(null);
+    useState<ReactFlowInstance<Node<BranchNodeData>, BranchEdgeType> | null>(null);
   const draggingNodeIdRef = useRef<string | null>(null);
   const isHomeInlineComposer = inlineNodeComposer?.variant === "home";
   const homeComposerNodeId = isHomeInlineComposer ? inlineNodeComposer?.nodeId : null;
@@ -324,14 +300,14 @@ export function MindMap({
   ]);
   const [nodes, setNodes] = useState(graphNodes);
 
-  const graphEdges = useMemo<MindMapEdge[]>(() => {
+  const graphEdges = useMemo<BranchEdgeType[]>(() => {
     return Object.values(project.nodes).flatMap((node) =>
       node.children
         .filter((childId) => visibleNodeIds.has(node.id) && visibleNodeIds.has(childId))
-        .map((childId) => {
+        .map((childId): BranchEdgeType => {
           const child = project.nodes[childId];
           const isBranchChild = child?.branchType === "branch";
-          const isEntering = enteringNodeIds.has(childId);
+          const kind: HomeDemoKind = isBranchChild ? "branch" : "continue";
           const isHighlighted = selectedNodeId === node.id || selectedNodeId === childId;
           return {
             id: `${node.id}-${childId}`,
@@ -341,16 +317,17 @@ export function MindMap({
             sourceHandle: isBranchChild ? "branch-source" : "continue-source",
             targetHandle: isBranchChild ? "branch-target" : "continue-target",
             animated: isHighlighted,
-            data: { isEntering },
+            data: {
+              kind,
+              growthStartedAt: enteringNodeIds.get(childId),
+            },
             style: {
               stroke: isBranchChild
                 ? "var(--node-handle-branch)"
                 : "var(--node-handle-continue)",
-              // 主线（继续）用实线，分支用虚线，不只靠颜色区分。
-              // 主线选中时没有流动虚线，改为加粗一点作为提示。
-              strokeWidth: isHighlighted && !isBranchChild ? 2.5 : 2,
-              strokeDasharray: isEntering ? 1 : isBranchChild ? "6 5" : "none",
-              ...(isEntering ? { strokeDashoffset: 1 } : {}),
+              // 继续与分支用同一种虚线茎；方向（向下 / 向右）和颜色区分两者。
+              strokeWidth: 2,
+              strokeDasharray: "6 5",
             },
           };
         }),
@@ -582,15 +559,107 @@ export function MindMap({
     });
   }, [graphNodes]);
 
+  const stopGrowthCamera = useCallback(() => {
+    window.cancelAnimationFrame(growthCameraFrameRef.current);
+    growthCameraFrameRef.current = 0;
+  }, []);
+
+  // Same camera as the home demo: the target follows the growing stem tip and a critically
+  // damped spring chases it, then rests with the new node framed.
+  const startGrowthCamera = useCallback(
+    (nodeId: string, kind: HomeDemoKind, startedAt: number) => {
+      if (!reactFlowInstance) return;
+      stopGrowthCamera();
+
+      const from = reactFlowInstance.getViewport();
+      const layout = window.matchMedia(HOME_DEMO_COMPACT_MEDIA_QUERY).matches
+        ? HOME_DEMO_COMPACT_LAYOUT
+        : HOME_DEMO_REGULAR_LAYOUT;
+      let state: HomeDemoCameraState = { x: from.x, y: from.y, vx: 0, vy: 0 };
+      let lastNow = startedAt;
+
+      const tick = (now: number) => {
+        const container = flowContainerRef.current;
+        const node = reactFlowInstance.getInternalNode(nodeId);
+        if (!container || !node) {
+          growthCameraFrameRef.current = 0;
+          return;
+        }
+
+        const target = getGrowthCameraTarget(
+          from,
+          {
+            x: node.internals.positionAbsolute.x,
+            y: node.internals.positionAbsolute.y,
+            width: node.measured.width ?? NODE_FOCUS_FALLBACK_WIDTH,
+            height: node.measured.height ?? NODE_FOCUS_FALLBACK_HEIGHT,
+          },
+          kind,
+          {
+            width: container.clientWidth,
+            height: container.clientHeight,
+            leftInset: window.matchMedia("(min-width: 1024px)").matches
+              ? canvasLeftInsetRef.current
+              : 0,
+          },
+          layout,
+        );
+        const progress = getStemProgress(Math.max(0, (now - startedAt) / 1000));
+        const goal = {
+          x: mix(from.x, target.x, progress),
+          y: mix(from.y, target.y, progress),
+          zoom: from.zoom,
+        };
+        const dt = Math.min(0.1, Math.max(0, (now - lastNow) / 1000));
+        lastNow = now;
+        for (let s = 0; s < dt; s += HOME_DEMO_CAMERA_STEP) {
+          state = stepCamera(state, goal, Math.min(HOME_DEMO_CAMERA_STEP, dt - s));
+        }
+
+        const settled =
+          progress >= 1 &&
+          Math.abs(state.x - target.x) < 0.5 &&
+          Math.abs(state.y - target.y) < 0.5 &&
+          Math.hypot(state.vx, state.vy) < 4;
+        if (settled) {
+          growthCameraFrameRef.current = 0;
+          void reactFlowInstance.setViewport(
+            { x: target.x, y: target.y, zoom: from.zoom },
+            { duration: 0 },
+          );
+          return;
+        }
+
+        void reactFlowInstance.setViewport(
+          { x: state.x, y: state.y, zoom: from.zoom },
+          { duration: 0 },
+        );
+        growthCameraFrameRef.current = window.requestAnimationFrame(tick);
+      };
+
+      growthCameraFrameRef.current = window.requestAnimationFrame(tick);
+    },
+    [reactFlowInstance, stopGrowthCamera],
+  );
+
+  // A user pan or zoom takes the camera back; programmatic moves have no event.
+  const handleMoveStart: OnMoveStart = useCallback(
+    (event) => {
+      if (event) stopGrowthCamera();
+    },
+    [stopGrowthCamera],
+  );
+
   useEffect(() => {
     const currentNodeIds = new Set(graphNodes.map((node) => node.id));
 
     if (previousProjectIdRef.current !== project.id) {
       nodeEntranceTimersRef.current.forEach((timer) => window.clearTimeout(timer));
       nodeEntranceTimersRef.current.clear();
+      stopGrowthCamera();
       previousProjectIdRef.current = project.id;
       previousNodeIdsRef.current = currentNodeIds;
-      setEnteringNodeIds(new Set());
+      setEnteringNodeIds(new Map());
       return;
     }
 
@@ -608,53 +677,48 @@ export function MindMap({
 
     previousNodeIdsRef.current = currentNodeIds;
 
-    const focusNewNode = (duration: number) => {
-      const renderedNode = reactFlowInstance.getNode(newChild.id);
-      const focusOffsetX =
-        (renderedNode?.measured?.width ?? NODE_FOCUS_FALLBACK_WIDTH) / 2;
-      const focusOffsetY =
-        (renderedNode?.measured?.height ?? NODE_FOCUS_FALLBACK_HEIGHT) / 2;
-
-      void reactFlowInstance.setCenter(
-        newChild.position.x + focusOffsetX,
-        newChild.position.y + focusOffsetY,
-        { zoom: reactFlowInstance.getZoom(), duration },
-      );
-    };
-
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      window.requestAnimationFrame(() => focusNewNode(0));
+      window.requestAnimationFrame(() => {
+        const renderedNode = reactFlowInstance.getNode(newChild.id);
+        void reactFlowInstance.setCenter(
+          newChild.position.x + (renderedNode?.measured?.width ?? NODE_FOCUS_FALLBACK_WIDTH) / 2,
+          newChild.position.y + (renderedNode?.measured?.height ?? NODE_FOCUS_FALLBACK_HEIGHT) / 2,
+          { zoom: reactFlowInstance.getZoom(), duration: 0 },
+        );
+      });
       return;
     }
 
-    setEnteringNodeIds((current) => new Set(current).add(newChild.id));
+    const startedAt = performance.now();
+    const kind: HomeDemoKind =
+      newChild.data.mindNode.branchType === "branch" ? "branch" : "continue";
+    setEnteringNodeIds((current) => new Map(current).set(newChild.id, startedAt));
+    startGrowthCamera(newChild.id, kind, startedAt);
 
-    const scheduleEntranceStep = (callback: () => void, delay: number) => {
-      const timer = window.setTimeout(() => {
-        nodeEntranceTimersRef.current.delete(timer);
-        callback();
-      }, delay);
-      nodeEntranceTimersRef.current.add(timer);
-    };
-
-    scheduleEntranceStep(
-      () => focusNewNode(NODE_ENTRANCE_CAMERA_DURATION_MS),
-      NODE_ENTRANCE_EDGE_DURATION_MS,
-    );
-    scheduleEntranceStep(() => {
+    const timer = window.setTimeout(() => {
+      nodeEntranceTimersRef.current.delete(timer);
       setEnteringNodeIds((current) => {
         if (!current.has(newChild.id)) return current;
-        const next = new Set(current);
+        const next = new Map(current);
         next.delete(newChild.id);
         return next;
       });
-    }, NODE_ENTRANCE_EDGE_DURATION_MS + NODE_ENTRANCE_NODE_DURATION_MS);
-  }, [creatingNodeId, graphNodes, project.id, reactFlowInstance]);
+    }, NODE_GROWTH_DURATION_MS);
+    nodeEntranceTimersRef.current.add(timer);
+  }, [
+    creatingNodeId,
+    graphNodes,
+    project.id,
+    reactFlowInstance,
+    startGrowthCamera,
+    stopGrowthCamera,
+  ]);
 
   useEffect(
     () => () => {
       nodeEntranceTimersRef.current.forEach((timer) => window.clearTimeout(timer));
       nodeEntranceTimersRef.current.clear();
+      window.cancelAnimationFrame(growthCameraFrameRef.current);
     },
     [],
   );
@@ -1285,6 +1349,7 @@ export function MindMap({
         onInit={setReactFlowInstance}
         onNodeClick={handleNodeClick}
         onViewportChange={handleViewportChange}
+        onMoveStart={handleMoveStart}
         onNodesChange={handleNodesChange}
         onNodeDragStart={handleNodeDragStart}
         onNodeDragStop={handleNodeDragStop}

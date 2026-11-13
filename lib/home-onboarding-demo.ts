@@ -89,10 +89,11 @@ export const HOME_DEMO_HERO_GAP = 24;
 export const HOME_DEMO_HERO_FADE_DISTANCE = 110;
 export const HOME_DEMO_FULL_RADIUS = 14;
 
-// Fallback colors (warm-limestone) when CSS variables cannot be parsed.
+// Fallback colors (warm-limestone) when CSS variables cannot be parsed. Continue and branch
+// share one color, like --node-handle-continue aliasing --node-handle-branch in every theme.
 export const HOME_DEMO_FALLBACK_COLORS = {
-  continue: [125, 107, 69] as HomeDemoRgb,
-  branch: [64, 57, 67] as HomeDemoRgb,
+  continue: [90, 77, 66] as HomeDemoRgb,
+  branch: [90, 77, 66] as HomeDemoRgb,
   surface: [248, 241, 231] as HomeDemoRgb,
 };
 
@@ -294,8 +295,11 @@ export function getCameraStops(
   return { home, first, second };
 }
 
-const stemEase = (loopTime: number, start: number) =>
-  easeInOutQuad(clamp01((loopTime - start) / HOME_DEMO_TIMELINE.stemDuration));
+/** Eased stem growth, 0 -> 1 over `stemDuration` seconds after growth starts. */
+export const getStemProgress = (localSeconds: number) =>
+  easeInOutQuad(clamp01(localSeconds / HOME_DEMO_TIMELINE.stemDuration));
+
+const stemEase = (loopTime: number, start: number) => getStemProgress(loopTime - start);
 
 const mixViewport = (from: HomeDemoViewport, to: HomeDemoViewport, amount: number): HomeDemoViewport => ({
   x: mix(from.x, to.x, amount),
@@ -450,33 +454,16 @@ export type HomeDemoGrowthFrame = {
   explanationOpacity: number;
 };
 
-export function getGrowthFrame(
-  kind: HomeDemoKind,
+// The two small leaflets on a stem, popping out as the stem grows past them. With
+// stemProgress = 1 this is the settled look that stays on canvas edges after growth.
+export function getStemLeaflets(
   stem: HomeDemoStem,
-  box: HomeDemoRect,
-  loopTime: number,
-  start: number,
-  question: string,
-  layout: HomeDemoLayout,
-): HomeDemoGrowthFrame | null {
-  if (loopTime < start) return null;
-  const local = loopTime - start;
-  const axis = kind === "continue" ? Math.PI / 2 : 0;
-  const stemProgress = stemEase(loopTime, start);
-  const leafScale = ramp(loopTime, start + 0.66, start + 1, 0.14, 1, easeOutCubic);
-  const morph = springProgress(local - 0.9);
-  const settled = clamp01(morph);
-  const sway =
-    (cubicAngle(stem, 1) - axis) * (1 - morph) + 0.05 * Math.sin(local * 9) * (1 - settled);
-  const tip = cubicPoint(stem, stemProgress);
-  const base = stem[3];
-  const showLeaf = local >= 0.66;
-  const leafLength = mix(layout.leaf.length * 0.14, layout.leaf.length, leafScale);
-  const leafBreadth = mix(layout.leaf.breadth * 0.14, layout.leaf.breadth, leafScale);
-  const cardLength = kind === "continue" ? box.height : box.width;
-  const cardBreadth = kind === "continue" ? box.width : box.height;
-  const leafletScale = layout.compact ? 0.85 : 1;
-  const leaflets = [0.4, 0.7].flatMap((at, index) => {
+  kind: HomeDemoKind,
+  stemProgress: number,
+  compact = false,
+): { path: string }[] {
+  const leafletScale = compact ? 0.85 : 1;
+  return [0.4, 0.7].flatMap((at, index) => {
     const scale = ramp(stemProgress, at, Math.min(1, at + 0.25), 0, 1, easeOutBack(1.6));
     if (scale <= 0) return [];
     const side = index === 0 ? -1 : 1;
@@ -492,21 +479,41 @@ export function getGrowthFrame(
       },
     ];
   });
+}
+
+export type HomeDemoGrowthShapes = Omit<HomeDemoGrowthFrame, "title" | "typing" | "explanationOpacity">;
+
+// Stem, leaflets, bud and the leaf that springs into the card, `local` seconds after growth
+// starts. `base` is where the leaf (and card) attaches; it defaults to the stem tip.
+export function getGrowthShapes(
+  kind: HomeDemoKind,
+  stem: HomeDemoStem,
+  box: HomeDemoRect,
+  local: number,
+  layout: HomeDemoLayout,
+  base: HomeDemoPoint = stem[3],
+): HomeDemoGrowthShapes {
+  const axis = kind === "continue" ? Math.PI / 2 : 0;
+  const stemProgress = getStemProgress(local);
+  const leafScale = ramp(local, 0.66, 1, 0.14, 1, easeOutCubic);
+  const morph = springProgress(local - 0.9);
+  const settled = clamp01(morph);
+  const sway =
+    (cubicAngle(stem, 1) - axis) * (1 - morph) + 0.05 * Math.sin(local * 9) * (1 - settled);
+  const tip = cubicPoint(stem, stemProgress);
+  const showLeaf = local >= 0.66;
+  const leafLength = mix(layout.leaf.length * 0.14, layout.leaf.length, leafScale);
+  const leafBreadth = mix(layout.leaf.breadth * 0.14, layout.leaf.breadth, leafScale);
+  const cardLength = kind === "continue" ? box.height : box.width;
+  const cardBreadth = kind === "continue" ? box.width : box.height;
   let midrib: { x1: number; y1: number; x2: number; y2: number } | null = null;
   if (showLeaf && settled < 0.98) {
     const [dx, dy] = rotate(leafLength * 0.9, 0, axis + sway);
     midrib = { x1: base.x, y1: base.y, x2: base.x + dx * (1 - settled), y2: base.y + dy * (1 - settled) };
   }
-  const titleStart = start + HOME_DEMO_TIMELINE.ghostTypeDelay;
-  const titlePerChar = getTypingPerChar(
-    question,
-    HOME_DEMO_TIMELINE.ghostTypePerChar,
-    HOME_DEMO_TIMELINE.ghostTypeMaxDuration,
-  );
-  const titleEnd = getTypingEnd(question, titleStart, titlePerChar);
   return {
     stemProgress,
-    leaflets,
+    leaflets: getStemLeaflets(stem, kind, stemProgress, layout.compact),
     budPath:
       !showLeaf && stemProgress > 0.03
         ? leafPath(tip, cubicAngle(stem, stemProgress), layout.leaf.length * 0.15, layout.leaf.breadth * 0.19)
@@ -518,8 +525,30 @@ export function getGrowthFrame(
           midrib,
         }
       : null,
-    cardOpacity: ramp(loopTime, start + 1.4, start + 1.7),
-    contentOpacity: ramp(loopTime, start + 1.3, start + 1.55),
+    cardOpacity: ramp(local, 1.4, 1.7),
+    contentOpacity: ramp(local, 1.3, 1.55),
+  };
+}
+
+export function getGrowthFrame(
+  kind: HomeDemoKind,
+  stem: HomeDemoStem,
+  box: HomeDemoRect,
+  loopTime: number,
+  start: number,
+  question: string,
+  layout: HomeDemoLayout,
+): HomeDemoGrowthFrame | null {
+  if (loopTime < start) return null;
+  const titleStart = start + HOME_DEMO_TIMELINE.ghostTypeDelay;
+  const titlePerChar = getTypingPerChar(
+    question,
+    HOME_DEMO_TIMELINE.ghostTypePerChar,
+    HOME_DEMO_TIMELINE.ghostTypeMaxDuration,
+  );
+  const titleEnd = getTypingEnd(question, titleStart, titlePerChar);
+  return {
+    ...getGrowthShapes(kind, stem, box, loopTime - start, layout),
     title: typedText(question, loopTime, titleStart, titlePerChar),
     typing: loopTime >= titleStart && loopTime < titleEnd + 0.4,
     explanationOpacity: ramp(loopTime, titleEnd + 0.05, titleEnd + 0.3),

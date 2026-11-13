@@ -33,14 +33,14 @@ export default defineConfig({
       args: ["--no-proxy-server"],
     },
     testIdAttribute: "data-testid",
-    // Skip immediate first-visit playback so unrelated tests start with the home composer.
-    // Idle replay stays enabled. e2e/home-onboarding-demo.spec.ts tests both entry paths.
+    // Skip immediate home demo playback so unrelated tests start with the home composer.
+    // Idle replay stays enabled. e2e/home-onboarding-demo.spec.ts tests the real entry path.
     storageState: {
       cookies: [],
       origins: [
         {
           origin: new URL(baseURL).origin,
-          localStorage: [{ name: "branchmind-home-demo-dismissed", value: "1" }],
+          localStorage: [{ name: "branchmind-e2e-skip-home-demo", value: "1" }],
         },
       ],
     },

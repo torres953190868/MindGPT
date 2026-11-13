@@ -1,5 +1,6 @@
 import { createBlankChildProject, removeNodeProject } from "@/lib/client/node-streaming";
 import { createPendingProjectSyncRecord } from "@/lib/client/pending-project-sync";
+import type { Project } from "@/lib/types";
 import {
   getActiveProject,
   getErrorMessage,
@@ -10,7 +11,10 @@ import {
   nodeCollapsedKey,
   positionsEqual,
   readJson,
+  reconcileConfirmedNodeDeletion,
+  reconcileFailedNodeDeletion,
   replaceProject,
+  stripConfirmedDeletedNodes,
   upsertProject,
 } from "./helpers";
 import {
@@ -27,15 +31,272 @@ import type {
   BranchMindCrudActions,
   BranchMindGet,
   BranchMindSet,
+  BranchMindState,
   CreateProjectResponse,
   ProjectsResponse,
   UpdateNodeResponse,
   UpdateProjectResponse,
 } from "./types";
 
+type QueuedNodeDeletion = {
+  nodeId: string;
+  previousSelectedNodeId: string | null;
+  autoSelectedNodeId: string | null;
+  resolve: () => void;
+  promise: Promise<void>;
+};
+
+type ProjectDeletionQueue = {
+  projectId: string;
+  lastConfirmedProject: Project;
+  confirmedDeletedNodeIds: Set<string>;
+  inFlight: QueuedNodeDeletion | null;
+  pending: QueuedNodeDeletion[];
+  processing: boolean;
+};
+
 const inFlightNodeCollapsedUpdates = new Map<string, Promise<void>>();
 const pendingNodeCollapsedVersions = new Map<string, number>();
 let nextNodeCollapsedVersion = 0;
+
+const projectDeletionQueues = new Map<string, ProjectDeletionQueue>();
+const activeDeletionLockNodeIds = new Set<string>();
+
+function getQueuedDeletionNodeId(projectId: string | null): string | null {
+  if (!projectId) return null;
+  const queue = projectDeletionQueues.get(projectId);
+  if (!queue) return null;
+  if (queue.pending.length > 0) {
+    return queue.pending[queue.pending.length - 1].nodeId;
+  }
+  return queue.inFlight?.nodeId ?? null;
+}
+
+function resolveNextDeletionCreatingNodeId(
+  current: Pick<
+    BranchMindState,
+    "activeProjectId" | "creatingNodeId" | "streamingNodeId"
+  >,
+): string | null {
+  if (current.streamingNodeId && current.creatingNodeId) {
+    return current.creatingNodeId;
+  }
+  if (
+    current.creatingNodeId !== null &&
+    !activeDeletionLockNodeIds.has(current.creatingNodeId)
+  ) {
+    return current.creatingNodeId;
+  }
+
+  const activeQueueNodeId = getQueuedDeletionNodeId(current.activeProjectId);
+  if (activeQueueNodeId) {
+    activeDeletionLockNodeIds.add(activeQueueNodeId);
+    return activeQueueNodeId;
+  }
+
+  for (const queue of projectDeletionQueues.values()) {
+    const candidate =
+      queue.pending.length > 0
+        ? queue.pending[queue.pending.length - 1].nodeId
+        : (queue.inFlight?.nodeId ?? null);
+    if (candidate) {
+      activeDeletionLockNodeIds.add(candidate);
+      return candidate;
+    }
+  }
+
+  activeDeletionLockNodeIds.clear();
+  return null;
+}
+
+async function retrieveAuthoritativeProject(
+  projectId: string,
+  fallbackProject: Project,
+): Promise<{ project: Project; fromServer: boolean }> {
+  try {
+    const response = await fetch("/api/projects", { credentials: "same-origin" });
+    const data = await readJson<ProjectsResponse>(response);
+    const serverProject = data.projects.find((item) => item.id === projectId);
+    if (!serverProject) {
+      return { project: fallbackProject, fromServer: false };
+    }
+    return { project: serverProject, fromServer: true };
+  } catch {
+    return { project: fallbackProject, fromServer: false };
+  }
+}
+
+async function processProjectDeletionQueue(
+  set: BranchMindSet,
+  get: BranchMindGet,
+  queue: ProjectDeletionQueue,
+): Promise<void> {
+  if (queue.processing) return;
+  queue.processing = true;
+
+  try {
+    while (queue.pending.length > 0) {
+      if (!get().projects.some((item) => item.id === queue.projectId)) {
+        const skipped = queue.pending.splice(0, queue.pending.length);
+        projectDeletionQueues.delete(queue.projectId);
+        set((current) => ({
+          creatingNodeId: resolveNextDeletionCreatingNodeId(current),
+        }));
+        skipped.forEach((op) => op.resolve());
+        break;
+      }
+
+      const op = queue.pending.shift()!;
+      queue.inFlight = op;
+
+      if (!queue.lastConfirmedProject.nodes[op.nodeId]) {
+        queue.confirmedDeletedNodeIds.add(op.nodeId);
+        queue.inFlight = null;
+        if (queue.pending.length === 0) {
+          projectDeletionQueues.delete(queue.projectId);
+        }
+        set((current) => ({
+          creatingNodeId: resolveNextDeletionCreatingNodeId(current),
+        }));
+        op.resolve();
+        continue;
+      }
+
+      const previousConfirmedProject = queue.lastConfirmedProject;
+
+      try {
+        const response = await fetch(
+          `/api/projects/${queue.projectId}/nodes/${op.nodeId}`,
+          {
+            method: "DELETE",
+            credentials: "same-origin",
+          },
+        );
+        const data = await readJson<UpdateNodeResponse>(response);
+
+        for (const id of Object.keys(previousConfirmedProject.nodes)) {
+          if (!data.project.nodes[id]) {
+            queue.confirmedDeletedNodeIds.add(id);
+          }
+        }
+        queue.confirmedDeletedNodeIds.add(op.nodeId);
+        queue.lastConfirmedProject = data.project;
+        queue.inFlight = null;
+
+        const pendingNodeIds = queue.pending.map((item) => item.nodeId);
+        if (queue.pending.length === 0) {
+          projectDeletionQueues.delete(queue.projectId);
+        }
+
+        set((current) => {
+          const currentProject = current.projects.find(
+            (item) => item.id === queue.projectId,
+          );
+          const nextCreatingNodeId = resolveNextDeletionCreatingNodeId(current);
+          if (!currentProject) {
+            return { creatingNodeId: nextCreatingNodeId };
+          }
+
+          const nextProject = reconcileConfirmedNodeDeletion(
+            currentProject,
+            previousConfirmedProject,
+            data.project,
+            op.nodeId,
+            pendingNodeIds,
+          );
+          const nextSelectedNodeId =
+            current.activeProjectId === queue.projectId
+              ? current.selectedNodeId && nextProject.nodes[current.selectedNodeId]
+                ? current.selectedNodeId
+                : data.selectedNodeId && nextProject.nodes[data.selectedNodeId]
+                  ? data.selectedNodeId
+                  : nextProject.rootNodeId
+              : current.selectedNodeId;
+
+          return {
+            projects: replaceProject(current.projects, nextProject),
+            selectedNodeId: nextSelectedNodeId,
+            creatingNodeId: nextCreatingNodeId,
+          };
+        });
+      } catch (error) {
+        const authoritative = await retrieveAuthoritativeProject(
+          queue.projectId,
+          queue.lastConfirmedProject,
+        );
+        queue.lastConfirmedProject = stripConfirmedDeletedNodes(
+          authoritative.project,
+          queue.confirmedDeletedNodeIds,
+        );
+        const alreadyDeletedOnServer =
+          authoritative.fromServer && !queue.lastConfirmedProject.nodes[op.nodeId];
+        if (alreadyDeletedOnServer) {
+          queue.confirmedDeletedNodeIds.add(op.nodeId);
+        }
+
+        queue.inFlight = null;
+        const pendingNodeIds = queue.pending.map((item) => item.nodeId);
+        if (queue.pending.length === 0) {
+          projectDeletionQueues.delete(queue.projectId);
+        }
+
+        set((current) => {
+          const currentProject = current.projects.find(
+            (item) => item.id === queue.projectId,
+          );
+          const nextCreatingNodeId = resolveNextDeletionCreatingNodeId(current);
+          if (!currentProject) {
+            return {
+              creatingNodeId: nextCreatingNodeId,
+              ...(alreadyDeletedOnServer ? {} : { aiError: getErrorMessage(error) }),
+            };
+          }
+
+          const nextProject = reconcileFailedNodeDeletion(
+            currentProject,
+            queue.lastConfirmedProject,
+            queue.confirmedDeletedNodeIds,
+            pendingNodeIds,
+          );
+
+          let nextSelectedNodeId = current.selectedNodeId;
+          if (current.activeProjectId === queue.projectId) {
+            if (
+              !alreadyDeletedOnServer &&
+              pendingNodeIds.length === 0 &&
+              current.selectedNodeId === op.autoSelectedNodeId &&
+              op.previousSelectedNodeId &&
+              nextProject.nodes[op.previousSelectedNodeId]
+            ) {
+              nextSelectedNodeId = op.previousSelectedNodeId;
+            } else {
+              nextSelectedNodeId = getSelectedNodeId(
+                nextProject,
+                current.selectedNodeId,
+              );
+            }
+          }
+
+          return {
+            projects: replaceProject(current.projects, nextProject),
+            selectedNodeId: nextSelectedNodeId,
+            creatingNodeId: nextCreatingNodeId,
+            ...(alreadyDeletedOnServer ? {} : { aiError: getErrorMessage(error) }),
+          };
+        });
+      }
+
+      op.resolve();
+    }
+  } finally {
+    queue.processing = false;
+    if (queue.pending.length > 0 && !queue.inFlight) {
+      void processProjectDeletionQueue(set, get, queue);
+    } else if (!queue.inFlight) {
+      projectDeletionQueues.delete(queue.projectId);
+    }
+  }
+}
 
 export function createCrudActions(
   set: BranchMindSet,
@@ -449,41 +710,80 @@ export function createCrudActions(
       const project = state.projects.find((item) => item.id === projectId);
       if (!projectId || !project || isProjectWaitingForSync(state, projectId)) return;
 
-      const optimisticDelete = removeNodeProject(project, nodeId);
-      if (!optimisticDelete) return;
+      const existingQueue = projectDeletionQueues.get(projectId);
+      if (existingQueue?.inFlight?.nodeId === nodeId) {
+        await existingQueue.inFlight.promise;
+        return;
+      }
+      const existingPending = existingQueue?.pending.find(
+        (item) => item.nodeId === nodeId,
+      );
+      if (existingPending) {
+        await existingPending.promise;
+        return;
+      }
 
-      const selectedNodeId =
-        state.selectedNodeId && !optimisticDelete.project.nodes[state.selectedNodeId]
+      const optimisticDelete = removeNodeProject(project, nodeId);
+      const canQueueOptimisticallyRemovedDescendant =
+        !optimisticDelete &&
+        Boolean(
+          existingQueue &&
+            existingQueue.lastConfirmedProject.nodes[nodeId] &&
+            existingQueue.lastConfirmedProject.nodes[nodeId].parentId !== null &&
+            !existingQueue.confirmedDeletedNodeIds.has(nodeId),
+        );
+
+      if (!optimisticDelete && !canQueueOptimisticallyRemovedDescendant) return;
+
+      const queue =
+        existingQueue ??
+        (() => {
+          const created: ProjectDeletionQueue = {
+            projectId,
+            lastConfirmedProject: project,
+            confirmedDeletedNodeIds: new Set<string>(),
+            inFlight: null,
+            pending: [],
+            processing: false,
+          };
+          projectDeletionQueues.set(projectId, created);
+          return created;
+        })();
+
+      const selectedNodeId = optimisticDelete
+        ? state.selectedNodeId && !optimisticDelete.project.nodes[state.selectedNodeId]
           ? optimisticDelete.parentId
-          : state.selectedNodeId;
+          : state.selectedNodeId
+        : state.selectedNodeId;
+
+      let resolveOp: () => void = () => {};
+      const promise = new Promise<void>((resolve) => {
+        resolveOp = resolve;
+      });
+
+      queue.pending.push({
+        nodeId,
+        previousSelectedNodeId: state.selectedNodeId,
+        autoSelectedNodeId: selectedNodeId,
+        resolve: resolveOp,
+        promise,
+      });
+      activeDeletionLockNodeIds.add(nodeId);
 
       set({
-        projects: replaceProject(state.projects, optimisticDelete.project),
+        ...(optimisticDelete
+          ? { projects: replaceProject(state.projects, optimisticDelete.project) }
+          : {}),
         selectedNodeId,
-        creatingNodeId: nodeId,
+        creatingNodeId:
+          state.streamingNodeId && state.creatingNodeId
+            ? state.creatingNodeId
+            : nodeId,
         aiError: null,
       });
 
-      try {
-        const response = await fetch(`/api/projects/${projectId}/nodes/${nodeId}`, {
-          method: "DELETE",
-          credentials: "same-origin",
-        });
-        const data = await readJson<UpdateNodeResponse>(response);
-
-        set({
-          projects: replaceProject(get().projects, data.project),
-          selectedNodeId: data.selectedNodeId ?? null,
-          creatingNodeId: null,
-        });
-      } catch (error) {
-        set({
-          projects: replaceProject(get().projects, project),
-          selectedNodeId: state.selectedNodeId,
-          creatingNodeId: null,
-          aiError: getErrorMessage(error),
-        });
-      }
+      void processProjectDeletionQueue(set, get, queue);
+      await promise;
     },
   };
 }
